@@ -1,0 +1,282 @@
+package com.chen404.service.impl;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.chen404.domain.entity.Article;
+import com.chen404.domain.entity.ArticleTag;
+import com.chen404.domain.entity.Category;
+import com.chen404.domain.entity.Tag;
+import com.chen404.domain.entity.User;
+import com.chen404.mapper.ArticleMapper;
+import com.chen404.mapper.ArticleTagMapper;
+import com.chen404.mapper.CategoryMapper;
+import com.chen404.mapper.TagMapper;
+import com.chen404.mapper.UserMapper;
+import com.chen404.service.ArticleService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@Service
+public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> implements ArticleService {
+
+    @Autowired
+    private ArticleMapper articleMapper;
+
+    @Autowired
+    private UserMapper userMapper;
+
+    @Autowired
+    private CategoryMapper categoryMapper;
+
+    @Autowired
+    private TagMapper tagMapper;
+
+    @Autowired
+    private ArticleTagMapper articleTagMapper;
+
+    @Override
+    public Page<Article> getArticlePage(Integer page, Integer size, Integer status, Long categoryId, Long tagId, String keyword) {
+        Page<Article> pageParam = new Page<>(page, size);
+
+        LambdaQueryWrapper<Article> wrapper = new LambdaQueryWrapper<>();
+
+        // 状态筛选
+        if (status != null) {
+            wrapper.eq(Article::getStatus, status);
+        } else {
+            // 默认查询已发布的文章
+            wrapper.eq(Article::getStatus, 1);
+        }
+
+        // 分类筛选
+        if (categoryId != null) {
+            wrapper.eq(Article::getCategoryId, categoryId);
+        }
+
+        // 关键词搜索
+        if (StringUtils.hasText(keyword)) {
+            wrapper.and(w -> w.like(Article::getTitle, keyword)
+                    .or()
+                    .like(Article::getSummary, keyword));
+        }
+
+        // 排序：置顶优先，然后按发布时间倒序
+        wrapper.orderByDesc(Article::getIsTop)
+                .orderByDesc(Article::getPublishTime);
+
+        Page<Article> result = articleMapper.selectPage(pageParam, wrapper);
+
+        // 填充关联数据
+        List<Article> records = result.getRecords();
+        for (Article article : records) {
+            fillArticleRelations(article);
+        }
+
+        return result;
+    }
+
+    @Override
+    public Article getArticleById(Long id, boolean incrementView) {
+        Article article = articleMapper.selectById(id);
+        if (article == null) {
+            return null;
+        }
+
+        // 增加浏览量
+        if (incrementView) {
+            articleMapper.incrementViewCount(id);
+            article.setViewCount(article.getViewCount() + 1);
+        }
+
+        // 填充关联数据
+        fillArticleRelations(article);
+
+        return article;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Article createArticle(Article article) {
+        // 设置默认值
+        if (article.getViewCount() == null) {
+            article.setViewCount(0);
+        }
+        if (article.getLikeCount() == null) {
+            article.setLikeCount(0);
+        }
+        if (article.getCommentCount() == null) {
+            article.setCommentCount(0);
+        }
+        if (article.getIsTop() == null) {
+            article.setIsTop(0);
+        }
+        if (article.getIsRecommend() == null) {
+            article.setIsRecommend(0);
+        }
+        if (article.getIsOriginal() == null) {
+            article.setIsOriginal(1);
+        }
+
+        // 如果是发布状态，设置发布时间
+        if (article.getStatus() == 1 && article.getPublishTime() == null) {
+            article.setPublishTime(LocalDateTime.now());
+        }
+
+        // 自动生成摘要（如果未填写）
+        if (!StringUtils.hasText(article.getSummary()) && StringUtils.hasText(article.getContent())) {
+            String summary = generateSummary(article.getContent());
+            article.setSummary(summary);
+        }
+
+        articleMapper.insert(article);
+
+        // 保存标签关联
+        if (article.getTagIds() != null && !article.getTagIds().isEmpty()) {
+            saveArticleTags(article.getId(), article.getTagIds());
+        }
+
+        // 更新分类文章数量
+        if (article.getCategoryId() != null) {
+            categoryMapper.updateArticleCount(article.getCategoryId());
+        }
+
+        return article;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Article updateArticle(Long id, Article article) {
+        Article existing = articleMapper.selectById(id);
+        if (existing == null) {
+            throw new RuntimeException("文章不存在");
+        }
+
+        article.setId(id);
+
+        // 如果从草稿变为发布，设置发布时间
+        if (existing.getStatus() == 0 && article.getStatus() == 1) {
+            article.setPublishTime(LocalDateTime.now());
+        }
+
+        // 自动生成摘要
+        if (!StringUtils.hasText(article.getSummary()) && StringUtils.hasText(article.getContent())) {
+            String summary = generateSummary(article.getContent());
+            article.setSummary(summary);
+        }
+
+        articleMapper.updateById(article);
+
+        // 更新标签关联
+        if (article.getTagIds() != null) {
+            // 删除旧关联
+            articleTagMapper.delete(new LambdaQueryWrapper<ArticleTag>()
+                    .eq(ArticleTag::getArticleId, id));
+            // 保存新关联
+            saveArticleTags(id, article.getTagIds());
+        }
+
+        // 更新分类文章数量
+        if (article.getCategoryId() != null) {
+            categoryMapper.updateArticleCount(article.getCategoryId());
+        }
+
+        return getArticleById(id, false);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteArticle(Long id) {
+        Article article = articleMapper.selectById(id);
+        if (article == null) {
+            throw new RuntimeException("文章不存在");
+        }
+
+        // 逻辑删除
+        articleMapper.deleteById(id);
+
+        // 更新分类文章数量
+        if (article.getCategoryId() != null) {
+            categoryMapper.updateArticleCount(article.getCategoryId());
+        }
+    }
+
+    @Override
+    public Integer likeArticle(Long id) {
+        articleMapper.incrementLikeCount(id);
+        Article article = articleMapper.selectById(id);
+        return article != null ? article.getLikeCount() + 1 : 0;
+    }
+
+    @Override
+    public List<Article> getHotArticles(Integer limit) {
+        return articleMapper.selectHotArticles(limit);
+    }
+
+    @Override
+    public List<Article> getRecommendArticles(Integer limit) {
+        return articleMapper.selectRecommendArticles(limit);
+    }
+
+    @Override
+    public Map<String, Object> getSiteStats() {
+        return articleMapper.selectSiteStats();
+    }
+
+    /**
+     * 填充文章关联数据
+     */
+    private void fillArticleRelations(Article article) {
+        // 填充作者信息
+        if (article.getAuthorId() != null) {
+            User author = userMapper.selectById(article.getAuthorId());
+            if (author != null) {
+                author.setPassword(null);
+                article.setAuthor(author);
+            }
+        }
+
+        // 填充分类信息
+        if (article.getCategoryId() != null) {
+            Category category = categoryMapper.selectById(article.getCategoryId());
+            article.setCategory(category);
+        }
+
+        // 填充标签信息
+        List<Tag> tags = tagMapper.selectTagsByArticleId(article.getId());
+        article.setTags(tags);
+    }
+
+    /**
+     * 保存文章标签关联
+     */
+    private void saveArticleTags(Long articleId, List<Long> tagIds) {
+        for (Long tagId : tagIds) {
+            ArticleTag at = new ArticleTag();
+            at.setArticleId(articleId);
+            at.setTagId(tagId);
+            articleTagMapper.insert(at);
+        }
+    }
+
+    /**
+     * 生成摘要（从内容中提取前200字）
+     */
+    private String generateSummary(String content) {
+        // 移除Markdown标记
+        String text = content.replaceAll("[#*`\\[\\]!()\\-_>]", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+        if (text.length() > 200) {
+            return text.substring(0, 200) + "...";
+        }
+        return text;
+    }
+}
