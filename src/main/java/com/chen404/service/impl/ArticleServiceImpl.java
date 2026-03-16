@@ -14,12 +14,14 @@ import com.chen404.mapper.CategoryMapper;
 import com.chen404.mapper.TagMapper;
 import com.chen404.mapper.UserMapper;
 import com.chen404.service.ArticleService;
+import com.chen404.service.SysFileService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -41,6 +43,9 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
     @Autowired
     private ArticleTagMapper articleTagMapper;
+
+    @Autowired
+    private SysFileService sysFileService;
 
     @Override
     public Page<Article> getArticlePage(Integer page, Integer size, Integer status, Long categoryId, Long tagId, String keyword) {
@@ -148,6 +153,9 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
             categoryMapper.updateArticleCount(article.getCategoryId());
         }
 
+        // 将文章中引用的文件转为永久状态
+        convertArticleFilesToPermanent(article);
+
         return article;
     }
 
@@ -187,6 +195,12 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         if (article.getCategoryId() != null) {
             categoryMapper.updateArticleCount(article.getCategoryId());
         }
+
+        // 清理未使用的文件资源
+        sysFileService.cleanUnusedFiles(id, article.getContent(), article.getCoverImage());
+
+        // 将新引用的文件转为永久状态
+        convertArticleFilesToPermanent(article);
 
         return getArticleById(id, false);
     }
@@ -271,12 +285,53 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
      */
     private String generateSummary(String content) {
         // 移除Markdown标记
-        String text = content.replaceAll("[#*`\\[\\]!()\\-_>]", " ")
+        String text = content.replaceAll("[#*\\`\\[\\]!()\\-_>]", " ")
                 .replaceAll("\\s+", " ")
                 .trim();
         if (text.length() > 200) {
             return text.substring(0, 200) + "...";
         }
         return text;
+    }
+
+    /**
+     * 将文章引用的所有文件转为永久状态
+     */
+    private void convertArticleFilesToPermanent(Article article) {
+        if (article == null) {
+            return;
+        }
+
+        // 收集所有引用的文件URL
+        List<String> fileUrls = new ArrayList<>();
+
+        // 提取内容中的图片URL
+        if (StringUtils.hasText(article.getContent())) {
+            fileUrls.addAll(sysFileService.extractImageUrlsFromContent(article.getContent()));
+        }
+
+        // 添加封面URL
+        if (StringUtils.hasText(article.getCoverImage())) {
+            fileUrls.add(article.getCoverImage());
+        }
+
+        // 去重并转为永久状态
+        if (!fileUrls.isEmpty()) {
+            List<String> uniqueUrls = fileUrls.stream()
+                    .distinct()
+                    .collect(Collectors.toList());
+
+            // 内容图片
+            sysFileService.convertToPermanent(uniqueUrls, com.chen404.domain.entity.SysFile.RefType.ARTICLE_CONTENT, article.getId());
+
+            // 封面单独标记
+            if (StringUtils.hasText(article.getCoverImage())) {
+                sysFileService.convertToPermanent(
+                        List.of(article.getCoverImage()),
+                        com.chen404.domain.entity.SysFile.RefType.ARTICLE_COVER,
+                        article.getId()
+                );
+            }
+        }
     }
 }

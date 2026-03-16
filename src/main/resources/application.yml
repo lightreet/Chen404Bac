@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: 10404
   servlet:
     context-path: /api
 
@@ -24,19 +24,20 @@ spring:
       connection-timeout: 30000
       connection-test-query: SELECT 1
 
-  # Redis配置
-  redis:
-    host: 192.168.1.6
-    port: 6379
-    password: admin@123
-    database: 0
-    timeout: 60000ms
-    lettuce:
-      pool:
-        max-active: 8
-        max-wait: -1ms
-        max-idle: 8
-        min-idle: 0
+  # Redis配置 (Spring Boot 3.x 使用 spring.data.redis 命名空间)
+  data:
+    redis:
+      host: 192.168.1.6
+      port: 6379
+      password: admin@123
+      database: 0
+      timeout: 60000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-wait: -1ms
+          max-idle: 8
+          min-idle: 0
 
   # 邮件配置（网易邮箱）
   mail:
@@ -62,8 +63,8 @@ spring:
   servlet:
     multipart:
       enabled: true
-      max-file-size: 10MB
-      max-request-size: 100MB
+      max-file-size: 15MB
+      max-request-size: 150MB
 
 # MinIO 对象存储配置
 minio:

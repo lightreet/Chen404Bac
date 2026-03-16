@@ -170,6 +170,9 @@
     <logger name="com.baomidou.mybatisplus" level="WARN"/>
     <logger name="org.apache.ibatis" level="WARN"/>
 
+    <!-- 数据库连接池日志 -->
+    <logger name="com.zaxxer.hikari" level="WARN"/>
+
     <!-- Spring框架日志 -->
     <logger name="org.springframework" level="WARN"/>
     <logger name="org.springframework.web" level="WARN"/>

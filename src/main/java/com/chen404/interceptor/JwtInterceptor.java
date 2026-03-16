@@ -21,14 +21,19 @@ public class JwtInterceptor implements HandlerInterceptor {
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
-        // 从请求头中获取token
-        String authHeader = request.getHeader("Authorization");
-
         // 允许匿名访问的请求直接放行
         String uri = request.getRequestURI();
         if (isPublicUri(uri)) {
             return true;
         }
+
+        // 放行 CORS 预检请求
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            return true;
+        }
+
+        // 从请求头中获取token
+        String authHeader = request.getHeader("Authorization");
 
         // 检查Authorization头
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
@@ -66,15 +71,31 @@ public class JwtInterceptor implements HandlerInterceptor {
      * 判断是否为公开URI
      */
     private boolean isPublicUri(String uri) {
-        return uri.startsWith("/api/auth/") ||
-               uri.startsWith("/api/upload/") ||
-               uri.startsWith("/api/home/") ||
-               uri.startsWith("/api/site/") ||
-               uri.startsWith("/api/articles/") ||
-               uri.startsWith("/api/categories/") ||
-               uri.startsWith("/api/tags/") ||
-               uri.startsWith("/api/archives/") ||
-               uri.startsWith("/api/comments/") ||
-               uri.startsWith("/api/friends/");
+        // 去除 context-path 后的路径（如果存在）
+        String path = uri;
+        if (uri.startsWith("/api")) {
+            path = uri.substring(4); // 去掉 /api 前缀
+        }
+
+        // Swagger/OpenAPI 相关路径
+        if (path.startsWith("/swagger-ui") ||
+            path.startsWith("/v3/api-docs") ||
+            path.startsWith("/swagger-resources") ||
+            path.startsWith("/webjars") ||
+            path.equals("/swagger-ui.html")) {
+            return true;
+        }
+
+        // 公开API路径（匹配根路径和子路径）
+        // 注意：/upload/** 需要认证，不在此处放行
+        return path.equals("/auth") || path.startsWith("/auth/") ||
+               path.equals("/home") || path.startsWith("/home/") ||
+               path.equals("/site") || path.startsWith("/site/") ||
+               path.equals("/articles") || path.startsWith("/articles/") ||
+               path.equals("/categories") || path.startsWith("/categories/") ||
+               path.equals("/tags") || path.startsWith("/tags/") ||
+               path.equals("/archives") || path.startsWith("/archives/") ||
+               path.equals("/comments") || path.startsWith("/comments/") ||
+               path.equals("/friends") || path.startsWith("/friends/");
     }
 }

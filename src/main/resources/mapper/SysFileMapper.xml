@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chen404.mapper.SysFileMapper">
+
+    <!-- 批量更新文件状态为永久 -->
+    <update id="batchUpdateToPermanent">
+        UPDATE sys_file
+        SET status = 'PERMANENT',
+            ref_type = #{refType},
+            ref_id = #{refId},
+            expire_time = NULL,
+            update_time = NOW()
+        WHERE file_url IN
+        <foreach collection="urls" item="url" open="(" separator="," close=")">
+            #{url}
+        </foreach>
+        AND deleted = 0
+    </update>
+
+    <!-- 根据对象名称列表查询文件 -->
+    <select id="selectByObjectNames" resultType="com.chen404.domain.entity.SysFile">
+        SELECT * FROM sys_file
+        WHERE object_name IN
+        <foreach collection="objectNames" item="name" open="(" separator="," close=")">
+            #{name}
+        </foreach>
+        AND deleted = 0
+    </select>
+
+</mapper>

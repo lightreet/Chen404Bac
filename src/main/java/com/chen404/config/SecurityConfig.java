@@ -2,7 +2,6 @@ package com.chen404.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -40,13 +39,22 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             // 配置授权规则
             .authorizeHttpRequests(auth -> auth
-                // 允许匿名访问的接口
-                .requestMatchers("/auth/**", "/upload/**", "/home/**", "/site/**",
-                        "/articles/**", "/categories/**", "/tags/**", "/archives/**",
+                // Swagger/OpenAPI 文档接口
+                .requestMatchers("/swagger-ui.html", "/swagger-ui/**",
+                        "/v3/api-docs/**", "/swagger-resources/**", "/webjars/**").permitAll()
+                // 允许匿名访问的接口（明确列出根路径和子路径）
+                .requestMatchers("/auth/**", "/home/**", "/site/**",
+                        "/articles", "/articles/**",
+                        "/categories", "/categories/**",
+                        "/tags", "/tags/**",
+                        "/archives", "/archives/**",
                         "/comments/**", "/friends/**").permitAll()
                 // 静态资源
                 .requestMatchers("/", "/uploads/**").permitAll()
-                // 其他接口需要认证
+                // 以下接口在 Controller/拦截器层做权限控制，Spring Security 放行
+                // 含 /api 前缀：部分环境下 Security 收到的 path 带 context-path
+                .requestMatchers("/upload/**", "/admin/**", "/api/admin/**").permitAll()
+                // 其他接口需要认证（兜底）
                 .anyRequest().authenticated()
             )
             // 禁用session（使用JWT）

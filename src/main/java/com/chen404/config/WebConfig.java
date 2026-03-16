@@ -51,10 +51,15 @@ public class WebConfig implements WebMvcConfigurer {
         registry.addInterceptor(jwtInterceptor)
                 // 拦截所有请求
                 .addPathPatterns("/**")
-                // 排除静态资源和公开接口
+                // 排除静态资源、Swagger和公开接口
                 .excludePathPatterns(
                         "/uploads/**",
-                        "/static/**"
+                        "/static/**",
+                        "/swagger-ui.html",
+                        "/swagger-ui/**",
+                        "/v3/api-docs/**",
+                        "/swagger-resources/**",
+                        "/webjars/**"
                 )
                 .order(2);
     }

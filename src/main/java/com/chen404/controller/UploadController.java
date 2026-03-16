@@ -1,7 +1,9 @@
 package com.chen404.controller;
 
 import com.chen404.domain.Result;
+import com.chen404.domain.entity.SysFile;
 import com.chen404.service.FileStorageService;
+import com.chen404.service.SysFileService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -14,6 +16,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * 文件上传控制器
@@ -27,6 +30,9 @@ public class UploadController {
     @Autowired
     private FileStorageService fileStorageService;
 
+    @Autowired
+    private SysFileService sysFileService;
+
     /**
      * 允许的图片类型
      */
@@ -35,14 +41,14 @@ public class UploadController {
     );
 
     /**
-     * 最大图片大小 5MB
+     * 最大图片大小 12MB
      */
-    private static final long MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+    private static final long MAX_IMAGE_SIZE = 12 * 1024 * 1024;
 
     /**
-     * 最大封面大小 5MB
+     * 最大封面大小 12MB
      */
-    private static final long MAX_COVER_SIZE = 5 * 1024 * 1024;
+    private static final long MAX_COVER_SIZE = 12 * 1024 * 1024;
 
     /**
      * 上传图片（用于编辑器内）
@@ -65,18 +71,15 @@ public class UploadController {
         }
 
         try {
-            // 生成对象名称：articles/content/2024/03/uuid.jpg
-            String objectName = generateObjectName("articles/content", file.getOriginalFilename());
-
-            // 上传文件
-            String fileUrl = fileStorageService.uploadFile(file, objectName);
+            // 使用 SysFileService 上传临时文件
+            SysFile sysFile = sysFileService.uploadTempFile(file, userId, SysFile.RefType.ARTICLE_CONTENT);
 
             Map<String, String> data = new HashMap<>();
-            data.put("url", fileUrl);
-            data.put("name", file.getOriginalFilename());
-            data.put("size", String.valueOf(file.getSize()));
+            data.put("url", sysFile.getFileUrl());
+            data.put("name", sysFile.getFileName());
+            data.put("size", String.valueOf(sysFile.getFileSize()));
 
-            log.info("用户 {} 上传图片成功: {}", userId, fileUrl);
+            log.info("用户 {} 上传临时图片成功: {}", userId, sysFile.getFileUrl());
             return Result.success("上传成功", data);
 
         } catch (Exception e) {
@@ -86,9 +89,9 @@ public class UploadController {
     }
 
     /**
-     * 批量上传图片
+     * 批量上传图片（并行处理优化版）
      */
-    @Operation(summary = "批量上传图片", description = "一次最多上传10张图片")
+    @Operation(summary = "批量上传图片", description = "一次最多上传10张图片，使用并行上传提高效率")
     @PostMapping("/images")
     public Result<List<Map<String, String>>> uploadImages(
             @Parameter(description = "图片文件列表", required = true) @RequestParam("files") MultipartFile[] files,
@@ -107,29 +110,25 @@ public class UploadController {
             return Result.error(400, "一次最多上传10张图片");
         }
 
+        // 使用并行流提高上传效率
+        List<CompletableFuture<Map<String, String>>> futures = Arrays.stream(files)
+                .map(file -> CompletableFuture.supplyAsync(() -> uploadSingleImage(file)))
+                .toList();
+
+        // 等待所有上传完成
         List<Map<String, String>> results = new ArrayList<>();
         List<String> errors = new ArrayList<>();
 
-        for (MultipartFile file : files) {
-            // 校验文件
-            Result<Map<String, String>> validateResult = validateImage(file, MAX_IMAGE_SIZE);
-            if (validateResult != null) {
-                errors.add(file.getOriginalFilename() + ": " + validateResult.getMessage());
-                continue;
-            }
-
+        for (int i = 0; i < files.length; i++) {
             try {
-                String objectName = generateObjectName("articles/content", file.getOriginalFilename());
-                String fileUrl = fileStorageService.uploadFile(file, objectName);
-
-                Map<String, String> data = new HashMap<>();
-                data.put("url", fileUrl);
-                data.put("name", file.getOriginalFilename());
-                data.put("size", String.valueOf(file.getSize()));
-                results.add(data);
-
+                Map<String, String> result = futures.get(i).get();
+                if (result.containsKey("url")) {
+                    results.add(result);
+                } else {
+                    errors.add(files[i].getOriginalFilename() + ": " + result.get("error"));
+                }
             } catch (Exception e) {
-                errors.add(file.getOriginalFilename() + ": " + e.getMessage());
+                errors.add(files[i].getOriginalFilename() + ": " + e.getMessage());
             }
         }
 
@@ -139,6 +138,34 @@ public class UploadController {
 
         log.info("用户 {} 批量上传图片成功: {} 张", userId, results.size());
         return Result.success("上传成功 " + results.size() + " 张" + (errors.isEmpty() ? "" : ", 失败 " + errors.size() + " 张"), results);
+    }
+
+    /**
+     * 上传单张图片（供批量上传使用）
+     */
+    private Map<String, String> uploadSingleImage(MultipartFile file) {
+        Map<String, String> result = new HashMap<>();
+
+        // 校验文件
+        Result<Map<String, String>> validateResult = validateImage(file, MAX_IMAGE_SIZE);
+        if (validateResult != null) {
+            result.put("error", validateResult.getMessage());
+            return result;
+        }
+
+        try {
+            String objectName = generateObjectName("articles/content", file.getOriginalFilename());
+            String fileUrl = fileStorageService.uploadFile(file, objectName);
+
+            result.put("url", fileUrl);
+            result.put("name", file.getOriginalFilename());
+            result.put("size", String.valueOf(file.getSize()));
+
+        } catch (Exception e) {
+            result.put("error", e.getMessage());
+        }
+
+        return result;
     }
 
     /**
@@ -162,18 +189,15 @@ public class UploadController {
         }
 
         try {
-            // 生成对象名称：articles/covers/2024/03/uuid.jpg
-            String objectName = generateObjectName("articles/covers", file.getOriginalFilename());
-
-            // 上传文件
-            String fileUrl = fileStorageService.uploadFile(file, objectName);
+            // 使用 SysFileService 上传临时文件
+            SysFile sysFile = sysFileService.uploadTempFile(file, userId, SysFile.RefType.ARTICLE_COVER);
 
             Map<String, String> data = new HashMap<>();
-            data.put("url", fileUrl);
-            data.put("name", file.getOriginalFilename());
-            data.put("size", String.valueOf(file.getSize()));
+            data.put("url", sysFile.getFileUrl());
+            data.put("name", sysFile.getFileName());
+            data.put("size", String.valueOf(sysFile.getFileSize()));
 
-            log.info("用户 {} 上传封面成功: {}", userId, fileUrl);
+            log.info("用户 {} 上传临时封面成功: {}", userId, sysFile.getFileUrl());
             return Result.success("上传成功", data);
 
         } catch (Exception e) {
@@ -242,15 +266,10 @@ public class UploadController {
         }
 
         try {
-            // 从URL中提取对象名称
-            String objectName = extractObjectNameFromUrl(url);
-            if (objectName == null) {
-                return Result.error(400, "无效的文件URL");
-            }
-
-            boolean success = fileStorageService.deleteFile(objectName);
+            // 使用 SysFileService 删除文件
+            boolean success = sysFileService.deleteByUrl(url, userId);
             if (success) {
-                log.info("用户 {} 删除文件成功: {}", userId, objectName);
+                log.info("用户 {} 删除文件成功: {}", userId, url);
                 return Result.success("删除成功");
             } else {
                 return Result.error(500, "删除失败");
