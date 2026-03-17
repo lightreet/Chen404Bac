@@ -2,6 +2,7 @@ package com.chen404.controller;
 
 import com.chen404.domain.Result;
 import com.chen404.domain.dto.ChangePasswordDTO;
+import com.chen404.util.RequestAttrUtil;
 import com.chen404.domain.dto.LoginDTO;
 import com.chen404.domain.dto.LoginResultDTO;
 import com.chen404.domain.dto.RegisterDTO;
@@ -122,10 +123,7 @@ public class AuthController {
     @Operation(summary = "获取当前用户信息", description = "需要登录，从JWT Token中解析用户信息")
     @RequestMapping(value = "/info", method = { RequestMethod.GET, RequestMethod.POST })
     public Result<User> getUserInfo(HttpServletRequest request) {
-        Long userId = (Long) request.getAttribute("userId");
-        if (userId == null) {
-            return Result.error(401, "未登录");
-        }
+        Long userId = RequestAttrUtil.requireUserId(request);
         User user = userService.getCurrentUser(userId);
         return Result.success(user);
     }
@@ -136,10 +134,7 @@ public class AuthController {
     @Operation(summary = "更新个人资料", description = "需要登录，可更新昵称与头像")
     @PutMapping("/profile")
     public Result<User> updateProfile(@Valid @RequestBody UpdateProfileDTO dto, HttpServletRequest request) {
-        Long userId = (Long) request.getAttribute("userId");
-        if (userId == null) {
-            return Result.error(401, "未登录");
-        }
+        Long userId = RequestAttrUtil.requireUserId(request);
         try {
             User user = userService.updateProfile(userId, dto);
             return Result.success("更新成功", user);
@@ -154,10 +149,7 @@ public class AuthController {
     @Operation(summary = "修改密码", description = "需要登录，校验旧密码，成功后发送提醒邮件")
     @PostMapping("/change-password")
     public Result<Void> changePassword(@Valid @RequestBody ChangePasswordDTO dto, HttpServletRequest request) {
-        Long userId = (Long) request.getAttribute("userId");
-        if (userId == null) {
-            return Result.error(401, "未登录");
-        }
+        Long userId = RequestAttrUtil.requireUserId(request);
         try {
             String clientIp = request.getRemoteAddr();
             String userAgent = request.getHeader("User-Agent");

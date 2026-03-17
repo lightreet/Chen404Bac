@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.chen404.domain.PageResult;
 import com.chen404.domain.entity.Article;
 import com.chen404.service.ArticleService;
+import com.chen404.util.RequestAttrUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -35,10 +36,7 @@ public class AdminArticleController {
             @RequestParam(required = false) Integer status,
             @RequestParam(required = false) String keyword,
             HttpServletRequest request) {
-        Long userId = (Long) request.getAttribute("userId");
-        if (userId == null) {
-            return Result.error(401, "未登录");
-        }
+        Long userId = RequestAttrUtil.requireUserId(request);
         Page<Article> articlePage = articleService.getMyArticlePage(userId, page, size, status, keyword);
         return Result.success(PageResult.of(articlePage));
     }
@@ -46,10 +44,7 @@ public class AdminArticleController {
     @Operation(summary = "创建文章", description = "发布新文章或保存草稿，需要登录")
     @PostMapping("/articles")
     public Result<Article> createArticle(@RequestBody Article article, HttpServletRequest request) {
-        Long userId = (Long) request.getAttribute("userId");
-        if (userId == null) {
-            return Result.error(401, "未登录");
-        }
+        Long userId = RequestAttrUtil.requireUserId(request);
         article.setAuthorId(userId);
         try {
             Article created = articleService.createArticle(article);
@@ -66,10 +61,7 @@ public class AdminArticleController {
             @PathVariable Long id,
             @RequestBody Article article,
             HttpServletRequest request) {
-        Long userId = (Long) request.getAttribute("userId");
-        if (userId == null) {
-            return Result.error(401, "未登录");
-        }
+        RequestAttrUtil.requireUserId(request);
         try {
             Article updated = articleService.updateArticle(id, article);
             return Result.success("更新成功", updated);
@@ -82,10 +74,7 @@ public class AdminArticleController {
     @Parameter(name = "id", description = "文章ID", required = true)
     @DeleteMapping("/articles/{id}")
     public Result<Void> deleteArticle(@PathVariable Long id, HttpServletRequest request) {
-        Long userId = (Long) request.getAttribute("userId");
-        if (userId == null) {
-            return Result.error(401, "未登录");
-        }
+        RequestAttrUtil.requireUserId(request);
         try {
             articleService.deleteArticle(id);
             return Result.success("删除成功");

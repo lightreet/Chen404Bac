@@ -17,6 +17,14 @@ import java.util.stream.Collectors;
 public class GlobalExceptionHandler {
 
     /**
+     * 未登录 / Token 无效
+     */
+    @ExceptionHandler(UnauthorizedException.class)
+    public Result<String> handleUnauthorized(UnauthorizedException e) {
+        return Result.error(401, e.getMessage());
+    }
+
+    /**
      * 处理参数校验异常
      */
     @ExceptionHandler(BindException.class)

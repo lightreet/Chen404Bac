@@ -4,6 +4,7 @@ import com.chen404.domain.Result;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.service.FileStorageService;
 import com.chen404.service.SysFileService;
+import com.chen404.util.RequestAttrUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -59,10 +60,7 @@ public class UploadController {
             @Parameter(description = "图片文件", required = true) @RequestParam("file") MultipartFile file,
             HttpServletRequest request) {
 
-        Long userId = (Long) request.getAttribute("userId");
-        if (userId == null) {
-            return Result.error(401, "请先登录");
-        }
+        Long userId = RequestAttrUtil.requireUserId(request);
 
         // 校验文件
         Result<Map<String, String>> validateResult = validateImage(file, MAX_IMAGE_SIZE);
@@ -97,10 +95,7 @@ public class UploadController {
             @Parameter(description = "图片文件列表", required = true) @RequestParam("files") MultipartFile[] files,
             HttpServletRequest request) {
 
-        Long userId = (Long) request.getAttribute("userId");
-        if (userId == null) {
-            return Result.error(401, "请先登录");
-        }
+        Long userId = RequestAttrUtil.requireUserId(request);
 
         if (files == null || files.length == 0) {
             return Result.error(400, "请选择要上传的文件");
@@ -177,10 +172,7 @@ public class UploadController {
             @Parameter(description = "封面图片", required = true) @RequestParam("file") MultipartFile file,
             HttpServletRequest request) {
 
-        Long userId = (Long) request.getAttribute("userId");
-        if (userId == null) {
-            return Result.error(401, "请先登录");
-        }
+        Long userId = RequestAttrUtil.requireUserId(request);
 
         // 校验文件
         Result<Map<String, String>> validateResult = validateImage(file, MAX_COVER_SIZE);
@@ -215,10 +207,7 @@ public class UploadController {
             @Parameter(description = "头像图片", required = true) @RequestParam("file") MultipartFile file,
             HttpServletRequest request) {
 
-        Long userId = (Long) request.getAttribute("userId");
-        if (userId == null) {
-            return Result.error(401, "请先登录");
-        }
+        Long userId = RequestAttrUtil.requireUserId(request);
 
         // 校验文件
         Result<Map<String, String>> validateResult = validateImage(file, MAX_IMAGE_SIZE);
@@ -260,10 +249,7 @@ public class UploadController {
             @Parameter(description = "文件URL", required = true) @RequestParam("url") String url,
             HttpServletRequest request) {
 
-        Long userId = (Long) request.getAttribute("userId");
-        if (userId == null) {
-            return Result.error(401, "请先登录");
-        }
+        Long userId = RequestAttrUtil.requireUserId(request);
 
         try {
             // 使用 SysFileService 删除文件
