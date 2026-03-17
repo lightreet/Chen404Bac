@@ -52,7 +52,7 @@ public class EmailServiceImpl implements EmailService {
         String htmlContent = buildVerificationEmail(typeName, code);
 
         sendHtmlEmail(toEmail, subject, htmlContent);
-        log.info("验证码邮件已发送至：{}，类型：{}，验证码：{}", toEmail, type, code);
+        log.info("验证码邮件已发送至：{}，类型：{}", toEmail, type);
     }
 
     @Override
@@ -82,7 +82,7 @@ public class EmailServiceImpl implements EmailService {
 
             mailSender.send(message);
         } catch (MessagingException e) {
-            log.error("发送HTML邮件失败：", e);
+            log.error("发送HTML邮件失败: toEmail={}", toEmail, e);
             throw new RuntimeException("邮件发送失败");
         }
     }

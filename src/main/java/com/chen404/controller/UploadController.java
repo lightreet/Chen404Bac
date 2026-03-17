@@ -83,7 +83,7 @@ public class UploadController {
             return Result.success("上传成功", data);
 
         } catch (Exception e) {
-            log.error("上传图片失败: {}", e.getMessage());
+            log.error("上传图片失败", e);
             return Result.error(500, "上传失败: " + e.getMessage());
         }
     }
@@ -201,7 +201,7 @@ public class UploadController {
             return Result.success("上传成功", data);
 
         } catch (Exception e) {
-            log.error("上传封面失败: {}", e.getMessage());
+            log.error("上传封面失败", e);
             return Result.error(500, "上传失败: " + e.getMessage());
         }
     }
@@ -246,7 +246,7 @@ public class UploadController {
             return Result.success("上传成功", data);
 
         } catch (Exception e) {
-            log.error("上传头像失败: {}", e.getMessage());
+            log.error("上传头像失败", e);
             return Result.error(500, "上传失败: " + e.getMessage());
         }
     }
@@ -276,7 +276,7 @@ public class UploadController {
             }
 
         } catch (Exception e) {
-            log.error("删除文件失败: {}", e.getMessage());
+            log.error("删除文件失败", e);
             return Result.error(500, "删除失败: " + e.getMessage());
         }
     }

@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import com.chen404.domain.dto.LoginDTO;
 import com.chen404.domain.dto.LoginResultDTO;
 import com.chen404.domain.dto.RegisterDTO;
+import com.chen404.domain.dto.ChangePasswordDTO;
+import com.chen404.domain.dto.UpdateProfileDTO;
 import com.chen404.domain.entity.User;
 
 /**
@@ -45,4 +47,14 @@ public interface UserService extends IService<User> {
      * 获取当前登录用户
      */
     User getCurrentUser(Long userId);
+
+    /**
+     * 更新个人资料（昵称、头像）
+     */
+    User updateProfile(Long userId, UpdateProfileDTO dto);
+
+    /**
+     * 修改密码（校验旧密码）
+     */
+    void changePassword(Long userId, ChangePasswordDTO dto, String clientIp, String userAgent);
 }

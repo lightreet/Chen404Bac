@@ -55,7 +55,7 @@ public class VerificationCodeServiceImpl implements VerificationCodeService {
         }
         // 手机号短信发送（后续实现）
 
-        log.info("验证码已发送至：{}，类型：{}，验证码：{}", target, type, code);
+        log.info("验证码已发送至：{}，类型：{}", target, type);
         return code;
     }
 

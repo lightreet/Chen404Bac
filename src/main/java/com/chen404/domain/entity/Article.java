@@ -1,6 +1,7 @@
 package com.chen404.domain.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -17,9 +18,10 @@ public class Article implements Serializable {
     private static final long serialVersionUID = 1L;
 
     /**
-     * 文章ID
+     * 文章ID（序列化为字符串，避免前端 JS 大数精度丢失）
      */
     @TableId(type = IdType.ASSIGN_ID)
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
     private Long id;
 
     /**

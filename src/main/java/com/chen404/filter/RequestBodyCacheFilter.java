@@ -24,7 +24,7 @@ public class RequestBodyCacheFilter implements Filter {
 
     @Override
     public void init(FilterConfig filterConfig) throws ServletException {
-        log.info("RequestBodyCacheFilter 初始化完成");
+        log.debug("RequestBodyCacheFilter 初始化完成");
     }
 
     @Override
@@ -46,7 +46,7 @@ public class RequestBodyCacheFilter implements Filter {
 
     @Override
     public void destroy() {
-        log.info("RequestBodyCacheFilter 销毁");
+        log.debug("RequestBodyCacheFilter 销毁");
     }
 
     /**

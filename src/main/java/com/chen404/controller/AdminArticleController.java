@@ -1,6 +1,8 @@
 package com.chen404.controller;
 
 import com.chen404.domain.Result;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.chen404.domain.PageResult;
 import com.chen404.domain.entity.Article;
 import com.chen404.service.ArticleService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -20,6 +22,26 @@ public class AdminArticleController {
 
     @Autowired
     private ArticleService articleService;
+
+    @Operation(summary = "我的文章列表", description = "分页获取当前登录用户的文章（草稿/发布），用于个人中心管理")
+    @Parameter(name = "page", description = "页码，默认1")
+    @Parameter(name = "size", description = "每页数量，默认10")
+    @Parameter(name = "status", description = "文章状态：0-草稿 1-已发布 2-回收站")
+    @Parameter(name = "keyword", description = "搜索关键词")
+    @GetMapping("/articles")
+    public Result<PageResult<Article>> getMyArticles(
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "10") Integer size,
+            @RequestParam(required = false) Integer status,
+            @RequestParam(required = false) String keyword,
+            HttpServletRequest request) {
+        Long userId = (Long) request.getAttribute("userId");
+        if (userId == null) {
+            return Result.error(401, "未登录");
+        }
+        Page<Article> articlePage = articleService.getMyArticlePage(userId, page, size, status, keyword);
+        return Result.success(PageResult.of(articlePage));
+    }
 
     @Operation(summary = "创建文章", description = "发布新文章或保存草稿，需要登录")
     @PostMapping("/articles")

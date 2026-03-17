@@ -18,9 +18,19 @@ public interface ArticleService extends IService<Article> {
     Page<Article> getArticlePage(Integer page, Integer size, Integer status, Long categoryId, Long tagId, String keyword);
 
     /**
+     * 管理端：分页查询当前用户的文章列表（可按状态筛选）
+     */
+    Page<Article> getMyArticlePage(Long userId, Integer page, Integer size, Integer status, String keyword);
+
+    /**
      * 获取文章详情
      */
     Article getArticleById(Long id, boolean incrementView);
+
+    /**
+     * 获取上一篇、下一篇文章（仅 id、title，按发布时间排序）
+     */
+    Map<String, Article> getNeighbors(Long articleId);
 
     /**
      * 创建文章

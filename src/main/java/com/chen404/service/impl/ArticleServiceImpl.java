@@ -89,6 +89,27 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     }
 
     @Override
+    public Page<Article> getMyArticlePage(Long userId, Integer page, Integer size, Integer status, String keyword) {
+        Page<Article> pageParam = new Page<>(page, size);
+        LambdaQueryWrapper<Article> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Article::getAuthorId, userId);
+        if (status != null) {
+            wrapper.eq(Article::getStatus, status);
+        }
+        if (StringUtils.hasText(keyword)) {
+            wrapper.and(w -> w.like(Article::getTitle, keyword)
+                    .or()
+                    .like(Article::getSummary, keyword));
+        }
+        wrapper.orderByDesc(Article::getUpdateTime).orderByDesc(Article::getCreateTime);
+        Page<Article> result = articleMapper.selectPage(pageParam, wrapper);
+        for (Article article : result.getRecords()) {
+            fillArticleRelations(article);
+        }
+        return result;
+    }
+
+    @Override
     public Article getArticleById(Long id, boolean incrementView) {
         Article article = articleMapper.selectById(id);
         if (article == null) {
@@ -105,6 +126,39 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         fillArticleRelations(article);
 
         return article;
+    }
+
+    @Override
+    public Map<String, Article> getNeighbors(Long articleId) {
+        Article current = articleMapper.selectById(articleId);
+        if (current == null || current.getPublishTime() == null) {
+            return Map.of();
+        }
+        Map<String, Article> result = new java.util.HashMap<>();
+
+        // 上一篇：发布时间早于当前，取最近一篇
+        LambdaQueryWrapper<Article> prevWrapper = new LambdaQueryWrapper<>();
+        prevWrapper.eq(Article::getStatus, 1)
+                .lt(Article::getPublishTime, current.getPublishTime())
+                .orderByDesc(Article::getPublishTime)
+                .last("LIMIT 1");
+        Article prev = articleMapper.selectOne(prevWrapper);
+        if (prev != null) {
+            result.put("prev", prev);
+        }
+
+        // 下一篇：发布时间晚于当前，取最早一篇
+        LambdaQueryWrapper<Article> nextWrapper = new LambdaQueryWrapper<>();
+        nextWrapper.eq(Article::getStatus, 1)
+                .gt(Article::getPublishTime, current.getPublishTime())
+                .orderByAsc(Article::getPublishTime)
+                .last("LIMIT 1");
+        Article next = articleMapper.selectOne(nextWrapper);
+        if (next != null) {
+            result.put("next", next);
+        }
+
+        return result;
     }
 
     @Override

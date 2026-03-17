@@ -27,7 +27,7 @@ public class TraceIdFilter implements Filter {
 
     @Override
     public void init(FilterConfig filterConfig) throws ServletException {
-        log.info("TraceIdFilter 初始化完成");
+        log.debug("TraceIdFilter 初始化完成");
     }
 
     @Override
@@ -63,7 +63,7 @@ public class TraceIdFilter implements Filter {
 
     @Override
     public void destroy() {
-        log.info("TraceIdFilter 销毁");
+        log.debug("TraceIdFilter 销毁");
     }
 
     /**

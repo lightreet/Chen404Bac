@@ -86,10 +86,14 @@ public class JwtInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        // 公开API路径（匹配根路径和子路径）
-        // 注意：/upload/** 需要认证，不在此处放行
-        return path.equals("/auth") || path.startsWith("/auth/") ||
-               path.equals("/home") || path.startsWith("/home/") ||
+        // 仅以下 /auth 子路径为公开（登录、注册、验证码、校验接口），其余 /auth/* 需 JWT（如 /auth/info、/auth/profile、/auth/change-password）
+        if (path.equals("/auth") || path.startsWith("/auth/")) {
+            return path.equals("/auth/login") || path.equals("/auth/register")
+                    || path.equals("/auth/send-code") || path.equals("/auth/refresh")
+                    || path.equals("/auth/check-username") || path.equals("/auth/check-email") || path.equals("/auth/check-phone");
+        }
+        // 其他公开API路径
+        return path.equals("/home") || path.startsWith("/home/") ||
                path.equals("/site") || path.startsWith("/site/") ||
                path.equals("/articles") || path.startsWith("/articles/") ||
                path.equals("/categories") || path.startsWith("/categories/") ||

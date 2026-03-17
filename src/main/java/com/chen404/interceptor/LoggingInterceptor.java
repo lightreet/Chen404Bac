@@ -1,7 +1,5 @@
 package com.chen404.interceptor;
 
-import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONWriter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -41,103 +39,78 @@ public class LoggingInterceptor implements HandlerInterceptor {
         logResponse(request, response, ex);
     }
 
+    /** 慢请求阈值（毫秒），超过则打 WARN */
+    private static final long SLOW_REQUEST_THRESHOLD_MS = 3000;
+
     /**
-     * 记录请求信息 - 按行展示
+     * 记录请求信息：默认单行摘要，符合阿里巴巴日志规约
      */
     private void logRequest(HttpServletRequest request) {
         try {
             String method = request.getMethod();
             String uri = request.getRequestURI();
-            String queryString = request.getQueryString();
+            String query = request.getQueryString() != null ? "?" + request.getQueryString() : "";
             String clientIp = getClientIp(request);
             String traceId = MDC.get("traceId");
-
-            StringBuilder sb = new StringBuilder();
-            sb.append("\n========== REQUEST START ==========");
-            sb.append("\nTraceId    : ").append(traceId);
-            sb.append("\nMethod     : ").append(method);
-            sb.append("\nURI        : ").append(uri);
-            if (queryString != null) {
-                sb.append("\nQuery      : ").append(queryString);
+            log.info("[API-REQ] traceId={} method={} uri={} clientIp={}", traceId, method, uri + query, clientIp);
+            if (log.isDebugEnabled()) {
+                logDebugRequest(request);
             }
-            sb.append("\nClientIP   : ").append(clientIp);
-
-            // Headers 一行展示
-            Map<String, String> headers = new HashMap<>();
-            Enumeration<String> headerNames = request.getHeaderNames();
-            while (headerNames.hasMoreElements()) {
-                String name = headerNames.nextElement();
-                String value = request.getHeader(name);
-                // 只记录关键header
-                if (isImportantHeader(name)) {
-                    headers.put(name, maskHeaderValue(name, value));
-                }
-            }
-            if (!headers.isEmpty()) {
-                sb.append("\nHeaders    : ").append(formatMap(headers));
-            }
-
-            // 请求参数
-            Map<String, String[]> paramMap = request.getParameterMap();
-            if (!paramMap.isEmpty()) {
-                Map<String, String> params = new HashMap<>();
-                paramMap.forEach((k, v) -> {
-                    if (v.length == 1) {
-                        params.put(k, maskSensitiveField(k, v[0]));
-                    } else {
-                        params.put(k, maskSensitiveField(k, String.join(",", v)));
-                    }
-                });
-                sb.append("\nParams     : ").append(formatMap(params));
-            }
-
-            // Body
-            if (isJsonRequest(request)) {
-                String body = getRequestBody(request);
-                if (body != null && !body.isEmpty()) {
-                    sb.append("\nBody       : ").append(maskSensitiveJson(body));
-                }
-            }
-
-            sb.append("\n========== REQUEST END ==========");
-
-            log.info(sb.toString());
-
         } catch (Exception e) {
             log.warn("记录请求日志失败: {}", e.getMessage());
         }
     }
 
+    /** DEBUG 下输出请求详情（参数、Body 脱敏） */
+    private void logDebugRequest(HttpServletRequest request) {
+        try {
+            Map<String, String> headers = new HashMap<>();
+            Enumeration<String> headerNames = request.getHeaderNames();
+            while (headerNames.hasMoreElements()) {
+                String name = headerNames.nextElement();
+                String value = request.getHeader(name);
+                if (isImportantHeader(name)) {
+                    headers.put(name, maskHeaderValue(name, value));
+                }
+            }
+            if (!headers.isEmpty()) {
+                log.debug("[API-REQ] headers={}", formatMap(headers));
+            }
+            Map<String, String[]> paramMap = request.getParameterMap();
+            if (!paramMap.isEmpty()) {
+                Map<String, String> params = new HashMap<>();
+                paramMap.forEach((k, v) -> params.put(k, maskSensitiveField(k, v.length == 1 ? v[0] : String.join(",", v))));
+                log.debug("[API-REQ] params={}", formatMap(params));
+            }
+            if (isJsonRequest(request)) {
+                String body = getRequestBody(request);
+                if (body != null && !body.isEmpty()) {
+                    log.debug("[API-REQ] body={}", maskSensitiveJson(body));
+                }
+            }
+        } catch (Exception e) {
+            log.debug("记录请求详情失败: {}", e.getMessage());
+        }
+    }
+
     /**
-     * 记录响应信息
+     * 记录响应信息：单行摘要，异常或慢请求时提升级别
      */
     private void logResponse(HttpServletRequest request, HttpServletResponse response, Exception ex) {
         try {
             Long startTime = (Long) request.getAttribute(START_TIME_KEY);
             long duration = startTime != null ? System.currentTimeMillis() - startTime : 0;
             String traceId = MDC.get("traceId");
-
-            StringBuilder sb = new StringBuilder();
-            sb.append("\n========== RESPONSE START ==========");
-            sb.append("\nTraceId    : ").append(traceId);
-            sb.append("\nMethod     : ").append(request.getMethod());
-            sb.append("\nURI        : ").append(request.getRequestURI());
-            sb.append("\nStatus     : ").append(response.getStatus());
-            sb.append("\nDuration   : ").append(duration).append("ms");
-
+            String method = request.getMethod();
+            String uri = request.getRequestURI();
+            int status = response.getStatus();
             if (ex != null) {
-                sb.append("\nError      : ").append(ex.getMessage());
-            }
-
-            sb.append("\n========== RESPONSE END ==========");
-
-            // 根据耗时选择日志级别
-            if (duration > 3000) {
-                log.warn(sb.toString());
+                log.error("[API-RES] traceId={} method={} uri={} status={} duration={}ms error={}", traceId, method, uri, status, duration, ex.getMessage(), ex);
+            } else if (duration > SLOW_REQUEST_THRESHOLD_MS) {
+                log.warn("[API-RES] traceId={} method={} uri={} status={} duration={}ms slow", traceId, method, uri, status, duration);
             } else {
-                log.info(sb.toString());
+                log.info("[API-RES] traceId={} method={} uri={} status={} duration={}ms", traceId, method, uri, status, duration);
             }
-
         } catch (Exception e) {
             log.warn("记录响应日志失败: {}", e.getMessage());
         }

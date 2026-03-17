@@ -8,7 +8,6 @@ import com.chen404.service.ArticleService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,7 +17,7 @@ import java.util.Map;
 /**
  * 文章控制器
  */
-@Tag(name = "文章管理", description = "文章发布、编辑、查询等相关接口")
+@Tag(name = "文章", description = "文章列表、详情、点赞、热门、推荐等公开接口")
 @RestController
 @RequestMapping("/articles")
 public class ArticleController {
@@ -68,73 +67,14 @@ public class ArticleController {
     }
 
     /**
-     * 创建文章（需要登录）
+     * 获取上一篇、下一篇文章
      */
-    @Operation(summary = "创建文章", description = "发布新文章或保存草稿，需要登录")
-    @PostMapping("/admin/articles")
-    public Result<Article> createArticle(@RequestBody Article article, HttpServletRequest request) {
-        Long userId = (Long) request.getAttribute("userId");
-        if (userId == null) {
-            return Result.error(401, "未登录");
-        }
-
-        // 设置作者
-        article.setAuthorId(userId);
-
-        try {
-            Article created = articleService.createArticle(article);
-            return Result.success("创建成功", created);
-        } catch (RuntimeException e) {
-            return Result.error(400, e.getMessage());
-        }
-    }
-
-    /**
-     * 更新文章（需要登录）
-     */
-    @Operation(summary = "更新文章", description = "更新已有文章，需要登录且是文章作者或管理员")
-    @Parameter(name = "id", description = "文章ID", required = true)
-    @PutMapping("/admin/articles/{id}")
-    public Result<Article> updateArticle(
-            @PathVariable Long id,
-            @RequestBody Article article,
-            HttpServletRequest request) {
-
-        Long userId = (Long) request.getAttribute("userId");
-        if (userId == null) {
-            return Result.error(401, "未登录");
-        }
-
-        // TODO: 检查权限（是否是作者或管理员）
-
-        try {
-            Article updated = articleService.updateArticle(id, article);
-            return Result.success("更新成功", updated);
-        } catch (RuntimeException e) {
-            return Result.error(400, e.getMessage());
-        }
-    }
-
-    /**
-     * 删除文章（需要登录）
-     */
-    @Operation(summary = "删除文章", description = "删除文章（逻辑删除），需要登录且是文章作者或管理员")
-    @Parameter(name = "id", description = "文章ID", required = true)
-    @DeleteMapping("/admin/articles/{id}")
-    public Result<Void> deleteArticle(@PathVariable Long id, HttpServletRequest request) {
-        Long userId = (Long) request.getAttribute("userId");
-        if (userId == null) {
-            return Result.error(401, "未登录");
-        }
-
-        // TODO: 检查权限
-
-        try {
-            articleService.deleteArticle(id);
-            return Result.success("删除成功");
-        } catch (RuntimeException e) {
-            return Result.error(400, e.getMessage());
-        }
+    @Operation(summary = "上一篇/下一篇", description = "按发布时间获取相邻文章")
+    @Parameter(name = "id", description = "当前文章ID", required = true)
+    @GetMapping("/{id}/neighbors")
+    public Result<Map<String, Article>> getArticleNeighbors(@PathVariable Long id) {
+        Map<String, Article> neighbors = articleService.getNeighbors(id);
+        return Result.success(neighbors);
     }
 
     /**

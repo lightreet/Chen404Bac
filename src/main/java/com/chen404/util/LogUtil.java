@@ -1,7 +1,6 @@
 package com.chen404.util;
 
 import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONWriter;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 
@@ -83,7 +82,7 @@ public class LogUtil {
             logMap.put("details", details);
         }
 
-        log.info("[BIZ] {}", JSON.toJSONString(logMap, JSONWriter.Feature.PrettyFormat));
+        log.info("[BIZ] {}", JSON.toJSONString(logMap));
     }
 
     /**
@@ -116,7 +115,7 @@ public class LogUtil {
             logMap.put("details", details);
         }
 
-        log.warn("[SLOW] {}", JSON.toJSONString(logMap, JSONWriter.Feature.PrettyFormat));
+        log.warn("[SLOW] {}", JSON.toJSONString(logMap));
     }
 
     /**
@@ -142,7 +141,7 @@ public class LogUtil {
             logMap.put("new", maskSensitiveData(newValue));
         }
 
-        log.info("[DATA] {}", JSON.toJSONString(logMap, JSONWriter.Feature.PrettyFormat));
+        log.info("[DATA] {}", JSON.toJSONString(logMap));
     }
 
     /**
@@ -162,7 +161,7 @@ public class LogUtil {
             logMap.put("details", details);
         }
 
-        log.warn("[SECURITY] {}", JSON.toJSONString(logMap, JSONWriter.Feature.PrettyFormat));
+        log.warn("[SECURITY] {}", JSON.toJSONString(logMap));
     }
 
     /**

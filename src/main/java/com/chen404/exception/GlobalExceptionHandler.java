@@ -32,7 +32,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(RuntimeException.class)
     public Result<String> handleRuntimeException(RuntimeException e) {
-        log.error("运行时异常：", e);
+        log.error("运行时异常", e);
         return Result.error(500, e.getMessage());
     }
 
@@ -41,7 +41,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(Exception.class)
     public Result<String> handleException(Exception e) {
-        log.error("系统异常：", e);
+        log.error("系统异常", e);
         return Result.error(500, "系统繁忙，请稍后重试");
     }
 }

@@ -1,30 +1,29 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-    企业级日志配置
-    功能：
-    1. 控制台输出彩色格式化日志
-    2. 按日志级别分文件存储
-    3. 自动归档和压缩
-    4. TraceID链路追踪
+    日志配置 - 遵循《阿里巴巴 Java 开发手册》日志规约
+    规约要点：
+    1. 统一格式：时间、级别、线程、Logger、消息；异常单独输出堆栈
+    2. 使用占位符，避免字符串拼接
+    3. 生产环境禁止 DEBUG；有选择地输出 INFO
+    4. 禁止在日志中输出密码、验证码等敏感信息
+    5. 异常必须使用 log.error("msg", e) 输出堆栈
+    6. 日志文件至少保留 15 天
 -->
 <configuration scan="true" scanPeriod="60 seconds">
 
-    <!-- 定义变量 -->
+    <!-- 统一日志格式：时间 | 线程 | 级别 | Logger | 消息 -->
+    <property name="LOG_PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n"/>
     <property name="LOG_PATH" value="logs"/>
-    <property name="LOG_PATTERN"
-              value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{traceId}] %logger{50} - %msg%n"/>
-    <property name="CONSOLE_PATTERN"
-              value="%d{HH:mm:ss.SSS} [%thread] %-5level [%X{traceId}] %logger{36} - %msg%n"/>
 
-    <!-- 控制台输出 -->
+    <!-- 控制台：与文件格式一致，便于排查 -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>${CONSOLE_PATTERN}</pattern>
+            <pattern>${LOG_PATTERN}</pattern>
             <charset>UTF-8</charset>
         </encoder>
     </appender>
 
-    <!-- INFO级别日志文件 -->
+    <!-- INFO 文件 -->
     <appender name="INFO_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_PATH}/info.log</file>
         <filter class="ch.qos.logback.classic.filter.LevelFilter">
@@ -46,7 +45,7 @@
         </rollingPolicy>
     </appender>
 
-    <!-- WARN级别日志文件 -->
+    <!-- WARN 文件 -->
     <appender name="WARN_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_PATH}/warn.log</file>
         <filter class="ch.qos.logback.classic.filter.LevelFilter">
@@ -68,7 +67,7 @@
         </rollingPolicy>
     </appender>
 
-    <!-- ERROR级别日志文件 -->
+    <!-- ERROR 文件（含异常堆栈） -->
     <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_PATH}/error.log</file>
         <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
@@ -88,7 +87,7 @@
         </rollingPolicy>
     </appender>
 
-    <!-- SQL日志文件 -->
+    <!-- SQL 日志（additivity=false 避免重复输出到 root） -->
     <appender name="SQL_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_PATH}/sql.log</file>
         <encoder>
@@ -105,7 +104,7 @@
         </rollingPolicy>
     </appender>
 
-    <!-- API请求日志文件 -->
+    <!-- API 请求日志（单行摘要，additivity=false） -->
     <appender name="API_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_PATH}/api.log</file>
         <encoder>
@@ -122,78 +121,42 @@
         </rollingPolicy>
     </appender>
 
-    <!-- 全量日志文件 -->
-    <appender name="ALL_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${LOG_PATH}/all.log</file>
-        <encoder>
-            <pattern>${LOG_PATTERN}</pattern>
-            <charset>UTF-8</charset>
-        </encoder>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>${LOG_PATH}/archive/all.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
-            <maxHistory>7</maxHistory>
-            <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
-                <maxFileSize>500MB</maxFileSize>
-            </timeBasedFileNamingAndTriggeringPolicy>
-            <totalSizeCap>5GB</totalSizeCap>
-        </rollingPolicy>
-    </appender>
-
-    <!-- 异步日志配置 -->
+    <!-- 异步控制台，减少阻塞 -->
     <appender name="ASYNC_CONSOLE" class="ch.qos.logback.classic.AsyncAppender">
         <appender-ref ref="CONSOLE"/>
         <queueSize>512</queueSize>
         <discardingThreshold>0</discardingThreshold>
     </appender>
 
-    <appender name="ASYNC_ALL_FILE" class="ch.qos.logback.classic.AsyncAppender">
-        <appender-ref ref="ALL_FILE"/>
-        <queueSize>1024</queueSize>
-        <discardingThreshold>0</discardingThreshold>
-    </appender>
-
-    <!-- Logger配置 -->
-
-    <!-- SQL相关日志 -->
+    <!-- Logger：SQL/API 仅写各自文件 + 控制台，不重复写入 root 文件 -->
     <logger name="com.chen404.interceptor.SqlPerformanceInterceptor" level="INFO" additivity="false">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="SQL_FILE"/>
     </logger>
-
-    <!-- API请求日志 -->
     <logger name="com.chen404.interceptor.LoggingInterceptor" level="INFO" additivity="false">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="API_FILE"/>
     </logger>
 
-    <!-- MyBatis日志 -->
+    <!-- 第三方库降噪 -->
     <logger name="com.baomidou.mybatisplus" level="WARN"/>
     <logger name="org.apache.ibatis" level="WARN"/>
-
-    <!-- 数据库连接池日志 -->
     <logger name="com.zaxxer.hikari" level="WARN"/>
-
-    <!-- Spring框架日志 -->
     <logger name="org.springframework" level="WARN"/>
     <logger name="org.springframework.web" level="WARN"/>
     <logger name="org.springframework.security" level="WARN"/>
-
-    <!-- Tomcat日志 -->
     <logger name="org.apache.catalina" level="WARN"/>
     <logger name="org.apache.tomcat" level="WARN"/>
 
-    <!-- 根日志配置 -->
     <root level="INFO">
         <appender-ref ref="ASYNC_CONSOLE"/>
         <appender-ref ref="INFO_FILE"/>
         <appender-ref ref="WARN_FILE"/>
         <appender-ref ref="ERROR_FILE"/>
-        <appender-ref ref="ASYNC_ALL_FILE"/>
     </root>
 
-    <!-- 开发环境配置 -->
     <springProfile name="dev">
-        <root level="DEBUG">
+        <root level="INFO">
             <appender-ref ref="CONSOLE"/>
             <appender-ref ref="INFO_FILE"/>
             <appender-ref ref="WARN_FILE"/>
@@ -202,15 +165,14 @@
         <logger name="com.chen404" level="DEBUG"/>
     </springProfile>
 
-    <!-- 生产环境配置 -->
     <springProfile name="prod">
         <root level="WARN">
             <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="INFO_FILE"/>
+            <appender-ref ref="WARN_FILE"/>
             <appender-ref ref="ERROR_FILE"/>
-            <appender-ref ref="ASYNC_ALL_FILE"/>
         </root>
         <logger name="com.chen404" level="INFO"/>
         <logger name="com.chen404.interceptor" level="INFO"/>
     </springProfile>
-
 </configuration>

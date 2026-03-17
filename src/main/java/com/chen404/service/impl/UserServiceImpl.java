@@ -4,12 +4,15 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.chen404.domain.dto.LoginDTO;
 import com.chen404.domain.dto.LoginResultDTO;
 import com.chen404.domain.dto.RegisterDTO;
+import com.chen404.domain.dto.ChangePasswordDTO;
+import com.chen404.domain.dto.UpdateProfileDTO;
 import com.chen404.domain.entity.Role;
 import com.chen404.domain.entity.User;
 import com.chen404.domain.entity.UserRole;
 import com.chen404.mapper.RoleMapper;
 import com.chen404.mapper.UserMapper;
 import com.chen404.mapper.UserRoleMapper;
+import com.chen404.service.EmailService;
 import com.chen404.service.UserService;
 import com.chen404.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,6 +45,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Autowired
     private JwtUtil jwtUtil;
+
+    @Autowired
+    private EmailService emailService;
 
     @Value("${jwt.expiration}")
     private Long expiration;
@@ -185,5 +191,50 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             }
         }
         return user;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public User updateProfile(Long userId, UpdateProfileDTO dto) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new RuntimeException("用户不存在");
+        }
+        user.setNickname(dto.getNickname());
+        user.setAvatar(dto.getAvatar());
+        userMapper.updateById(user);
+        return getCurrentUser(userId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void changePassword(Long userId, ChangePasswordDTO dto, String clientIp, String userAgent) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new RuntimeException("用户不存在");
+        }
+        if (!passwordEncoder.matches(dto.getOldPassword(), user.getPassword())) {
+            throw new RuntimeException("当前密码错误");
+        }
+        if (passwordEncoder.matches(dto.getNewPassword(), user.getPassword())) {
+            throw new RuntimeException("新密码不能与当前密码相同");
+        }
+        user.setPassword(passwordEncoder.encode(dto.getNewPassword()));
+        userMapper.updateById(user);
+
+        // 修改密码后发送提醒邮件（尽力而为，不影响主流程）
+        if (StringUtils.hasText(user.getEmail())) {
+            try {
+                String subject = "Chen404 博客：密码已修改提醒";
+                String content = "你的账号密码刚刚被修改。\n\n"
+                        + "时间：" + LocalDateTime.now() + "\n"
+                        + "IP：" + (clientIp == null ? "-" : clientIp) + "\n"
+                        + "设备：" + (userAgent == null ? "-" : userAgent) + "\n\n"
+                        + "若这不是你本人操作，请尽快登录并修改密码，或联系管理员。";
+                emailService.sendEmail(user.getEmail(), subject, content);
+            } catch (Exception ignored) {
+                // ignore
+            }
+        }
     }
 }

@@ -13,7 +13,6 @@ import org.apache.ibatis.reflection.MetaObject;
 import org.apache.ibatis.reflection.SystemMetaObject;
 import org.apache.ibatis.session.Configuration;
 import org.apache.ibatis.session.ResultHandler;
-import org.apache.ibatis.type.TypeHandlerRegistry;
 
 import java.sql.Statement;
 import java.text.SimpleDateFormat;
@@ -34,10 +33,10 @@ import java.util.Properties;
 })
 public class SqlPerformanceInterceptor implements Interceptor {
 
-    /**
-     * 慢查询阈值（毫秒）
-     */
+    /** 慢查询阈值（毫秒） */
     private static final long SLOW_QUERY_THRESHOLD = 1000;
+    /** SQL 日志最大长度，避免刷屏（阿里巴巴规约：谨慎记录、避免过量） */
+    private static final int MAX_SQL_LOG_LENGTH = 500;
 
     @Override
     public Object intercept(Invocation invocation) throws Throwable {
@@ -64,18 +63,13 @@ public class SqlPerformanceInterceptor implements Interceptor {
         // 获取影响行数
         int rows = getEffectedRows(result, invocation.getMethod().getName());
 
-        // 简化的SQL ID（去掉包名）
         String simpleSqlId = getSimpleSqlId(mappedStatement.getId());
+        String sqlForLog = truncateIfNeeded(completeSql, MAX_SQL_LOG_LENGTH);
 
-        // 构建日志：一行展示完整SQL
-        String logMsg = String.format("[SQL] %s | %dms | rows=%d | %s",
-                simpleSqlId, duration, rows, completeSql);
-
-        // 根据耗时选择日志级别
         if (duration > SLOW_QUERY_THRESHOLD) {
-            log.warn("[SLOW-SQL] {}", logMsg);
+            log.warn("[SLOW-SQL] sqlId={} duration={}ms rows={} sql={}", simpleSqlId, duration, rows, sqlForLog);
         } else {
-            log.info(logMsg);
+            log.info("[SQL] sqlId={} duration={}ms rows={} sql={}", simpleSqlId, duration, rows, sqlForLog);
         }
 
         return result;
@@ -91,6 +85,16 @@ public class SqlPerformanceInterceptor implements Interceptor {
 
     @Override
     public void setProperties(Properties properties) {
+    }
+
+    private static String truncateIfNeeded(String sql, int maxLen) {
+        if (sql == null) {
+            return "";
+        }
+        if (sql.length() <= maxLen) {
+            return sql;
+        }
+        return sql.substring(0, maxLen) + "...";
     }
 
     /**
@@ -125,7 +129,6 @@ public class SqlPerformanceInterceptor implements Interceptor {
             return sql;
         }
 
-        TypeHandlerRegistry typeHandlerRegistry = configuration.getTypeHandlerRegistry();
         List<String> parameters = new ArrayList<>();
 
         for (ParameterMapping parameterMapping : parameterMappings) {

@@ -1,5 +1,6 @@
 package com.chen404;
 
+import lombok.extern.slf4j.Slf4j;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -8,6 +9,7 @@ import org.springframework.core.env.Environment;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
+@Slf4j
 @SpringBootApplication
 @MapperScan("com.chen404.mapper")
 @ServletComponentScan("com.chen404.filter")
@@ -18,17 +20,9 @@ public class Chen404Application {
     public static void main(String[] args) {
         var context = SpringApplication.run(Chen404Application.class, args);
         Environment env = context.getEnvironment();
-
         String port = env.getProperty("server.port", "8080");
         String contextPath = env.getProperty("server.servlet.context-path", "");
-
-        System.out.println("╔════════════════════════════════════════════════════════════╗");
-        System.out.println("║                                                            ║");
-        System.out.println("║         Chen404 Backend 启动成功！                         ║");
-        System.out.println("║                                                            ║");
-        System.out.println("║   本地访问: http://localhost:" + port + contextPath + "                            ║");
-        System.out.println("║   API 文档: http://localhost:" + port + contextPath + "/swagger-ui.html     ║");
-        System.out.println("║                                                            ║");
-        System.out.println("╚════════════════════════════════════════════════════════════╝");
+        String baseUrl = "http://localhost:" + port + contextPath;
+        log.info("Chen404 Backend 启动成功 | 本地访问: {} | API 文档: {}/swagger-ui.html", baseUrl, baseUrl);
     }
 }
