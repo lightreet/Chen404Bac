@@ -2,13 +2,16 @@ package com.chen404.service.impl;
 
 import com.chen404.service.EmailService;
 import com.chen404.service.VerificationCodeService;
+import com.chen404.util.RedisKeys;
+import com.chen404.util.RedisUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.Random;
-import java.util.concurrent.TimeUnit;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 /**
  * 验证码服务实现类
@@ -18,7 +21,7 @@ import java.util.concurrent.TimeUnit;
 public class VerificationCodeServiceImpl implements VerificationCodeService {
 
     @Autowired
-    private StringRedisTemplate redisTemplate;
+    private RedisUtil redisUtil;
 
     @Autowired
     private EmailService emailService;
@@ -43,8 +46,8 @@ public class VerificationCodeServiceImpl implements VerificationCodeService {
         String code = generateCode();
 
         // 存储到Redis
-        String codeKey = buildCodeKey(target, type);
-        redisTemplate.opsForValue().set(codeKey, code, CODE_EXPIRE_MINUTES, TimeUnit.MINUTES);
+        String codeKey = RedisKeys.verifyCode(type, target);
+        redisUtil.setString(codeKey, code, Duration.ofMinutes(CODE_EXPIRE_MINUTES));
 
         // 记录发送次数
         recordSendCount(target, type);
@@ -66,8 +69,8 @@ public class VerificationCodeServiceImpl implements VerificationCodeService {
             return true;
         }
 
-        String codeKey = buildCodeKey(target, type);
-        String storedCode = redisTemplate.opsForValue().get(codeKey);
+        String codeKey = RedisKeys.verifyCode(type, target);
+        String storedCode = redisUtil.getString(codeKey);
 
         if (storedCode == null) {
             return false;
@@ -76,7 +79,7 @@ public class VerificationCodeServiceImpl implements VerificationCodeService {
         boolean valid = storedCode.equals(code);
         if (valid) {
             // 验证成功后删除验证码
-            redisTemplate.delete(codeKey);
+            redisUtil.delete(codeKey);
         }
 
         return valid;
@@ -84,22 +87,21 @@ public class VerificationCodeServiceImpl implements VerificationCodeService {
 
     @Override
     public void deleteCode(String target, String type) {
-        String codeKey = buildCodeKey(target, type);
-        redisTemplate.delete(codeKey);
+        String codeKey = RedisKeys.verifyCode(type, target);
+        redisUtil.delete(codeKey);
     }
 
     @Override
     public boolean canSend(String target, String type) {
         // 检查发送间隔
-        String intervalKey = buildIntervalKey(target, type);
-        Boolean hasKey = redisTemplate.hasKey(intervalKey);
-        if (Boolean.TRUE.equals(hasKey)) {
+        String intervalKey = RedisKeys.verifyInterval(type, target);
+        if (redisUtil.exists(intervalKey)) {
             return false;
         }
 
         // 检查每日发送次数
-        String dailyKey = buildDailyKey(target, type);
-        String countStr = redisTemplate.opsForValue().get(dailyKey);
+        String dailyKey = RedisKeys.verifyDailyCount(type, target);
+        String countStr = redisUtil.getString(dailyKey);
         if (countStr != null) {
             int count = Integer.parseInt(countStr);
             if (count >= MAX_DAILY_SEND_COUNT) {
@@ -115,16 +117,23 @@ public class VerificationCodeServiceImpl implements VerificationCodeService {
      */
     private void recordSendCount(String target, String type) {
         // 记录发送间隔
-        String intervalKey = buildIntervalKey(target, type);
-        redisTemplate.opsForValue().set(intervalKey, "1", SEND_INTERVAL_SECONDS, TimeUnit.SECONDS);
+        String intervalKey = RedisKeys.verifyInterval(type, target);
+        redisUtil.setString(intervalKey, "1", Duration.ofSeconds(SEND_INTERVAL_SECONDS));
 
         // 记录每日次数
-        String dailyKey = buildDailyKey(target, type);
-        Long count = redisTemplate.opsForValue().increment(dailyKey);
+        String dailyKey = RedisKeys.verifyDailyCount(type, target);
+        Long count = redisUtil.increment(dailyKey);
         if (count != null && count == 1) {
-            // 设置过期时间为当天剩余时间
-            redisTemplate.expire(dailyKey, 1, TimeUnit.DAYS);
+            // 设置过期到当天结束（更符合 “daily” 语义）
+            redisUtil.expire(dailyKey, durationUntilEndOfDay());
         }
+    }
+
+    private static Duration durationUntilEndOfDay() {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime end = now.toLocalDate().atTime(23, 59, 59);
+        long seconds = end.atZone(ZoneId.systemDefault()).toEpochSecond() - now.atZone(ZoneId.systemDefault()).toEpochSecond();
+        return Duration.ofSeconds(Math.max(seconds, 1));
     }
 
     /**
@@ -139,24 +148,4 @@ public class VerificationCodeServiceImpl implements VerificationCodeService {
         return code.toString();
     }
 
-    /**
-     * 构建验证码存储key
-     */
-    private String buildCodeKey(String target, String type) {
-        return "verify:code:" + type + ":" + target;
-    }
-
-    /**
-     * 构建发送间隔key
-     */
-    private String buildIntervalKey(String target, String type) {
-        return "verify:interval:" + type + ":" + target;
-    }
-
-    /**
-     * 构建每日次数key
-     */
-    private String buildDailyKey(String target, String type) {
-        return "verify:daily:" + type + ":" + target;
-    }
 }
