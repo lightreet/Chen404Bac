@@ -35,6 +35,16 @@ public class CategoryController {
         return Result.success(categories);
     }
 
+    @Operation(summary = "获取分类详情")
+    @GetMapping("/{id}")
+    public Result<Category> getCategoryById(@Parameter(description = "分类ID", required = true) @PathVariable Long id) {
+        Category category = categoryService.getById(id);
+        if (category == null) {
+            return Result.error(404, "分类不存在");
+        }
+        return Result.success(category);
+    }
+
     @RequireAdmin
     @Operation(summary = "创建分类", description = "仅管理员")
     @PostMapping("")
