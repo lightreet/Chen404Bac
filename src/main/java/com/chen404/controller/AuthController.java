@@ -5,8 +5,10 @@ import com.chen404.domain.dto.ChangePasswordDTO;
 import com.chen404.util.RequestAttrUtil;
 import com.chen404.domain.dto.LoginDTO;
 import com.chen404.domain.dto.LoginResultDTO;
+import com.chen404.domain.dto.RefreshTokenDTO;
 import com.chen404.domain.dto.RegisterDTO;
 import com.chen404.domain.dto.SendCodeDTO;
+import com.chen404.domain.dto.TokenRefreshResultDTO;
 import com.chen404.domain.dto.UpdateProfileDTO;
 import com.chen404.domain.entity.User;
 import com.chen404.service.UserService;
@@ -17,6 +19,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -35,6 +38,12 @@ public class AuthController {
 
     @Autowired
     private VerificationCodeService verificationCodeService;
+
+    @Autowired
+    private com.chen404.util.JwtUtil jwtUtil;
+
+    @Value("${jwt.expiration}")
+    private Long expiration;
 
     /**
      * 用户登录
@@ -126,6 +135,36 @@ public class AuthController {
         Long userId = RequestAttrUtil.requireUserId(request);
         User user = userService.getCurrentUser(userId);
         return Result.success(user);
+    }
+
+    /**
+     * 刷新访问 Token
+     */
+    @Operation(summary = "刷新Token", description = "使用 refreshToken 换取新的访问 token（无需登录）")
+    @PostMapping("/refresh")
+    public Result<TokenRefreshResultDTO> refresh(@Valid @RequestBody RefreshTokenDTO dto) {
+        try {
+            String refreshToken = dto.getRefreshToken();
+            var decoded = jwtUtil.verifyToken(refreshToken);
+            String type = decoded.getClaim("type").asString();
+            if (!"refresh".equals(type)) {
+                return Result.error(401, "refreshToken无效");
+            }
+            Long userId = Long.valueOf(decoded.getSubject());
+            String username = decoded.getClaim("username").asString();
+
+            User user = userService.getById(userId);
+            if (user == null || user.getStatus() == 0) {
+                return Result.error(401, "用户不存在或已被禁用");
+            }
+
+            String newToken = jwtUtil.generateToken(userId, username);
+            String newRefreshToken = jwtUtil.generateRefreshToken(userId, username);
+            int expiresSeconds = expiration == null ? 0 : (int) (expiration / 1000);
+            return Result.success(TokenRefreshResultDTO.of(newToken, newRefreshToken, expiresSeconds));
+        } catch (Exception e) {
+            return Result.error(401, "refreshToken无效或已过期");
+        }
     }
 
     /**

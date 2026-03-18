@@ -152,4 +152,10 @@ public class Article implements Serializable {
      */
     @TableField(exist = false)
     private List<Long> tagIds;
+
+    /**
+     * 新标签名称列表（用户自定义输入，后端会 findOrCreate 后并入 tagIds）
+     */
+    @TableField(exist = false)
+    private List<String> tagNames;
 }

@@ -25,6 +25,14 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 无权限（如非管理员）
+     */
+    @ExceptionHandler(ForbiddenException.class)
+    public Result<String> handleForbidden(ForbiddenException e) {
+        return Result.error(403, e.getMessage());
+    }
+
+    /**
      * 处理参数校验异常
      */
     @ExceptionHandler(BindException.class)

@@ -33,4 +33,10 @@ public interface TagMapper extends BaseMapper<Tag> {
      */
     @Select("SELECT * FROM tag WHERE slug = #{slug} AND deleted = 0")
     Tag selectBySlug(@Param("slug") String slug);
+
+    /**
+     * 根据名称查询标签（忽略大小写）
+     */
+    @Select("SELECT * FROM tag WHERE name = #{name} AND deleted = 0 LIMIT 1")
+    Tag selectByName(@Param("name") String name);
 }

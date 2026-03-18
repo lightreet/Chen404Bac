@@ -22,8 +22,7 @@ public class JwtInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         // 允许匿名访问的请求直接放行
-        String uri = request.getRequestURI();
-        if (isPublicUri(uri)) {
+        if (isPublicUri(request)) {
             return true;
         }
 
@@ -68,14 +67,12 @@ public class JwtInterceptor implements HandlerInterceptor {
     }
 
     /**
-     * 判断是否为公开URI
+     * 判断是否为公开 URI（部分路径仅 GET 公开，如 /categories）
      */
-    private boolean isPublicUri(String uri) {
-        // 去除 context-path 后的路径（如果存在）
-        String path = uri;
-        if (uri.startsWith("/api")) {
-            path = uri.substring(4); // 去掉 /api 前缀
-        }
+    private boolean isPublicUri(HttpServletRequest request) {
+        String uri = request.getRequestURI();
+        String method = request.getMethod();
+        String path = uri.startsWith("/api") ? uri.substring(4) : uri;
 
         // Swagger/OpenAPI 相关路径
         if (path.startsWith("/swagger-ui") ||
@@ -86,17 +83,41 @@ public class JwtInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        // 仅以下 /auth 子路径为公开（登录、注册、验证码、校验接口），其余 /auth/* 需 JWT（如 /auth/info、/auth/profile、/auth/change-password）
+        // 仅以下 /auth 子路径为公开
         if (path.equals("/auth") || path.startsWith("/auth/")) {
             return path.equals("/auth/login") || path.equals("/auth/register")
                     || path.equals("/auth/send-code") || path.equals("/auth/refresh")
                     || path.equals("/auth/check-username") || path.equals("/auth/check-email") || path.equals("/auth/check-phone");
         }
-        // 其他公开API路径
+
+        // /categories 仅 GET 公开，POST/PUT/DELETE 需 JWT + 管理员
+        if (path.equals("/categories") || path.startsWith("/categories/")) {
+            return "GET".equalsIgnoreCase(method);
+        }
+
+        // /articles：列表、详情、热门、推荐、上一篇下一篇、点赞公开；/articles/mine 与 创建/更新/删除 需 JWT
+        if (path.equals("/articles") || path.startsWith("/articles/")) {
+            if ("GET".equalsIgnoreCase(method)) {
+                if (path.equals("/articles") || path.equals("/articles/hot") || path.equals("/articles/recommend")) {
+                    return true;
+                }
+                if (path.equals("/articles/mine")) {
+                    return false;
+                }
+                // /articles/{id} 或 /articles/{id}/neighbors
+                if (path.matches("/articles/[^/]+") || path.matches("/articles/[^/]+/neighbors")) {
+                    return true;
+                }
+            }
+            if ("POST".equalsIgnoreCase(method) && path.matches("/articles/[^/]+/like")) {
+                return true;
+            }
+            return false;
+        }
+
+        // 其他公开 API 路径
         return path.equals("/home") || path.startsWith("/home/") ||
                path.equals("/site") || path.startsWith("/site/") ||
-               path.equals("/articles") || path.startsWith("/articles/") ||
-               path.equals("/categories") || path.startsWith("/categories/") ||
                path.equals("/tags") || path.startsWith("/tags/") ||
                path.equals("/archives") || path.startsWith("/archives/") ||
                path.equals("/comments") || path.startsWith("/comments/") ||

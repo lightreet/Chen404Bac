@@ -8,4 +8,10 @@ import java.util.List;
 public interface CategoryService extends IService<Category> {
 
     List<Category> getAllCategories();
+
+    Category createCategory(Category category);
+
+    Category updateCategory(Long id, Category category);
+
+    void deleteCategory(Long id);
 }

@@ -15,6 +15,7 @@ import com.chen404.mapper.TagMapper;
 import com.chen404.mapper.UserMapper;
 import com.chen404.service.ArticleService;
 import com.chen404.service.SysFileService;
+import com.chen404.service.TagService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +47,9 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
     @Autowired
     private SysFileService sysFileService;
+
+    @Autowired
+    private TagService tagService;
 
     @Override
     public Page<Article> getArticlePage(Integer page, Integer size, Integer status, Long categoryId, Long tagId, String keyword) {
@@ -197,9 +201,10 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
         articleMapper.insert(article);
 
-        // 保存标签关联
-        if (article.getTagIds() != null && !article.getTagIds().isEmpty()) {
-            saveArticleTags(article.getId(), article.getTagIds());
+        // 解析 tagNames 为 ID 并合并到 tagIds，再保存标签关联
+        List<Long> resolvedTagIds = resolveTagIds(article);
+        if (!resolvedTagIds.isEmpty()) {
+            saveArticleTags(article.getId(), resolvedTagIds);
         }
 
         // 更新分类文章数量
@@ -236,13 +241,12 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
         articleMapper.updateById(article);
 
-        // 更新标签关联
-        if (article.getTagIds() != null) {
-            // 删除旧关联
-            articleTagMapper.delete(new LambdaQueryWrapper<ArticleTag>()
-                    .eq(ArticleTag::getArticleId, id));
-            // 保存新关联
-            saveArticleTags(id, article.getTagIds());
+        // 解析 tagNames 并合并 tagIds，更新标签关联
+        List<Long> resolvedTagIds = resolveTagIds(article);
+        articleTagMapper.delete(new LambdaQueryWrapper<ArticleTag>()
+                .eq(ArticleTag::getArticleId, id));
+        if (!resolvedTagIds.isEmpty()) {
+            saveArticleTags(id, resolvedTagIds);
         }
 
         // 更新分类文章数量
@@ -320,6 +324,28 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         // 填充标签信息
         List<Tag> tags = tagMapper.selectTagsByArticleId(article.getId());
         article.setTags(tags);
+    }
+
+    /**
+     * 将 article.tagIds 与 article.tagNames（findOrCreate 后）合并为最终要保存的 tagId 列表
+     */
+    private List<Long> resolveTagIds(Article article) {
+        List<Long> ids = new ArrayList<>();
+        if (article.getTagIds() != null) {
+            ids.addAll(article.getTagIds());
+        }
+        if (article.getTagNames() != null && !article.getTagNames().isEmpty()) {
+            for (String name : article.getTagNames()) {
+                if (!StringUtils.hasText(name)) {
+                    continue;
+                }
+                Tag tag = tagService.findOrCreateByName(name.trim());
+                if (tag != null && tag.getId() != null && !ids.contains(tag.getId())) {
+                    ids.add(tag.getId());
+                }
+            }
+        }
+        return ids;
     }
 
     /**

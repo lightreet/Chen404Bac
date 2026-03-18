@@ -5,9 +5,11 @@ import com.chen404.domain.PageResult;
 import com.chen404.domain.Result;
 import com.chen404.domain.entity.Article;
 import com.chen404.service.ArticleService;
+import com.chen404.util.RequestAttrUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,9 +17,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 文章控制器
+ * 文章控制器：列表/详情/热门/推荐等公开；我的文章/创建/更新/删除需登录（JWT 校验后取 userId）
  */
-@Tag(name = "文章", description = "文章列表、详情、点赞、热门、推荐等公开接口")
+@Tag(name = "文章", description = "文章列表、详情、点赞、热门、推荐及个人文章管理")
 @RestController
 @RequestMapping("/articles")
 public class ArticleController {
@@ -26,7 +28,23 @@ public class ArticleController {
     private ArticleService articleService;
 
     /**
-     * 获取文章列表
+     * 我的文章列表（需登录，个人中心管理用）
+     */
+    @Operation(summary = "我的文章列表", description = "分页获取当前登录用户的文章，需登录")
+    @GetMapping("/mine")
+    public Result<PageResult<Article>> getMyArticles(
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "10") Integer size,
+            @RequestParam(required = false) Integer status,
+            @RequestParam(required = false) String keyword,
+            HttpServletRequest request) {
+        Long userId = RequestAttrUtil.requireUserId(request);
+        Page<Article> articlePage = articleService.getMyArticlePage(userId, page, size, status, keyword);
+        return Result.success(PageResult.of(articlePage));
+    }
+
+    /**
+     * 获取文章列表（公开）
      */
     @Operation(summary = "获取文章列表", description = "支持分页、分类筛选、标签筛选、关键词搜索")
     @Parameter(name = "page", description = "页码，默认1")
@@ -110,5 +128,56 @@ public class ArticleController {
             @RequestParam(defaultValue = "6") Integer limit) {
         List<Article> articles = articleService.getRecommendArticles(limit);
         return Result.success(articles);
+    }
+
+    /**
+     * 创建文章（需登录）
+     */
+    @Operation(summary = "创建文章", description = "发布新文章或保存草稿，需登录")
+    @PostMapping("")
+    public Result<Article> createArticle(@RequestBody Article article, HttpServletRequest request) {
+        Long userId = RequestAttrUtil.requireUserId(request);
+        article.setAuthorId(userId);
+        try {
+            Article created = articleService.createArticle(article);
+            return Result.success("创建成功", created);
+        } catch (RuntimeException e) {
+            return Result.error(400, e.getMessage());
+        }
+    }
+
+    /**
+     * 更新文章（需登录）
+     */
+    @Operation(summary = "更新文章", description = "更新已有文章，需登录")
+    @Parameter(name = "id", description = "文章ID", required = true)
+    @PutMapping("/{id}")
+    public Result<Article> updateArticle(
+            @PathVariable Long id,
+            @RequestBody Article article,
+            HttpServletRequest request) {
+        RequestAttrUtil.requireUserId(request);
+        try {
+            Article updated = articleService.updateArticle(id, article);
+            return Result.success("更新成功", updated);
+        } catch (RuntimeException e) {
+            return Result.error(400, e.getMessage());
+        }
+    }
+
+    /**
+     * 删除文章（需登录，逻辑删除）
+     */
+    @Operation(summary = "删除文章", description = "逻辑删除，需登录")
+    @Parameter(name = "id", description = "文章ID", required = true)
+    @DeleteMapping("/{id}")
+    public Result<Void> deleteArticle(@PathVariable Long id, HttpServletRequest request) {
+        RequestAttrUtil.requireUserId(request);
+        try {
+            articleService.deleteArticle(id);
+            return Result.success("删除成功");
+        } catch (RuntimeException e) {
+            return Result.error(400, e.getMessage());
+        }
     }
 }
