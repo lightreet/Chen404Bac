@@ -26,7 +26,7 @@
 
 1. 创建数据库并导入 SQL
 ```bash
-mysql -u root -p < doc/database.sql
+mysql -u root -p < doc/chen404.sql
 ```
 
 2. 修改配置文件 `src/main/resources/application.yml`
@@ -75,7 +75,7 @@ Chen404Bac/
 │   └── application.yml  # 配置文件
 └── doc/
     ├── architecture.md  # 架构设计文档
-    └── database.sql     # 数据库脚本
+    └── chen404.sql      # 数据库脚本
 ```
 
 ## 接口约定
@@ -101,4 +101,4 @@ Chen404Bac/
 ## 文档
 
 - [架构设计](doc/architecture.md) - 详细架构设计说明
-- [数据库设计](doc/database.sql) - 数据库表结构和初始化数据
+- [数据库设计](doc/chen404.sql) - 数据库表结构和初始化数据

@@ -11,9 +11,9 @@ spring:
   datasource:
     type: com.zaxxer.hikari.HikariDataSource
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://192.168.1.6:3306/chen404?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    url: jdbc:mysql://129.204.199.44:3306/chen404?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     username: root
-    password: admin@123
+    password: Dev@123456
     hikari:
       minimum-idle: 5
       maximum-pool-size: 20
@@ -27,9 +27,9 @@ spring:
   # Redis配置 (Spring Boot 3.x 使用 spring.data.redis 命名空间)
   data:
     redis:
-      host: 192.168.1.6
+      host: 129.204.199.44
       port: 6379
-      password: admin@123
+      password: Dev@123456
       database: 0
       timeout: 60000ms
       lettuce:
@@ -68,9 +68,9 @@ spring:
 
 # MinIO 对象存储配置
 minio:
-  endpoint: http://192.168.1.6:9000
-  access-key: root
-  secret-key: admin@123
+  endpoint: http://129.204.199.44:9000
+  access-key: admin
+  secret-key: Dev@123456
   bucket-name: chen404
   # 外部访问URL（如果通过CDN或域名访问，留空则使用endpoint）
   external-url: ""
