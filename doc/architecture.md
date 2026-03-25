@@ -1,287 +1,218 @@
 # Chen404 后端架构设计
 
-## 1. 技术架构
+## 1. 架构概览
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                         前端层                               │
-│                   (Vue3 + Vite + TS)                        │
-└─────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────┐
-│                        控制层 (Controller)                  │
-│  AuthController | ArticleController | CommentController     │
-│  SiteController | UploadController  | AdminController       │
-└─────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────┐
-│                        业务层 (Service)                     │
-│  业务接口 + 业务实现 (impl)                                  │
-└─────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────┐
-│                        数据层 (Mapper)                      │
-│  MyBatis Plus 数据访问                                       │
-└─────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────┐
-│                        数据存储                              │
-│  MySQL (主存储) | Redis (缓存) | MinIO (文件存储)            │
-└─────────────────────────────────────────────────────────────┘
+```text
+Vue Frontend
+  ↓
+Controller
+  ↓
+Service / ServiceImpl
+  ↓
+Mapper (MyBatis Plus)
+  ↓
+MySQL / Redis / MinIO
 ```
 
-## 2. 技术选型
+除标准的 Controller → Service → Mapper 链路外，当前项目还包含：
 
-| 组件 | 技术 | 版本 | 说明 |
-|------|------|------|------|
-| 基础框架 | Spring Boot | 3.2.x | 核心框架 |
-| JDK | Java | 17+ | 运行环境 |
-| ORM | MyBatis Plus | 3.5.x | 数据访问 |
-| 数据库 | MySQL | 8.0+ | 关系型数据库 |
-| 缓存 | Redis | 7.x | 缓存/会话 |
-| 安全 | Spring Security + JWT | - | 认证授权 |
-| 连接池 | Druid | 1.2.x | 数据库连接池 |
-| 文件存储 | MinIO | - | 对象存储 |
-| 构建工具 | Maven | 3.9+ | 依赖管理 |
+- `JwtInterceptor`：解析请求中的 JWT
+- `@RequireAdmin` + `RequireAdminAspect`：管理员权限校验
+- `TraceIdFilter`、`RequestBodyCacheFilter`：请求链路辅助
+- `LoggingInterceptor`、`SqlPerformanceInterceptor`：日志与性能观测
 
-## 3. 项目结构
+## 2. 技术栈
 
-```
-src/main/java/com/chen404/blog/
-├── config/                    # 配置类
-│   ├── SecurityConfig.java    # 安全配置
-│   ├── CorsConfig.java        # 跨域配置
-│   ├── RedisConfig.java       # Redis配置
-│   ├── MinIOConfig.java       # MinIO配置
-│   └── MybatisPlusConfig.java # MyBatis Plus配置
-├── controller/                # 控制层
-│   ├── AuthController.java    # 认证接口
-│   ├── ArticleController.java # 文章接口
-│   ├── SiteController.java    # 站点接口
-│   └── AdminController.java   # 管理接口
-├── service/                   # 业务层
-│   ├── interfaces/            # 业务接口
-│   └── impl/                  # 业务实现
-├── mapper/                    # 数据访问层
-├── domain/                    # 领域模型
-│   ├── entity/                # 实体类
-│   ├── dto/                   # 数据传输对象
-│   │   ├── request/           # 请求DTO
-│   │   └── response/          # 响应DTO
-│   ├── vo/                    # 视图对象
-│   └── common/                # 通用结果封装
-│       ├── Result.java        # 统一响应
-│       └── PageResult.java    # 分页响应
-├── interceptor/               # 拦截器
-│   ├── JwtInterceptor.java    # JWT认证拦截
-│   └── LogInterceptor.java    # 日志拦截
-├── exception/                 # 异常处理
-│   └── GlobalExceptionHandler.java
-├── util/                      # 工具类
-│   ├── JwtUtil.java           # JWT工具
-│   └── RedisUtil.java         # Redis工具
-└── Chen404Application.java    # 启动类
+| 模块 | 技术 |
+| ------ | ------ |
+| 框架 | Spring Boot 3.1.8 |
+| 语言 | Java 17 |
+| 数据访问 | MyBatis Plus 3.5.5 |
+| 数据库 | MySQL 8 |
+| 连接池 | HikariCP |
+| 缓存 / 验证码 | Redis |
+| 鉴权 | Spring Security + JWT |
+| 对象存储 | MinIO |
+| 邮件 | Spring Mail |
+| 文档 | SpringDoc OpenAPI |
+
+## 3. 当前目录结构
+
+```text
+src/main/java/com/chen404/
+├── annotation/
+├── aspect/
+├── config/
+├── controller/
+├── domain/
+│   ├── dto/
+│   └── entity/
+├── exception/
+├── filter/
+├── interceptor/
+├── job/
+├── mapper/
+├── service/
+├── service/impl/
+├── util/
+└── Chen404Application.java
 ```
 
-## 4. 核心设计
+需要特别注意：
 
-### 4.1 统一响应格式
+- 当前主包路径是 `com.chen404`，不是旧文档中的 `com.chen404.blog`
+- 项目以 `domain.Result` 作为统一响应包装，而不是单独的 common/vo 目录体系
 
-```java
+## 4. 当前控制器与职责
+
+| 控制器 | 路径前缀 | 说明 |
+| ------ | ------ | ------ |
+| `AuthController` | `/auth` | 登录、注册、验证码、刷新令牌、资料修改、改密码 |
+| `ArticleController` | `/articles` | 列表、详情、我的文章、邻接文章、点赞、推荐、CRUD |
+| `CategoryController` | `/categories` | 分类查询与管理 |
+| `TagController` | `/tags` | 标签列表 |
+| `HomeController` | `/home` | 首页聚合数据与站点统计 |
+| `SiteController` | `/site` | Banner、站点配置 |
+| `UploadController` | `/upload` | 图片、头像、封面、批量上传、文件删除 |
+
+当前仓库中未见完整的：
+
+- `CommentController`
+- `FriendController`
+- 独立 `AdminController`
+
+因此架构文档只记录目前代码里真实存在的模块。
+
+## 5. 统一响应与鉴权
+
+### 统一响应
+
+后端统一返回：
+
+```json
 {
-  "code": 200,           // 状态码
-  "message": "success",  // 消息
-  "data": {}             // 数据
+  "code": 200,
+  "message": "success",
+  "data": {}
 }
 ```
 
-状态码定义：
-- 200: 成功
-- 400: 参数错误
-- 401: 未授权
-- 403: 禁止访问
-- 404: 资源不存在
-- 500: 服务器错误
+### 鉴权流程
 
-### 4.2 分层架构
-
-| 层级 | 职责 | 命名规范 |
-|------|------|----------|
-| Controller | 接收请求、参数校验、调用Service | XxxController |
-| Service | 业务逻辑、事务控制 | XxxService / XxxServiceImpl |
-| Mapper | 数据访问 | XxxMapper |
-| Entity | 数据库实体 | Xxx |
-| DTO | 数据传输 | XxxDTO / XxxRequest / XxxResponse |
-| VO | 视图对象 | XxxVO |
-
-### 4.3 数据库设计原则
-
-- **无物理外键**：通过应用层维护关联关系，提升性能
-- **逻辑删除**：所有表使用 `deleted` 字段进行软删除
-- **时间追踪**：所有表包含 `create_time` 和 `update_time`
-- **索引优化**：常用查询字段建立索引
-
-## 5. 安全设计
-
-### 5.1 JWT 认证
-
-```
-1. 用户登录 → 验证用户名密码
-2. 生成 JWT Token (AccessToken + RefreshToken)
-3. 前端存储 Token
-4. 请求时携带 Authorization: Bearer {token}
-5. 后端验证 Token 有效性
+```text
+Login
+  → issue access token + refresh token
+  → frontend stores token
+  → request carries Authorization header
+  → JwtInterceptor resolves userId
+  → controller/service uses RequestAttrUtil.requireUserId()
 ```
 
-配置：
-```yaml
-jwt:
-  secret: your-secret-key
-  expiration: 86400000  # 24小时
+管理员接口当前主要通过：
+
+- 前端路由角色守卫
+- 后端 `@RequireAdmin` 切面
+
+共同约束。
+
+## 6. 配置结构
+
+当前 [`application.yml`](../src/main/resources/application.yml) 的核心配置包括：
+
+- `server.port = 10404`
+- `server.servlet.context-path = /api`
+- `spring.datasource`（MySQL）
+- `spring.data.redis`（Redis）
+- `spring.mail`（邮件）
+- `minio`（对象存储）
+- `mybatis-plus`
+- `jwt`
+- `logging`
+
+文档中不再重复真实凭据，只保留结构层说明。
+
+## 7. 当前 API 模块边界
+
+| 模块 | 当前状态 |
+| ------ | ------ |
+| 认证 | 已实现 |
+| 用户资料 / 密码 | 已实现 |
+| 文章 CRUD | 已实现 |
+| 我的文章 | 已实现 |
+| 分类查询与管理 | 已实现 |
+| 标签查询 | 已实现 |
+| 首页聚合与统计 | 已实现 |
+| 站点配置 / Banner | 已实现 |
+| 上传 | 已实现 |
+| 评论 | 当前仓库未见完整控制器 |
+| 友链 | 当前仓库未见完整控制器 |
+| 后台全量管理 | 当前仓库未见独立管理控制器 |
+
+## 8. 数据模型概览
+
+从当前实体与 Mapper 可以看出，核心表关系仍围绕以下对象展开：
+
+```text
+sys_user
+  ├─ sys_user_role
+  ├─ article
+  └─ sys_file
+
+article
+  ├─ category
+  └─ tag (through article_tag)
 ```
 
-### 5.2 权限控制
+其中：
 
-基于 RBAC 模型：
-- 用户 (User) - 角色 (Role) - 菜单/权限 (Menu)
-- 支持多角色
-- 接口权限通过注解控制
+- 用户与角色通过 `sys_user_role` 关联
+- 文章关联分类
+- 文章与标签通过中间表关联
+- 上传文件通过 `SysFile` 管理
 
-### 5.3 跨域配置
+## 9. 当前实现特点
 
-```java
-@Configuration
-public class CorsConfig {
-    @Bean
-    public CorsFilter corsFilter() {
-        CorsConfiguration config = new CorsConfiguration();
-        config.addAllowedOrigin("http://localhost:5173");
-        config.addAllowedHeader("*");
-        config.addAllowedMethod("*");
-        config.setAllowCredentials(true);
-        // ...
-    }
-}
-```
+### 首页数据
 
-## 6. 缓存策略
+`HomeController` 当前提供：
 
-| 缓存键 | 过期时间 | 说明 |
-|--------|----------|------|
-| article:hot | 1小时 | 热门文章 |
-| article:{id} | 30分钟 | 文章详情 |
-| category:list | 24小时 | 分类列表 |
-| tag:list | 24小时 | 标签列表 |
+- `GET /home`
+- `GET /home/stats`
 
-缓存更新策略：
-- 文章更新时删除对应缓存
-- 定时任务刷新热门文章缓存
-- 发布/删除文章时清除列表缓存
+首页聚合数据包含：
 
-## 7. API 模块划分
+- Banner
+- 站点统计
+- 热门文章
 
-| 模块 | 路径 | 说明 |
-|------|------|------|
-| 认证 | /api/auth/** | 登录、注册、Token刷新 |
-| 首页 | /api/home | 聚合数据、轮播图 |
-| 文章 | /api/articles/** | 文章列表、详情、搜索 |
-| 分类 | /api/categories/** | 分类列表、详情 |
-| 标签 | /api/tags/** | 标签列表、详情 |
-| 评论 | /api/comments/** | 评论列表、发表 |
-| 归档 | /api/archives/** | 归档数据 |
-| 友链 | /api/friends/** | 友链列表、申请 |
-| 文件 | /api/upload/** | 图片/文件上传 |
-| 管理 | /api/admin/** | 后台管理接口 |
+### 上传体系
 
-## 8. 配置文件
+`UploadController` 当前支持：
 
-### application.yml 主要配置
+- `/upload/image`
+- `/upload/images`
+- `/upload/cover`
+- `/upload/avatar`
+- `DELETE /upload/file?url=...`
 
-```yaml
-server:
-  port: 8080
-  servlet:
-    context-path: /api
+并基于 `SysFileService` 和 `FileStorageService` 管理临时文件与引用关系。
 
-spring:
-  datasource:
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/chen404?useUnicode=true&characterEncoding=utf-8
-    username: root
-    password: password
-    type: com.alibaba.druid.pool.DruidDataSource
+### 用户认证
 
-  redis:
-    host: localhost
-    port: 6379
-    password:
-    database: 0
+`AuthController` 当前支持：
 
-mybatis-plus:
-  configuration:
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
-  global-config:
-    db-config:
-      logic-delete-field: deleted
-      logic-delete-value: 1
-      logic-not-delete-value: 0
+- 登录 / 注册 / 登出
+- 发送验证码
+- 获取当前用户
+- 刷新 token
+- 修改个人资料
+- 修改密码
+- 用户名 / 邮箱 / 手机号可用性检查
 
-jwt:
-  secret: chen404-blog-secret-key
-  expiration: 86400000
+## 10. 文档维护建议
 
-minio:
-  endpoint: http://localhost:9000
-  access-key: minioadmin
-  secret-key: minioadmin
-  bucket-name: chen404
-```
+后端文档后续维护时，建议优先同步以下内容：
 
-## 9. 实体关系
-
-```
-┌─────────────┐     ┌─────────────────┐     ┌─────────────┐
-│  sys_user   │────<│  sys_user_role  │>────│  sys_role   │
-└──────┬──────┘     └─────────────────┘     └──────┬──────┘
-       │                                            │
-       └───────────────┬────────────────────────────┘
-                       │
-       ┌───────────────┼───────────────┐
-       ▼               ▼               ▼
-┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│   article   │  │   comment   │  │  sys_file   │
-└──────┬──────┘  └─────────────┘  └─────────────┘
-       │
-       │>────┐
-       │      │
-       ▼      ▼
-┌─────────────┐     ┌─────────────┐
-│  category   │     │     tag     │
-└─────────────┘     └──────┬──────┘
-                           │
-                    ┌──────┴──────┐
-                    │ article_tag │
-                    └─────────────┘
-```
-
-## 10. 开发规范
-
-### 10.1 代码规范
-
-- 使用 Lombok 简化 Getter/Setter
-- 使用 MyBatis Plus 简化 CRUD
-- 统一使用 Result 包装响应
-- 业务异常使用自定义异常
-
-### 10.2 接口规范
-
-- RESTful 风格设计
-- 请求参数校验使用 @Valid
-- 分页接口统一使用 PageResult
-- 管理接口统一前缀 /api/admin
-
-### 10.3 日志规范
-
-- Controller 层记录请求日志
-- Service 层记录业务操作
-- 异常统一捕获并记录
+- 控制器增删时更新“当前控制器与职责”
+- 新增接口时更新 README 中的实现边界
+- 如果评论/友链/后台管理模块补齐，需把“当前仓库未见完整控制器”的说明移除
