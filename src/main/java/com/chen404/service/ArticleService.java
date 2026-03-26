@@ -25,12 +25,12 @@ public interface ArticleService extends IService<Article> {
     /**
      * 获取文章详情
      */
-    Article getArticleById(Long id, boolean incrementView);
+    Article getArticleById(Long id, boolean incrementView, Long requesterId);
 
     /**
      * 获取上一篇、下一篇文章（仅 id、title，按发布时间排序）
      */
-    Map<String, Article> getNeighbors(Long articleId);
+    Map<String, Article> getNeighbors(Long articleId, Long requesterId);
 
     /**
      * 创建文章
@@ -40,17 +40,17 @@ public interface ArticleService extends IService<Article> {
     /**
      * 更新文章
      */
-    Article updateArticle(Long id, Article article);
+    Article updateArticle(Long id, Article article, Long operatorId);
 
     /**
      * 删除文章
      */
-    void deleteArticle(Long id);
+    void deleteArticle(Long id, Long operatorId);
 
     /**
      * 点赞文章
      */
-    Integer likeArticle(Long id);
+    Integer likeArticle(Long id, Long requesterId, String clientIp);
 
     /**
      * 获取热门文章

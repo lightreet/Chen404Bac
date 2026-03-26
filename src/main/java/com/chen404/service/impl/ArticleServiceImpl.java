@@ -8,11 +8,14 @@ import com.chen404.domain.entity.ArticleTag;
 import com.chen404.domain.entity.Category;
 import com.chen404.domain.entity.Tag;
 import com.chen404.domain.entity.User;
+import com.chen404.exception.ForbiddenException;
+import com.chen404.exception.TooManyRequestsException;
 import com.chen404.mapper.ArticleMapper;
 import com.chen404.mapper.ArticleTagMapper;
 import com.chen404.mapper.CategoryMapper;
 import com.chen404.mapper.TagMapper;
 import com.chen404.mapper.UserMapper;
+import com.chen404.service.AccessService;
 import com.chen404.service.ArticleService;
 import com.chen404.service.SysFileService;
 import com.chen404.service.TagService;
@@ -25,10 +28,18 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 @Service
 public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> implements ArticleService {
+
+    private static final long LIKE_COOLDOWN_MS = 60_000L;
+    private static final int LIKE_THROTTLE_CLEANUP_INTERVAL = 256;
+    private static final ConcurrentHashMap<String, Long> LIKE_THROTTLE_CACHE = new ConcurrentHashMap<>();
+    private static final AtomicInteger LIKE_THROTTLE_OPS = new AtomicInteger();
 
     @Autowired
     private ArticleMapper articleMapper;
@@ -51,23 +62,27 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     @Autowired
     private TagService tagService;
 
+    @Autowired
+    private AccessService accessService;
+
     @Override
     public Page<Article> getArticlePage(Integer page, Integer size, Integer status, Long categoryId, Long tagId, String keyword) {
         Page<Article> pageParam = new Page<>(page, size);
 
         LambdaQueryWrapper<Article> wrapper = new LambdaQueryWrapper<>();
 
-        // 状态筛选
-        if (status != null) {
-            wrapper.eq(Article::getStatus, status);
-        } else {
-            // 默认查询已发布的文章
-            wrapper.eq(Article::getStatus, 1);
-        }
+        // 公开列表只返回已发布 + 公开可见文章
+        wrapper.eq(Article::getStatus, Article.Status.PUBLISHED);
+        wrapper.eq(Article::getVisibility, Article.Visibility.PUBLIC);
 
         // 分类筛选
         if (categoryId != null) {
             wrapper.eq(Article::getCategoryId, categoryId);
+        }
+
+        // 标签筛选
+        if (tagId != null) {
+            wrapper.inSql(Article::getId, "SELECT article_id FROM article_tag WHERE tag_id = " + tagId);
         }
 
         // 关键词搜索
@@ -109,15 +124,20 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         Page<Article> result = articleMapper.selectPage(pageParam, wrapper);
         for (Article article : result.getRecords()) {
             fillArticleRelations(article);
+            accessService.fillArticlePermissions(article, userId);
         }
         return result;
     }
 
     @Override
-    public Article getArticleById(Long id, boolean incrementView) {
+    public Article getArticleById(Long id, boolean incrementView, Long requesterId) {
         Article article = articleMapper.selectById(id);
         if (article == null) {
             return null;
+        }
+
+        if (!accessService.canViewArticle(requesterId, article)) {
+            throw new ForbiddenException("当前文章无权访问");
         }
 
         // 增加浏览量
@@ -128,21 +148,23 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
         // 填充关联数据
         fillArticleRelations(article);
+        accessService.fillArticlePermissions(article, requesterId);
 
         return article;
     }
 
     @Override
-    public Map<String, Article> getNeighbors(Long articleId) {
+    public Map<String, Article> getNeighbors(Long articleId, Long requesterId) {
         Article current = articleMapper.selectById(articleId);
-        if (current == null || current.getPublishTime() == null) {
+        if (current == null || current.getPublishTime() == null || !accessService.canViewArticle(requesterId, current)) {
             return Map.of();
         }
         Map<String, Article> result = new java.util.HashMap<>();
 
         // 上一篇：发布时间早于当前，取最近一篇
         LambdaQueryWrapper<Article> prevWrapper = new LambdaQueryWrapper<>();
-        prevWrapper.eq(Article::getStatus, 1)
+        prevWrapper.eq(Article::getStatus, Article.Status.PUBLISHED)
+                .eq(Article::getVisibility, Article.Visibility.PUBLIC)
                 .lt(Article::getPublishTime, current.getPublishTime())
                 .orderByDesc(Article::getPublishTime)
                 .last("LIMIT 1");
@@ -153,7 +175,8 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
         // 下一篇：发布时间晚于当前，取最早一篇
         LambdaQueryWrapper<Article> nextWrapper = new LambdaQueryWrapper<>();
-        nextWrapper.eq(Article::getStatus, 1)
+        nextWrapper.eq(Article::getStatus, Article.Status.PUBLISHED)
+                .eq(Article::getVisibility, Article.Visibility.PUBLIC)
                 .gt(Article::getPublishTime, current.getPublishTime())
                 .orderByAsc(Article::getPublishTime)
                 .last("LIMIT 1");
@@ -168,16 +191,12 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Article createArticle(Article article) {
+        User operator = accessService.getUserOrNull(article.getAuthorId());
+
         // 设置默认值
-        if (article.getViewCount() == null) {
-            article.setViewCount(0);
-        }
-        if (article.getLikeCount() == null) {
-            article.setLikeCount(0);
-        }
-        if (article.getCommentCount() == null) {
-            article.setCommentCount(0);
-        }
+        article.setViewCount(0);
+        article.setLikeCount(0);
+        article.setCommentCount(0);
         if (article.getIsTop() == null) {
             article.setIsTop(0);
         }
@@ -187,9 +206,19 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         if (article.getIsOriginal() == null) {
             article.setIsOriginal(1);
         }
+        if (article.getVisibility() == null) {
+            article.setVisibility(Article.Visibility.PUBLIC);
+        }
+        if (article.getCommentPolicy() == null) {
+            article.setCommentPolicy(Article.CommentPolicy.REGISTERED);
+        }
+        if (operator == null || !accessService.isAdmin(operator)) {
+            article.setIsTop(0);
+            article.setIsRecommend(0);
+        }
 
         // 如果是发布状态，设置发布时间
-        if (article.getStatus() == 1 && article.getPublishTime() == null) {
+        if (article.getStatus() == Article.Status.PUBLISHED && article.getPublishTime() == null) {
             article.setPublishTime(LocalDateTime.now());
         }
 
@@ -220,16 +249,37 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Article updateArticle(Long id, Article article) {
+    public Article updateArticle(Long id, Article article, Long operatorId) {
         Article existing = articleMapper.selectById(id);
         if (existing == null) {
             throw new RuntimeException("文章不存在");
         }
+        if (!accessService.canManageArticle(operatorId, existing)) {
+            throw new ForbiddenException("仅作者本人或管理员可修改该文章");
+        }
+        User operator = accessService.getUserOrNull(operatorId);
 
         article.setId(id);
+        article.setAuthorId(existing.getAuthorId());
+        article.setViewCount(existing.getViewCount());
+        article.setLikeCount(existing.getLikeCount());
+        article.setCommentCount(existing.getCommentCount());
+
+        if (article.getVisibility() == null) {
+            article.setVisibility(existing.getVisibility() == null ? Article.Visibility.PUBLIC : existing.getVisibility());
+        }
+        if (article.getCommentPolicy() == null) {
+            article.setCommentPolicy(existing.getCommentPolicy() == null
+                    ? Article.CommentPolicy.REGISTERED
+                    : existing.getCommentPolicy());
+        }
+        if (operator == null || !accessService.isAdmin(operator)) {
+            article.setIsTop(existing.getIsTop());
+            article.setIsRecommend(existing.getIsRecommend());
+        }
 
         // 如果从草稿变为发布，设置发布时间
-        if (existing.getStatus() == 0 && article.getStatus() == 1) {
+        if (existing.getStatus() == Article.Status.DRAFT && article.getStatus() == Article.Status.PUBLISHED) {
             article.setPublishTime(LocalDateTime.now());
         }
 
@@ -249,8 +299,11 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
             saveArticleTags(id, resolvedTagIds);
         }
 
-        // 更新分类文章数量
-        if (article.getCategoryId() != null) {
+        // 更新分类文章数量（兼容分类变更）
+        if (existing.getCategoryId() != null) {
+            categoryMapper.updateArticleCount(existing.getCategoryId());
+        }
+        if (article.getCategoryId() != null && !Objects.equals(article.getCategoryId(), existing.getCategoryId())) {
             categoryMapper.updateArticleCount(article.getCategoryId());
         }
 
@@ -260,15 +313,18 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         // 将新引用的文件转为永久状态
         convertArticleFilesToPermanent(article);
 
-        return getArticleById(id, false);
+        return getArticleById(id, false, operatorId);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void deleteArticle(Long id) {
+    public void deleteArticle(Long id, Long operatorId) {
         Article article = articleMapper.selectById(id);
         if (article == null) {
             throw new RuntimeException("文章不存在");
+        }
+        if (!accessService.canManageArticle(operatorId, article)) {
+            throw new ForbiddenException("仅作者本人或管理员可删除该文章");
         }
 
         // 逻辑删除
@@ -281,10 +337,18 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     }
 
     @Override
-    public Integer likeArticle(Long id) {
-        articleMapper.incrementLikeCount(id);
+    public Integer likeArticle(Long id, Long requesterId, String clientIp) {
         Article article = articleMapper.selectById(id);
-        return article != null ? article.getLikeCount() + 1 : 0;
+        if (article == null) {
+            throw new RuntimeException("文章不存在");
+        }
+        if (!accessService.canViewArticle(requesterId, article)) {
+            throw new ForbiddenException("当前文章无权互动");
+        }
+        assertLikeAllowed(id, requesterId, clientIp);
+        articleMapper.incrementLikeCount(id);
+        int currentLikes = article.getLikeCount() == null ? 0 : article.getLikeCount();
+        return currentLikes + 1;
     }
 
     @Override
@@ -311,6 +375,9 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
             User author = userMapper.selectById(article.getAuthorId());
             if (author != null) {
                 author.setPassword(null);
+                if (author.getTrustLevel() == null) {
+                    author.setTrustLevel(User.TrustLevel.NORMAL);
+                }
                 article.setAuthor(author);
             }
         }
@@ -413,5 +480,44 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                 );
             }
         }
+    }
+
+    private void assertLikeAllowed(Long articleId, Long requesterId, String clientIp) {
+        long now = System.currentTimeMillis();
+        cleanupLikeThrottleCacheIfNeeded(now);
+
+        String actorKey = buildLikeActorKey(articleId, requesterId, clientIp);
+        Long lastLikeAt = LIKE_THROTTLE_CACHE.putIfAbsent(actorKey, now);
+        if (lastLikeAt == null) {
+            return;
+        }
+
+        if (now - lastLikeAt < LIKE_COOLDOWN_MS) {
+            throw new TooManyRequestsException("点赞过于频繁，请稍后再试");
+        }
+
+        LIKE_THROTTLE_CACHE.put(actorKey, now);
+    }
+
+    private void cleanupLikeThrottleCacheIfNeeded(long now) {
+        if (LIKE_THROTTLE_OPS.incrementAndGet() % LIKE_THROTTLE_CLEANUP_INTERVAL != 0) {
+            return;
+        }
+        LIKE_THROTTLE_CACHE.entrySet().removeIf(entry -> now - entry.getValue() >= LIKE_COOLDOWN_MS);
+    }
+
+    private String buildLikeActorKey(Long articleId, Long requesterId, String clientIp) {
+        if (requesterId != null) {
+            return "article:" + articleId + ":user:" + requesterId;
+        }
+        String normalizedIp = normalizeClientIp(clientIp);
+        return "article:" + articleId + ":ip:" + normalizedIp;
+    }
+
+    private String normalizeClientIp(String clientIp) {
+        if (!StringUtils.hasText(clientIp)) {
+            return "anonymous";
+        }
+        return clientIp.trim();
     }
 }

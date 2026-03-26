@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.chen404.domain.PageResult;
 import com.chen404.domain.Result;
 import com.chen404.domain.entity.Article;
+import com.chen404.exception.ForbiddenException;
+import com.chen404.exception.UnauthorizedException;
 import com.chen404.service.ArticleService;
 import com.chen404.util.RequestAttrUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -75,9 +77,10 @@ public class ArticleController {
     @GetMapping("/{id}")
     public Result<Article> getArticleById(
             @PathVariable Long id,
-            @RequestParam(defaultValue = "true") Boolean incrementView) {
+            @RequestParam(defaultValue = "true") Boolean incrementView,
+            HttpServletRequest request) {
 
-        Article article = articleService.getArticleById(id, incrementView);
+        Article article = articleService.getArticleById(id, incrementView, RequestAttrUtil.getUserId(request));
         if (article == null) {
             return Result.error(404, "文章不存在");
         }
@@ -90,8 +93,8 @@ public class ArticleController {
     @Operation(summary = "上一篇/下一篇", description = "按发布时间获取相邻文章")
     @Parameter(name = "id", description = "当前文章ID", required = true)
     @GetMapping("/{id}/neighbors")
-    public Result<Map<String, Article>> getArticleNeighbors(@PathVariable Long id) {
-        Map<String, Article> neighbors = articleService.getNeighbors(id);
+    public Result<Map<String, Article>> getArticleNeighbors(@PathVariable Long id, HttpServletRequest request) {
+        Map<String, Article> neighbors = articleService.getNeighbors(id, RequestAttrUtil.getUserId(request));
         return Result.success(neighbors);
     }
 
@@ -101,8 +104,8 @@ public class ArticleController {
     @Operation(summary = "点赞文章", description = "为文章点赞")
     @Parameter(name = "id", description = "文章ID", required = true)
     @PostMapping("/{id}/like")
-    public Result<Map<String, Integer>> likeArticle(@PathVariable Long id) {
-        Integer likes = articleService.likeArticle(id);
+    public Result<Map<String, Integer>> likeArticle(@PathVariable Long id, HttpServletRequest request) {
+        Integer likes = articleService.likeArticle(id, RequestAttrUtil.getUserId(request), getClientIp(request));
         return Result.success(Map.of("likes", likes));
     }
 
@@ -156,10 +159,12 @@ public class ArticleController {
             @PathVariable Long id,
             @RequestBody Article article,
             HttpServletRequest request) {
-        RequestAttrUtil.requireUserId(request);
+        Long userId = RequestAttrUtil.requireUserId(request);
         try {
-            Article updated = articleService.updateArticle(id, article);
+            Article updated = articleService.updateArticle(id, article, userId);
             return Result.success("更新成功", updated);
+        } catch (ForbiddenException | UnauthorizedException e) {
+            throw e;
         } catch (RuntimeException e) {
             return Result.error(400, e.getMessage());
         }
@@ -172,12 +177,29 @@ public class ArticleController {
     @Parameter(name = "id", description = "文章ID", required = true)
     @DeleteMapping("/{id}")
     public Result<Void> deleteArticle(@PathVariable Long id, HttpServletRequest request) {
-        RequestAttrUtil.requireUserId(request);
+        Long userId = RequestAttrUtil.requireUserId(request);
         try {
-            articleService.deleteArticle(id);
+            articleService.deleteArticle(id, userId);
             return Result.success("删除成功");
+        } catch (ForbiddenException | UnauthorizedException e) {
+            throw e;
         } catch (RuntimeException e) {
             return Result.error(400, e.getMessage());
         }
+    }
+
+    private String getClientIp(HttpServletRequest request) {
+        String ip = request.getHeader("X-Forwarded-For");
+        if (ip != null && !ip.isBlank() && !"unknown".equalsIgnoreCase(ip)) {
+            int commaIndex = ip.indexOf(',');
+            return commaIndex >= 0 ? ip.substring(0, commaIndex).trim() : ip.trim();
+        }
+
+        ip = request.getHeader("X-Real-IP");
+        if (ip != null && !ip.isBlank() && !"unknown".equalsIgnoreCase(ip)) {
+            return ip.trim();
+        }
+
+        return request.getRemoteAddr();
     }
 }

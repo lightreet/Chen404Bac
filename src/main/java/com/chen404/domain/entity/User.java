@@ -62,6 +62,11 @@ public class User implements Serializable {
     private Integer status;
 
     /**
+     * 信任级别：0-普通用户 1-好友/受信用户
+     */
+    private Integer trustLevel;
+
+    /**
      * 邮箱是否验证：0-否 1-是
      */
     private Integer emailVerified;
@@ -104,4 +109,25 @@ public class User implements Serializable {
      */
     @TableField(exist = false)
     private Integer role;
+
+    /**
+     * 角色编码（非数据库字段）
+     */
+    @TableField(exist = false)
+    private String roleCode;
+
+    public interface RoleValue {
+        int USER = 0;
+        int ADMIN = 1;
+    }
+
+    public interface RoleCode {
+        String USER = "user";
+        String ADMIN = "admin";
+    }
+
+    public interface TrustLevel {
+        int NORMAL = 0;
+        int FRIEND = 1;
+    }
 }

@@ -30,7 +30,7 @@ public interface ArticleMapper extends BaseMapper<Article> {
      * 获取热门文章
      */
     @Select("SELECT id, title, view_count FROM article " +
-            "WHERE status = 1 AND deleted = 0 " +
+            "WHERE status = 1 AND visibility = 0 AND deleted = 0 " +
             "ORDER BY view_count DESC LIMIT #{limit}")
     List<Article> selectHotArticles(@Param("limit") Integer limit);
 
@@ -38,7 +38,7 @@ public interface ArticleMapper extends BaseMapper<Article> {
      * 获取推荐文章
      */
     @Select("SELECT id, title, cover_image, summary FROM article " +
-            "WHERE status = 1 AND is_recommend = 1 AND deleted = 0 " +
+            "WHERE status = 1 AND visibility = 0 AND is_recommend = 1 AND deleted = 0 " +
             "ORDER BY create_time DESC LIMIT #{limit}")
     List<Article> selectRecommendArticles(@Param("limit") Integer limit);
 
@@ -58,10 +58,10 @@ public interface ArticleMapper extends BaseMapper<Article> {
      * 获取站点统计
      */
     @Select("SELECT " +
-            "(SELECT COUNT(*) FROM article WHERE deleted = 0) as articleCount, " +
+            "(SELECT COUNT(*) FROM article WHERE deleted = 0 AND status = 1 AND visibility = 0) as articleCount, " +
             "(SELECT COUNT(*) FROM category WHERE deleted = 0 AND status = 1) as categoryCount, " +
             "(SELECT COUNT(*) FROM tag WHERE deleted = 0 AND status = 1) as tagCount, " +
             "(SELECT COUNT(*) FROM comment WHERE deleted = 0) as commentCount, " +
-            "(SELECT SUM(view_count) FROM article WHERE deleted = 0) as viewCount")
+            "(SELECT COALESCE(SUM(view_count), 0) FROM article WHERE deleted = 0 AND status = 1 AND visibility = 0) as viewCount")
     java.util.Map<String, Object> selectSiteStats();
 }

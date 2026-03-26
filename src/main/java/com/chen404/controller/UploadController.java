@@ -2,7 +2,8 @@ package com.chen404.controller;
 
 import com.chen404.domain.Result;
 import com.chen404.domain.entity.SysFile;
-import com.chen404.service.FileStorageService;
+import com.chen404.exception.ForbiddenException;
+import com.chen404.exception.UnauthorizedException;
 import com.chen404.service.SysFileService;
 import com.chen404.util.RequestAttrUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -14,8 +15,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
@@ -27,9 +26,6 @@ import java.util.concurrent.CompletableFuture;
 @RestController
 @RequestMapping("/upload")
 public class UploadController {
-
-    @Autowired
-    private FileStorageService fileStorageService;
 
     @Autowired
     private SysFileService sysFileService;
@@ -82,7 +78,7 @@ public class UploadController {
 
         } catch (Exception e) {
             log.error("上传图片失败", e);
-            return Result.error(500, "上传失败: " + e.getMessage());
+            return Result.error(500, "上传失败，请稍后重试");
         }
     }
 
@@ -107,7 +103,7 @@ public class UploadController {
 
         // 使用并行流提高上传效率
         List<CompletableFuture<Map<String, String>>> futures = Arrays.stream(files)
-                .map(file -> CompletableFuture.supplyAsync(() -> uploadSingleImage(file)))
+                .map(file -> CompletableFuture.supplyAsync(() -> uploadSingleImage(file, userId)))
                 .toList();
 
         // 等待所有上传完成
@@ -123,7 +119,8 @@ public class UploadController {
                     errors.add(files[i].getOriginalFilename() + ": " + result.get("error"));
                 }
             } catch (Exception e) {
-                errors.add(files[i].getOriginalFilename() + ": " + e.getMessage());
+                log.error("批量上传等待结果失败，文件名: {}", files[i].getOriginalFilename(), e);
+                errors.add(files[i].getOriginalFilename() + ": 上传失败");
             }
         }
 
@@ -138,7 +135,7 @@ public class UploadController {
     /**
      * 上传单张图片（供批量上传使用）
      */
-    private Map<String, String> uploadSingleImage(MultipartFile file) {
+    private Map<String, String> uploadSingleImage(MultipartFile file, Long userId) {
         Map<String, String> result = new HashMap<>();
 
         // 校验文件
@@ -149,15 +146,15 @@ public class UploadController {
         }
 
         try {
-            String objectName = generateObjectName("articles/content", file.getOriginalFilename());
-            String fileUrl = fileStorageService.uploadFile(file, objectName);
+            SysFile sysFile = sysFileService.uploadTempFile(file, userId, SysFile.RefType.ARTICLE_CONTENT);
 
-            result.put("url", fileUrl);
-            result.put("name", file.getOriginalFilename());
-            result.put("size", String.valueOf(file.getSize()));
+            result.put("url", sysFile.getFileUrl());
+            result.put("name", sysFile.getFileName());
+            result.put("size", String.valueOf(sysFile.getFileSize()));
 
         } catch (Exception e) {
-            result.put("error", e.getMessage());
+            log.error("批量上传单文件失败，用户: {}, 文件名: {}", userId, file.getOriginalFilename(), e);
+            result.put("error", "上传失败");
         }
 
         return result;
@@ -194,7 +191,7 @@ public class UploadController {
 
         } catch (Exception e) {
             log.error("上传封面失败", e);
-            return Result.error(500, "上传失败: " + e.getMessage());
+            return Result.error(500, "上传失败，请稍后重试");
         }
     }
 
@@ -216,27 +213,18 @@ public class UploadController {
         }
 
         try {
-            // 生成对象名称：avatars/2024/03/userId_uuid.jpg
-            String extension = getFileExtension(file.getOriginalFilename());
-            String objectName = String.format("avatars/%s/%d_%s%s",
-                    LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy/MM")),
-                    userId,
-                    UUID.randomUUID().toString().substring(0, 8),
-                    extension);
-
-            // 上传文件
-            String fileUrl = fileStorageService.uploadFile(file, objectName);
+            SysFile sysFile = sysFileService.uploadTempFile(file, userId, SysFile.RefType.AVATAR);
 
             Map<String, String> data = new HashMap<>();
-            data.put("url", fileUrl);
-            data.put("name", file.getOriginalFilename());
+            data.put("url", sysFile.getFileUrl());
+            data.put("name", sysFile.getFileName());
 
-            log.info("用户 {} 上传头像成功: {}", userId, fileUrl);
+            log.info("用户 {} 上传头像成功: {}", userId, sysFile.getFileUrl());
             return Result.success("上传成功", data);
 
         } catch (Exception e) {
             log.error("上传头像失败", e);
-            return Result.error(500, "上传失败: " + e.getMessage());
+            return Result.error(500, "上传失败，请稍后重试");
         }
     }
 
@@ -261,9 +249,11 @@ public class UploadController {
                 return Result.error(500, "删除失败");
             }
 
+        } catch (ForbiddenException | UnauthorizedException e) {
+            throw e;
         } catch (Exception e) {
             log.error("删除文件失败", e);
-            return Result.error(500, "删除失败: " + e.getMessage());
+            return Result.error(500, "删除失败，请稍后重试");
         }
     }
 
@@ -287,53 +277,4 @@ public class UploadController {
         return null;
     }
 
-    /**
-     * 生成对象名称
-     */
-    private String generateObjectName(String prefix, String originalName) {
-        String extension = getFileExtension(originalName);
-        String datePath = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy/MM"));
-        String uuid = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
-        return String.format("%s/%s/%s%s", prefix, datePath, uuid, extension);
-    }
-
-    /**
-     * 获取文件扩展名
-     */
-    private String getFileExtension(String filename) {
-        if (filename == null || !filename.contains(".")) {
-            return ".jpg";
-        }
-        return filename.substring(filename.lastIndexOf("."));
-    }
-
-    /**
-     * 从URL中提取对象名称
-     */
-    private String extractObjectNameFromUrl(String url) {
-        if (url == null || url.isEmpty()) {
-            return null;
-        }
-
-        try {
-            int bucketIndex = url.indexOf("/chen404/");
-            if (bucketIndex != -1) {
-                return url.substring(bucketIndex + "/chen404/".length());
-            }
-
-            java.net.URL urlObj = new java.net.URL(url);
-            String path = urlObj.getPath();
-            if (path.startsWith("/")) {
-                path = path.substring(1);
-            }
-            if (path.startsWith("chen404/")) {
-                path = path.substring("chen404/".length());
-            }
-            return path;
-
-        } catch (Exception e) {
-            log.error("解析URL失败: {}", url);
-            return null;
-        }
-    }
 }

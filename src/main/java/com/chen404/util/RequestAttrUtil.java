@@ -14,10 +14,17 @@ public final class RequestAttrUtil {
      * 获取当前登录用户 ID，未登录时抛出 UnauthorizedException（全局处理器返回 401）
      */
     public static Long requireUserId(HttpServletRequest request) {
-        Long userId = (Long) request.getAttribute("userId");
+        Long userId = getUserId(request);
         if (userId == null) {
             throw new UnauthorizedException();
         }
         return userId;
+    }
+
+    /**
+     * 获取当前请求中的用户 ID；未登录时返回 null。
+     */
+    public static Long getUserId(HttpServletRequest request) {
+        return (Long) request.getAttribute("userId");
     }
 }

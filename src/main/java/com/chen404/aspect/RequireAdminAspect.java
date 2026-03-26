@@ -4,7 +4,7 @@ import com.chen404.annotation.RequireAdmin;
 import com.chen404.domain.entity.User;
 import com.chen404.exception.ForbiddenException;
 import com.chen404.exception.UnauthorizedException;
-import com.chen404.service.UserService;
+import com.chen404.service.support.UserAccessProfileSupport;
 import jakarta.servlet.http.HttpServletRequest;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -21,10 +21,8 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 @Component
 public class RequireAdminAspect {
 
-    private static final int ROLE_ADMIN = 1;
-
     @Autowired
-    private UserService userService;
+    private UserAccessProfileSupport userAccessProfileSupport;
 
     @Around("@annotation(requireAdmin)")
     public Object around(ProceedingJoinPoint joinPoint, RequireAdmin requireAdmin) throws Throwable {
@@ -36,8 +34,8 @@ public class RequireAdminAspect {
         if (userId == null) {
             throw new UnauthorizedException();
         }
-        User user = userService.getCurrentUser(userId);
-        if (user == null || user.getRole() == null || user.getRole() != ROLE_ADMIN) {
+        User user = userAccessProfileSupport.loadUserProfile(userId);
+        if (user == null || !User.RoleCode.ADMIN.equals(user.getRoleCode())) {
             throw new ForbiddenException("仅管理员可操作");
         }
         return joinPoint.proceed();

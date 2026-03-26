@@ -7,13 +7,16 @@ import com.chen404.domain.dto.RegisterDTO;
 import com.chen404.domain.dto.ChangePasswordDTO;
 import com.chen404.domain.dto.UpdateProfileDTO;
 import com.chen404.domain.entity.Role;
+import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.entity.User;
 import com.chen404.domain.entity.UserRole;
 import com.chen404.mapper.RoleMapper;
 import com.chen404.mapper.UserMapper;
 import com.chen404.mapper.UserRoleMapper;
 import com.chen404.service.EmailService;
+import com.chen404.service.SysFileService;
 import com.chen404.service.UserService;
+import com.chen404.service.support.UserAccessProfileSupport;
 import com.chen404.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,6 +27,7 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 用户服务实现类
@@ -48,6 +52,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Autowired
     private EmailService emailService;
+
+    @Autowired
+    private SysFileService sysFileService;
+
+    @Autowired
+    private UserAccessProfileSupport userAccessProfileSupport;
 
     @Value("${jwt.expiration}")
     private Long expiration;
@@ -87,14 +97,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setLastLoginIp("0.0.0.0");
         userMapper.updateById(user);
 
-        // 获取用户角色
-        List<Role> roles = roleMapper.selectRolesByUserId(user.getId());
-        if (!roles.isEmpty()) {
-            user.setRole(roles.get(0).getId().intValue());
-        }
-
-        // 清除敏感信息
-        user.setPassword(null);
+        userAccessProfileSupport.enrichUserProfile(user);
 
         // 生成Token
         String token = jwtUtil.generateToken(user.getId(), user.getUsername());
@@ -132,6 +135,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setPhone(registerDTO.getPhone());
         user.setAvatar("/default-avatar.jpg");
         user.setStatus(1);
+        user.setTrustLevel(User.TrustLevel.NORMAL);
 
         // 设置验证状态（邮箱已验证）
         if (StringUtils.hasText(registerDTO.getEmail())) {
@@ -152,10 +156,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             userRoleMapper.insert(ur);
         }
 
-        // 清除敏感信息
-        user.setPassword(null);
-
-        return user;
+        return getCurrentUser(user.getId());
     }
 
     @Override
@@ -180,17 +181,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Override
     public User getCurrentUser(Long userId) {
-        User user = userMapper.selectById(userId);
-        if (user != null) {
-            // 清除敏感信息
-            user.setPassword(null);
-            // 获取角色
-            List<Role> roles = roleMapper.selectRolesByUserId(userId);
-            if (!roles.isEmpty()) {
-                user.setRole(roles.get(0).getId().intValue());
-            }
-        }
-        return user;
+        return userAccessProfileSupport.loadUserProfile(userId);
     }
 
     @Override
@@ -200,8 +191,39 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (user == null) {
             throw new RuntimeException("用户不存在");
         }
+        String oldAvatar = user.getAvatar();
+        String newAvatar = dto.getAvatar();
+
         user.setNickname(dto.getNickname());
-        user.setAvatar(dto.getAvatar());
+        user.setAvatar(newAvatar);
+        userMapper.updateById(user);
+
+        if (!Objects.equals(oldAvatar, newAvatar)) {
+            if (StringUtils.hasText(newAvatar)) {
+                sysFileService.convertToPermanent(List.of(newAvatar), SysFile.RefType.AVATAR, userId);
+            }
+            if (StringUtils.hasText(oldAvatar) && !oldAvatar.startsWith("/")) {
+                sysFileService.deleteByUrl(oldAvatar, userId);
+            }
+        }
+
+        return getCurrentUser(userId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public User updateTrustLevel(Long userId, Integer trustLevel) {
+        if (!Objects.equals(trustLevel, User.TrustLevel.NORMAL)
+                && !Objects.equals(trustLevel, User.TrustLevel.FRIEND)) {
+            throw new RuntimeException("仅支持设置为普通用户(0)或好友/受信用户(1)");
+        }
+
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new RuntimeException("用户不存在");
+        }
+
+        user.setTrustLevel(trustLevel);
         userMapper.updateById(user);
         return getCurrentUser(userId);
     }
@@ -237,4 +259,5 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             }
         }
     }
+
 }

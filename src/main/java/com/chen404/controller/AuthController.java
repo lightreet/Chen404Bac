@@ -111,14 +111,10 @@ public class AuthController {
             }
 
             // 生成并发送验证码
-            String code = verificationCodeService.generateAndSendCode(target, sendCodeDTO.getType());
+            verificationCodeService.generateAndSendCode(target, sendCodeDTO.getType());
 
             Map<String, Object> result = new HashMap<>();
             result.put("expireSeconds", 300); // 5分钟有效期
-
-            // 开发环境返回验证码（方便测试）
-            // 生产环境应移除此行
-            result.put("code", code);
 
             return Result.success("验证码发送成功", result);
         } catch (RuntimeException e) {

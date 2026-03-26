@@ -2,6 +2,7 @@ package com.chen404.domain.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -102,7 +103,18 @@ public class Article implements Serializable {
     /**
      * 访问密码
      */
+    @JsonIgnore
     private String password;
+
+    /**
+     * 可见性：0-公开 1-登录可见 2-好友可见 3-私密
+     */
+    private Integer visibility;
+
+    /**
+     * 评论策略：0-关闭 1-登录可评论 2-好友可评论 3-游客可评论
+     */
+    private Integer commentPolicy;
 
     /**
      * 发布时间
@@ -158,4 +170,42 @@ public class Article implements Serializable {
      */
     @TableField(exist = false)
     private List<String> tagNames;
+
+    /**
+     * 当前请求用户是否可编辑
+     */
+    @TableField(exist = false)
+    private Boolean canEdit;
+
+    /**
+     * 当前请求用户是否可删除
+     */
+    @TableField(exist = false)
+    private Boolean canDelete;
+
+    /**
+     * 当前请求用户是否可评论
+     */
+    @TableField(exist = false)
+    private Boolean canComment;
+
+    public interface Status {
+        int DRAFT = 0;
+        int PUBLISHED = 1;
+        int RECYCLED = 2;
+    }
+
+    public interface Visibility {
+        int PUBLIC = 0;
+        int LOGIN = 1;
+        int FRIEND = 2;
+        int PRIVATE = 3;
+    }
+
+    public interface CommentPolicy {
+        int CLOSED = 0;
+        int REGISTERED = 1;
+        int FRIEND = 2;
+        int PUBLIC = 3;
+    }
 }

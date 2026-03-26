@@ -2,7 +2,9 @@ package com.chen404.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.chen404.domain.entity.SysFile;
+import com.chen404.exception.ForbiddenException;
 import com.chen404.mapper.SysFileMapper;
+import com.chen404.service.AccessService;
 import com.chen404.service.FileStorageService;
 import com.chen404.service.SysFileService;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +30,9 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
 
     @Autowired
     private FileStorageService fileStorageService;
+
+    @Autowired
+    private AccessService accessService;
 
     // 临时文件过期时间（小时）
     private static final int TEMP_FILE_EXPIRE_HOURS = 24;
@@ -106,12 +111,11 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
         SysFile file = baseMapper.selectByUrl(fileUrl);
         if (file == null) {
             log.warn("删除文件失败，文件记录不存在: {}", fileUrl);
-            // 尝试直接删除存储中的文件
-            String objectName = extractObjectNameFromUrl(fileUrl);
-            if (objectName != null) {
-                return fileStorageService.deleteFile(objectName);
-            }
             return false;
+        }
+
+        if (!accessService.canDeleteFile(userId, file)) {
+            throw new ForbiddenException("仅文件上传者本人或管理员可删除该文件");
         }
 
         // 删除存储中的文件

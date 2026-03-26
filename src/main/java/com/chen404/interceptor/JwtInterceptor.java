@@ -2,6 +2,8 @@ package com.chen404.interceptor;
 
 import com.auth0.jwt.exceptions.JWTVerificationException;
 import com.chen404.domain.Result;
+import com.chen404.domain.entity.User;
+import com.chen404.service.UserService;
 import com.chen404.util.JwtUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
@@ -19,15 +21,19 @@ public class JwtInterceptor implements HandlerInterceptor {
     @Autowired
     private JwtUtil jwtUtil;
 
+    @Autowired
+    private UserService userService;
+
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
-        // 允许匿名访问的请求直接放行
-        if (isPublicUri(request)) {
+        // 放行 CORS 预检请求
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
             return true;
         }
 
-        // 放行 CORS 预检请求
-        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+        // 允许匿名访问的请求直接放行
+        if (isPublicUri(request)) {
+            attachUserIdIfPresent(request);
             return true;
         }
 
@@ -53,6 +59,15 @@ public class JwtInterceptor implements HandlerInterceptor {
 
             // 将用户ID存入request属性，供后续使用
             Long userId = jwtUtil.getUserIdFromToken(token);
+            User user = userService.getById(userId);
+            if (user == null || user.getStatus() == null || user.getStatus() != UserStatus.ENABLED) {
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.setContentType("application/json;charset=UTF-8");
+                response.getWriter().write(new ObjectMapper().writeValueAsString(
+                        Result.error(401, "账号已被禁用或不存在")
+                ));
+                return false;
+            }
             request.setAttribute("userId", userId);
 
             return true;
@@ -64,6 +79,29 @@ public class JwtInterceptor implements HandlerInterceptor {
             ));
             return false;
         }
+    }
+
+    private void attachUserIdIfPresent(HttpServletRequest request) {
+        String authHeader = request.getHeader("Authorization");
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return;
+        }
+
+        String token = authHeader.substring(7);
+        try {
+            jwtUtil.verifyToken(token);
+            Long userId = jwtUtil.getUserIdFromToken(token);
+            User user = userService.getById(userId);
+            if (user != null && user.getStatus() != null && user.getStatus() == UserStatus.ENABLED) {
+                request.setAttribute("userId", userId);
+            }
+        } catch (JWTVerificationException ignored) {
+            // 公开接口允许匿名访问；若 token 失效，仅忽略身份，不阻断公开请求。
+        }
+    }
+
+    private interface UserStatus {
+        int ENABLED = 1;
     }
 
     /**
@@ -116,11 +154,14 @@ public class JwtInterceptor implements HandlerInterceptor {
         }
 
         // 其他公开 API 路径
+        if (path.equals("/comments") || path.startsWith("/comments/")) {
+            return "GET".equalsIgnoreCase(method);
+        }
+
         return path.equals("/home") || path.startsWith("/home/") ||
                path.equals("/site") || path.startsWith("/site/") ||
                path.equals("/tags") || path.startsWith("/tags/") ||
                path.equals("/archives") || path.startsWith("/archives/") ||
-               path.equals("/comments") || path.startsWith("/comments/") ||
                path.equals("/friends") || path.startsWith("/friends/");
     }
 }

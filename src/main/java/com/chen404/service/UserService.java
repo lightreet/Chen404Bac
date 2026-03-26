@@ -54,6 +54,11 @@ public interface UserService extends IService<User> {
     User updateProfile(Long userId, UpdateProfileDTO dto);
 
     /**
+     * 更新用户信任级别（仅管理员调用）
+     */
+    User updateTrustLevel(Long userId, Integer trustLevel);
+
+    /**
      * 修改密码（校验旧密码）
      */
     void changePassword(Long userId, ChangePasswordDTO dto, String clientIp, String userAgent);

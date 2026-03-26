@@ -117,7 +117,7 @@ Login
 
 ## 6. 配置结构
 
-当前 [`application.yml`](../src/main/resources/application.yml) 的核心配置包括：
+当前 [`application.yml`](../../src/main/resources/application.yml) 的核心配置包括：
 
 - `server.port = 10404`
 - `server.servlet.context-path = /api`

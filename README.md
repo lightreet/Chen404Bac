@@ -141,5 +141,7 @@ Chen404Bac/
 
 ## 文档
 
-- [架构设计](doc/architecture.md)
-- [数据库脚本](doc/chen404.sql)
+- [架构设计](doc/architecture/architecture.md)
+- [数据库脚本](doc/sql/3-20/chen404.sql)
+- [权限设计](doc/architecture/permission-design.md)
+- [权限升级脚本](doc/sql/3-20/permission-phase1-upgrade.sql)
