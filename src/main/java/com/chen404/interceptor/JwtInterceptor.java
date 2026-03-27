@@ -133,6 +133,11 @@ public class JwtInterceptor implements HandlerInterceptor {
             return "GET".equalsIgnoreCase(method);
         }
 
+        // /emoji 仅 GET 公开（表情包下发）
+        if (path.equals("/emoji") || path.startsWith("/emoji/")) {
+            return "GET".equalsIgnoreCase(method);
+        }
+
         // /articles：列表、详情、热门、推荐、上一篇下一篇、点赞公开；/articles/mine 与 创建/更新/删除 需 JWT
         if (path.equals("/articles") || path.startsWith("/articles/")) {
             if ("GET".equalsIgnoreCase(method)) {
@@ -155,7 +160,13 @@ public class JwtInterceptor implements HandlerInterceptor {
 
         // 其他公开 API 路径
         if (path.equals("/comments") || path.startsWith("/comments/")) {
-            return "GET".equalsIgnoreCase(method);
+            if ("GET".equalsIgnoreCase(method)) {
+                return true;
+            }
+            if ("POST".equalsIgnoreCase(method)) {
+                return path.equals("/comments") || path.matches("/comments/[^/]+/like");
+            }
+            return false;
         }
 
         return path.equals("/home") || path.startsWith("/home/") ||

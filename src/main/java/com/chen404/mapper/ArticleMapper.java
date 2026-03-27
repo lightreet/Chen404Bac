@@ -61,7 +61,7 @@ public interface ArticleMapper extends BaseMapper<Article> {
             "(SELECT COUNT(*) FROM article WHERE deleted = 0 AND status = 1 AND visibility = 0) as articleCount, " +
             "(SELECT COUNT(*) FROM category WHERE deleted = 0 AND status = 1) as categoryCount, " +
             "(SELECT COUNT(*) FROM tag WHERE deleted = 0 AND status = 1) as tagCount, " +
-            "(SELECT COUNT(*) FROM comment WHERE deleted = 0) as commentCount, " +
+            "(SELECT COUNT(*) FROM comment WHERE deleted = 0 AND status = 1) as commentCount, " +
             "(SELECT COALESCE(SUM(view_count), 0) FROM article WHERE deleted = 0 AND status = 1 AND visibility = 0) as viewCount")
     java.util.Map<String, Object> selectSiteStats();
 }

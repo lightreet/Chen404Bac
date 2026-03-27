@@ -177,6 +177,107 @@ CREATE TABLE `friend_link`  (
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '友链表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
+-- Table structure for emoji_pack
+-- ----------------------------
+DROP TABLE IF EXISTS `emoji_pack`;
+CREATE TABLE `emoji_pack`  (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '表情包ID',
+  `pack_code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '表情包编码（唯一）',
+  `name` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '表情包名称',
+  `description` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '描述',
+  `icon_url` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '图标URL',
+  `enabled` tinyint NOT NULL DEFAULT 1 COMMENT '是否启用：0-否 1-是',
+  `sort` int NOT NULL DEFAULT 0 COMMENT '排序号',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `deleted` tinyint NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_pack_code`(`pack_code` ASC) USING BTREE,
+  INDEX `idx_enabled`(`enabled` ASC) USING BTREE,
+  INDEX `idx_sort`(`sort` ASC) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '表情包表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Table structure for emoji_item
+-- ----------------------------
+DROP TABLE IF EXISTS `emoji_item`;
+CREATE TABLE `emoji_item`  (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '表情项ID',
+  `pack_code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '表情包编码',
+  `shortcode` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '短码（唯一，如 basic_smile）',
+  `label` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '名称',
+  `category` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '分类',
+  `type` tinyint NOT NULL COMMENT '类型：0-unicode 1-image',
+  `unicode` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT 'Unicode 表情（type=0）',
+  `asset_url` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '资源URL（type=1）',
+  `width` int NULL DEFAULT NULL COMMENT '宽度（可选）',
+  `height` int NULL DEFAULT NULL COMMENT '高度（可选）',
+  `enabled` tinyint NOT NULL DEFAULT 1 COMMENT '是否启用：0-否 1-是',
+  `sort` int NOT NULL DEFAULT 0 COMMENT '排序号',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `deleted` tinyint NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_shortcode`(`shortcode` ASC) USING BTREE,
+  INDEX `idx_pack_code`(`pack_code` ASC) USING BTREE,
+  INDEX `idx_enabled`(`enabled` ASC) USING BTREE,
+  INDEX `idx_sort`(`sort` ASC) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '表情项表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Seed data for emoji (basic unicode pack)
+-- ----------------------------
+INSERT INTO `emoji_pack`(`pack_code`, `name`, `description`, `enabled`, `sort`)
+VALUES ('basic', '基础表情', '常用基础 Unicode 表情', 1, 10);
+
+INSERT INTO `emoji_item`(`pack_code`, `shortcode`, `label`, `category`, `type`, `unicode`, `enabled`, `sort`) VALUES
+('basic','basic_smile','微笑','emotion',0,'🙂',1,1),
+('basic','basic_grin','大笑','emotion',0,'😄',1,2),
+('basic','basic_laugh','笑哭','emotion',0,'😂',1,3),
+('basic','basic_joy','开心','emotion',0,'🥳',1,4),
+('basic','basic_love','爱心眼','emotion',0,'😍',1,5),
+('basic','basic_think','思考','emotion',0,'🤔',1,6),
+('basic','basic_wow','震惊','emotion',0,'😮',1,7),
+('basic','basic_sleepy','困','emotion',0,'😪',1,8),
+('basic','basic_cry','哭哭','emotion',0,'😢',1,9),
+('basic','basic_sob','大哭','emotion',0,'😭',1,10),
+('basic','basic_angry','生气','emotion',0,'😤',1,11),
+('basic','basic_cool','酷','emotion',0,'😎',1,12),
+('basic','basic_wink','眨眼','emotion',0,'😉',1,13),
+('basic','basic_sweat','汗','emotion',0,'😅',1,14),
+('basic','basic_hug','拥抱','emotion',0,'🤗',1,15),
+('basic','basic_shy','害羞','emotion',0,'😊',1,16),
+('basic','basic_sigh','叹气','emotion',0,'😮‍💨',1,17),
+('basic','basic_dizzy','晕','emotion',0,'😵‍💫',1,18),
+('basic','basic_tired','疲惫','emotion',0,'😫',1,19),
+('basic','basic_ok','OK','social',0,'👌',1,20),
+('basic','basic_thumbsup','点赞','social',0,'👍',1,21),
+('basic','basic_clap','鼓掌','social',0,'👏',1,22),
+('basic','basic_pray','感谢','social',0,'🙏',1,23),
+('basic','basic_heart','爱心','social',0,'❤️',1,24),
+('basic','basic_fire','火','social',0,'🔥',1,25),
+('basic','basic_star','星星','social',0,'⭐',1,26),
+('basic','basic_rocket','冲','social',0,'🚀',1,27),
+('basic','basic_wave','挥手','social',0,'👋',1,28),
+('basic','basic_handshake','握手','social',0,'🤝',1,29),
+('basic','basic_muscle','加油','social',0,'💪',1,30),
+('basic','basic_confetti','庆祝','social',0,'🎉',1,31),
+('basic','basic_gift','礼物','social',0,'🎁',1,32),
+('basic','basic_camera','相机','daily',0,'📷',1,40),
+('basic','basic_coffee','咖啡','daily',0,'☕',1,41),
+('basic','basic_tea','奶茶','daily',0,'🧋',1,42),
+('basic','basic_cake','蛋糕','daily',0,'🍰',1,43),
+('basic','basic_moon','晚安','daily',0,'🌙',1,44),
+('basic','basic_sakura','樱花','daily',0,'🌸',1,45),
+('basic','basic_book','学习','tech',0,'📚',1,50),
+('basic','basic_laptop','电脑','tech',0,'💻',1,51),
+('basic','basic_bug','Bug','tech',0,'🐛',1,52),
+('basic','basic_wrench','修复','tech',0,'🔧',1,53),
+('basic','basic_lightbulb','灵感','tech',0,'💡',1,54),
+('basic','basic_memo','记录','tech',0,'📝',1,55),
+('basic','basic_link','链接','tech',0,'🔗',1,56);
+
+-- ----------------------------
 -- Table structure for site_config
 -- ----------------------------
 DROP TABLE IF EXISTS `site_config`;

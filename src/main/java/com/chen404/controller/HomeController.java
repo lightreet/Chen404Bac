@@ -3,8 +3,10 @@ package com.chen404.controller;
 import com.chen404.domain.Result;
 import com.chen404.domain.entity.Article;
 import com.chen404.domain.entity.Banner;
+import com.chen404.domain.entity.Comment;
 import com.chen404.service.ArticleService;
 import com.chen404.service.BannerService;
+import com.chen404.service.CommentService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -28,6 +30,9 @@ public class HomeController {
     @Autowired
     private BannerService bannerService;
 
+    @Autowired
+    private CommentService commentService;
+
     /**
      * 获取首页聚合数据
      */
@@ -46,6 +51,10 @@ public class HomeController {
         // 热门文章
         List<Article> hotArticles = articleService.getHotArticles(10);
         data.put("hotArticles", hotArticles);
+
+        // 最新评论
+        List<Comment> recentComments = commentService.getRecentComments(5);
+        data.put("recentComments", recentComments);
 
         return Result.success(data);
     }
