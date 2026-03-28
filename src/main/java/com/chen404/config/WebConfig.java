@@ -3,10 +3,13 @@ package com.chen404.config;
 import com.chen404.interceptor.JwtInterceptor;
 import com.chen404.interceptor.LoggingInterceptor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+import java.util.Arrays;
 
 /**
  * Web配置类
@@ -20,11 +23,20 @@ public class WebConfig implements WebMvcConfigurer {
     @Autowired
     private LoggingInterceptor loggingInterceptor;
 
+    @Value("${app.cors.allowed-origins:http://localhost:5173,http://127.0.0.1:5173,http://192.168.1.6:5173}")
+    private String corsAllowedOrigins;
+
+    private String[] parseCorsOrigins() {
+        return Arrays.stream(corsAllowedOrigins.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toArray(String[]::new);
+    }
+
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
-                // 允许的前端地址
-                .allowedOrigins("http://localhost:5173", "http://127.0.0.1:5173", "http://192.168.1.6:5173")
+                .allowedOrigins(parseCorsOrigins())
                 // 允许的方法
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
                 // 允许的请求头

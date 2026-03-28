@@ -148,26 +148,23 @@
     <logger name="org.apache.catalina" level="WARN"/>
     <logger name="org.apache.tomcat" level="WARN"/>
 
-    <root level="INFO">
-        <appender-ref ref="ASYNC_CONSOLE"/>
-        <appender-ref ref="INFO_FILE"/>
-        <appender-ref ref="WARN_FILE"/>
-        <appender-ref ref="ERROR_FILE"/>
-    </root>
-
-    <springProfile name="dev">
+    <!-- 非 prod 单一 root；勿再叠一层无条件 root，否则 dev 下控制台会打两遍 -->
+    <springProfile name="!prod">
         <root level="INFO">
-            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="ASYNC_CONSOLE"/>
             <appender-ref ref="INFO_FILE"/>
             <appender-ref ref="WARN_FILE"/>
             <appender-ref ref="ERROR_FILE"/>
         </root>
+    </springProfile>
+
+    <springProfile name="dev">
         <logger name="com.chen404" level="DEBUG"/>
     </springProfile>
 
     <springProfile name="prod">
         <root level="WARN">
-            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="ASYNC_CONSOLE"/>
             <appender-ref ref="INFO_FILE"/>
             <appender-ref ref="WARN_FILE"/>
             <appender-ref ref="ERROR_FILE"/>

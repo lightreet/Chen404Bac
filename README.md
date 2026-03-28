@@ -30,29 +30,29 @@
 mysql -u root -p < doc/chen404.sql
 ```
 
-### 2. 配置 `application.yml`
+### 2. 配置说明（多环境）
 
-请根据本地环境修改：
+| 文件 | 用途 |
+|------|------|
+| `application.yml` | 公共配置，默认 profile 为 **dev** |
+| `application-dev.yml` | 本地开发；连接信息可用环境变量覆盖，见仓库 [`deploy/env.dev.example`](../deploy/env.dev.example) |
+| `application-prod.yml` | 生产；**必须通过环境变量**提供密码、密钥、CORS 等，见 [`deploy/env.prod.example`](../deploy/env.prod.example) |
 
-- `spring.datasource.*`
-- `spring.data.redis.*`
-- `spring.mail.*`
-- `minio.*`
-- `jwt.*`
-
-建议不要在文档或仓库中保留真实生产凭据。
+不要在仓库中提交真实生产凭据。上线流程与服务器操作见 **[`deploy/README.md`](../deploy/README.md)**。
 
 ### 3. 启动项目
+
+本地默认 **dev**：
 
 ```bash
 mvn spring-boot:run
 ```
 
-或打包运行：
+生产 JAR（需先在系统中导出 `env.prod` 中的变量或使用 systemd `EnvironmentFile`）：
 
 ```bash
 mvn clean package -DskipTests
-java -jar target/chen404bac-1.0.0.jar
+java -jar target/chen404bac-1.0.0.jar --spring.profiles.active=prod
 ```
 
 ## 当前运行配置

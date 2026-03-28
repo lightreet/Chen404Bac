@@ -1,0 +1,73 @@
+# 生产环境：必须 SPRING_PROFILES_ACTIVE=prod，敏感信息通过环境变量注入（deploy/env.prod.example）
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+  datasource:
+    type: com.zaxxer.hikari.HikariDataSource
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${CHEN404_DB_HOST:127.0.0.1}:${CHEN404_DB_PORT:3306}/chen404?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: ${CHEN404_DB_USER:root}
+    password: ${CHEN404_DB_PASSWORD}
+    hikari:
+      minimum-idle: 5
+      maximum-pool-size: 20
+      auto-commit: true
+      idle-timeout: 30000
+      pool-name: Chen404HikariCP
+      max-lifetime: 1800000
+      connection-timeout: 30000
+      connection-test-query: SELECT 1
+
+  data:
+    redis:
+      host: ${CHEN404_REDIS_HOST:127.0.0.1}
+      port: ${CHEN404_REDIS_PORT:6379}
+      password: ${CHEN404_REDIS_PASSWORD:}
+      database: 0
+      timeout: 60000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-wait: -1ms
+          max-idle: 8
+          min-idle: 0
+
+  mail:
+    host: ${SPRING_MAIL_HOST:smtp.163.com}
+    port: ${SPRING_MAIL_PORT:465}
+    username: ${SPRING_MAIL_USERNAME}
+    password: ${SPRING_MAIL_PASSWORD}
+    default-encoding: UTF-8
+    protocol: smtp
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
+          socketFactory:
+            class: javax.net.ssl.SSLSocketFactory
+            port: 465
+
+minio:
+  endpoint: ${MINIO_ENDPOINT:http://127.0.0.1:9000}
+  access-key: ${MINIO_ACCESS_KEY}
+  secret-key: ${MINIO_SECRET_KEY}
+  bucket-name: ${MINIO_BUCKET_NAME:chen404}
+  external-url: ${MINIO_EXTERNAL_URL:}
+
+jwt:
+  secret: ${JWT_SECRET}
+  expiration: ${JWT_EXPIRATION:7200000}
+  refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
+
+app:
+  cors:
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS}
+
+logging:
+  level:
+    com.chen404: info
+    com.chen404.interceptor: warn

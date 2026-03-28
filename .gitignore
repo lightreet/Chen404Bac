@@ -51,6 +51,8 @@ Thumbs.db
 !application.yml
 !application-dev.yml
 !application-prod.yml
+# 本地覆盖（不提交）
+application-*-local.yml
 uploads/
 
 # Others

@@ -6,81 +6,23 @@ server:
 spring:
   application:
     name: chen404bac
-
-  # 数据库配置
-  datasource:
-    type: com.zaxxer.hikari.HikariDataSource
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://129.204.199.44:3306/chen404?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    username: root
-    password: Dev@123456
-    hikari:
-      minimum-idle: 5
-      maximum-pool-size: 20
-      auto-commit: true
-      idle-timeout: 30000
-      pool-name: Chen404HikariCP
-      max-lifetime: 1800000
-      connection-timeout: 30000
-      connection-test-query: SELECT 1
-
-  # Redis配置 (Spring Boot 3.x 使用 spring.data.redis 命名空间)
-  data:
-    redis:
-      host: 129.204.199.44
-      port: 6379
-      password: Dev@123456
-      database: 0
-      timeout: 60000ms
-      lettuce:
-        pool:
-          max-active: 8
-          max-wait: -1ms
-          max-idle: 8
-          min-idle: 0
-
-  # 邮件配置（网易邮箱）
-  mail:
-    host: smtp.163.com
-    port: 465
-    username: wy_massage@163.com
-    # 注意：这里需要填写网易邮箱的授权码，不是登录密码
-    # 获取方式：登录网易邮箱 -> 设置 -> POP3/SMTP/IMAP -> 开启SMTP服务 -> 获取授权码
-    password: MTaLbTDBSsv6dKwZ
-    default-encoding: UTF-8
-    protocol: smtp
-    properties:
-      mail:
-        smtp:
-          auth: true
-          ssl:
-            enable: true
-          socketFactory:
-            class: javax.net.ssl.SSLSocketFactory
-            port: 465
-
-  # 文件上传配置
+  profiles:
+    default: dev
   servlet:
     multipart:
       enabled: true
       max-file-size: 15MB
       max-request-size: 150MB
 
-# MinIO 对象存储配置
-minio:
-  endpoint: http://129.204.199.44:9000
-  access-key: admin
-  secret-key: Dev@123456
-  bucket-name: chen404
-  # 外部访问URL（如果通过CDN或域名访问，留空则使用endpoint）
-  external-url: ""
+# 逗号分隔；生产环境由 application-prod 中 APP_CORS_ALLOWED_ORIGINS 覆盖
+app:
+  cors:
+    allowed-origins: "http://localhost:5173,http://127.0.0.1:5173,http://192.168.1.6:5173"
 
-# MyBatis Plus配置
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
     cache-enabled: true
-    # 使用logback记录SQL，不输出到控制台
     log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
   global-config:
     db-config:
@@ -91,19 +33,12 @@ mybatis-plus:
   mapper-locations: classpath*:mapper/**/*.xml
   type-aliases-package: com.chen404.domain.entity
 
-# JWT配置
-jwt:
-  secret: chen404-secret-key-2024-for-jwt-token-generation
-  expiration: 7200000  # 2小时（毫秒）
-  refresh-expiration: 604800000  # 7天（毫秒）
-
-# 日志配置（使用logback-spring.xml进行详细配置）
 logging:
   config: classpath:logback-spring.xml
   level:
     root: info
-    com.chen404: debug
-    com.chen404.interceptor: debug
+    com.chen404: info
+    com.chen404.interceptor: info
     org.springframework.security: error
     org.springframework.web: warn
     org.springframework.jdbc: warn
