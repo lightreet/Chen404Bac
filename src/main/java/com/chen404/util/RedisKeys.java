@@ -21,5 +21,22 @@ public final class RedisKeys {
     public static String verifyDailyCount(String type, String target) {
         return PREFIX + "verify:daily:" + type + ":" + target;
     }
+
+    /** 匿名文章点赞冷却（与 IP 绑定） */
+    public static String articleLikeThrottle(Long articleId, String clientIp) {
+        return PREFIX + "article:like:throttle:" + articleId + ":" + sanitizeIp(clientIp);
+    }
+
+    /** 匿名评论点赞冷却 */
+    public static String commentLikeThrottle(Long commentId, String clientIp) {
+        return PREFIX + "comment:like:throttle:" + commentId + ":" + sanitizeIp(clientIp);
+    }
+
+    private static String sanitizeIp(String ip) {
+        if (ip == null || ip.isBlank()) {
+            return "anonymous";
+        }
+        return ip.trim().replace(':', '_');
+    }
 }
 

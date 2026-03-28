@@ -3,11 +3,17 @@ package com.chen404.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.chen404.domain.dto.ArchiveArticleItem;
+import com.chen404.domain.dto.ArchiveMonthVO;
+import com.chen404.domain.dto.ArchiveYearVO;
+import com.chen404.domain.dto.ArticleLikeResult;
 import com.chen404.domain.entity.Article;
 import com.chen404.domain.entity.ArticleTag;
 import com.chen404.domain.entity.Category;
 import com.chen404.domain.entity.Tag;
 import com.chen404.domain.entity.User;
+import com.chen404.domain.entity.UserArticleFavorite;
+import com.chen404.domain.entity.UserArticleLike;
 import com.chen404.exception.ForbiddenException;
 import com.chen404.exception.TooManyRequestsException;
 import com.chen404.exception.UnauthorizedException;
@@ -15,32 +21,34 @@ import com.chen404.mapper.ArticleMapper;
 import com.chen404.mapper.ArticleTagMapper;
 import com.chen404.mapper.CategoryMapper;
 import com.chen404.mapper.TagMapper;
+import com.chen404.mapper.UserArticleFavoriteMapper;
+import com.chen404.mapper.UserArticleLikeMapper;
 import com.chen404.mapper.UserMapper;
 import com.chen404.service.AccessService;
 import com.chen404.service.ArticleService;
 import com.chen404.service.SysFileService;
 import com.chen404.service.TagService;
+import com.chen404.util.RedisKeys;
+import com.chen404.util.RedisUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 @Service
 public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> implements ArticleService {
 
     private static final long LIKE_COOLDOWN_MS = 60_000L;
-    private static final int LIKE_THROTTLE_CLEANUP_INTERVAL = 256;
-    private static final ConcurrentHashMap<String, Long> LIKE_THROTTLE_CACHE = new ConcurrentHashMap<>();
-    private static final AtomicInteger LIKE_THROTTLE_OPS = new AtomicInteger();
 
     @Autowired
     private ArticleMapper articleMapper;
@@ -66,6 +74,15 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     @Autowired
     private AccessService accessService;
 
+    @Autowired
+    private UserArticleLikeMapper userArticleLikeMapper;
+
+    @Autowired
+    private UserArticleFavoriteMapper userArticleFavoriteMapper;
+
+    @Autowired
+    private RedisUtil redisUtil;
+
     @Override
     public Page<Article> getArticlePage(Integer page, Integer size, Integer status, Long categoryId, Long tagId, String keyword) {
         Page<Article> pageParam = new Page<>(page, size);
@@ -86,11 +103,9 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
             wrapper.inSql(Article::getId, "SELECT article_id FROM article_tag WHERE tag_id = " + tagId);
         }
 
-        // 关键词搜索
+        // 关键词搜索（公开列表：仅匹配标题）
         if (StringUtils.hasText(keyword)) {
-            wrapper.and(w -> w.like(Article::getTitle, keyword)
-                    .or()
-                    .like(Article::getSummary, keyword));
+            wrapper.like(Article::getTitle, keyword);
         }
 
         // 排序：置顶优先，然后按发布时间倒序
@@ -150,8 +165,23 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         // 填充关联数据
         fillArticleRelations(article);
         accessService.fillArticlePermissions(article, requesterId);
+        fillArticleInteractionFlags(article, requesterId);
 
         return article;
+    }
+
+    private void fillArticleInteractionFlags(Article article, Long requesterId) {
+        if (article == null || requesterId == null) {
+            return;
+        }
+        long likedCount = userArticleLikeMapper.selectCount(new LambdaQueryWrapper<UserArticleLike>()
+                .eq(UserArticleLike::getUserId, requesterId)
+                .eq(UserArticleLike::getArticleId, article.getId()));
+        article.setLiked(likedCount > 0);
+        long favCount = userArticleFavoriteMapper.selectCount(new LambdaQueryWrapper<UserArticleFavorite>()
+                .eq(UserArticleFavorite::getUserId, requesterId)
+                .eq(UserArticleFavorite::getArticleId, article.getId()));
+        article.setFavorited(favCount > 0);
     }
 
     @Override
@@ -351,7 +381,8 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     }
 
     @Override
-    public Integer likeArticle(Long id, Long requesterId, String clientIp) {
+    @Transactional(rollbackFor = Exception.class)
+    public ArticleLikeResult likeArticle(Long id, Long requesterId, String clientIp) {
         Article article = articleMapper.selectById(id);
         if (article == null) {
             throw new RuntimeException("文章不存在");
@@ -359,10 +390,125 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         if (!accessService.canViewArticle(requesterId, article)) {
             throw new ForbiddenException("当前文章无权互动");
         }
-        assertLikeAllowed(id, requesterId, clientIp);
+
+        if (requesterId != null) {
+            LambdaQueryWrapper<UserArticleLike> w = new LambdaQueryWrapper<UserArticleLike>()
+                    .eq(UserArticleLike::getUserId, requesterId)
+                    .eq(UserArticleLike::getArticleId, id);
+            UserArticleLike existing = userArticleLikeMapper.selectOne(w);
+            if (existing == null) {
+                UserArticleLike row = new UserArticleLike();
+                row.setUserId(requesterId);
+                row.setArticleId(id);
+                userArticleLikeMapper.insert(row);
+                articleMapper.incrementLikeCount(id);
+            } else {
+                userArticleLikeMapper.deleteById(existing.getId());
+                articleMapper.decrementLikeCount(id);
+            }
+            Article fresh = articleMapper.selectById(id);
+            int likes = fresh.getLikeCount() == null ? 0 : fresh.getLikeCount();
+            boolean liked = userArticleLikeMapper.selectCount(new LambdaQueryWrapper<UserArticleLike>()
+                    .eq(UserArticleLike::getUserId, requesterId)
+                    .eq(UserArticleLike::getArticleId, id)) > 0;
+            return new ArticleLikeResult(likes, liked);
+        }
+
+        assertAnonymousArticleLikeAllowed(id, clientIp);
         articleMapper.incrementLikeCount(id);
-        int currentLikes = article.getLikeCount() == null ? 0 : article.getLikeCount();
-        return currentLikes + 1;
+        Article fresh = articleMapper.selectById(id);
+        int likes = fresh.getLikeCount() == null ? 0 : fresh.getLikeCount();
+        return new ArticleLikeResult(likes, null);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean toggleFavorite(Long articleId, Long userId) {
+        if (userId == null) {
+            throw new UnauthorizedException();
+        }
+        Article article = articleMapper.selectById(articleId);
+        if (article == null) {
+            throw new RuntimeException("文章不存在");
+        }
+        if (!accessService.canViewArticle(userId, article)) {
+            throw new ForbiddenException("当前文章无权收藏");
+        }
+        LambdaQueryWrapper<UserArticleFavorite> w = new LambdaQueryWrapper<UserArticleFavorite>()
+                .eq(UserArticleFavorite::getUserId, userId)
+                .eq(UserArticleFavorite::getArticleId, articleId);
+        UserArticleFavorite existing = userArticleFavoriteMapper.selectOne(w);
+        if (existing == null) {
+            UserArticleFavorite row = new UserArticleFavorite();
+            row.setUserId(userId);
+            row.setArticleId(articleId);
+            userArticleFavoriteMapper.insert(row);
+            return true;
+        }
+        userArticleFavoriteMapper.deleteById(existing.getId());
+        return false;
+    }
+
+    @Override
+    public Page<Article> getMyLikedArticlePage(Long userId, Integer page, Integer size) {
+        if (userId == null) {
+            throw new UnauthorizedException();
+        }
+        return buildArticlePageFromUserRelation(userId, page, size, true);
+    }
+
+    @Override
+    public Page<Article> getMyFavoriteArticlePage(Long userId, Integer page, Integer size) {
+        if (userId == null) {
+            throw new UnauthorizedException();
+        }
+        return buildArticlePageFromUserRelation(userId, page, size, false);
+    }
+
+    /**
+     * 按关联表时间倒序取文章，过滤当前仍可见，内存分页
+     */
+    private Page<Article> buildArticlePageFromUserRelation(Long userId, int page, int size, boolean likes) {
+        List<Long> articleIdsOrdered;
+        if (likes) {
+            LambdaQueryWrapper<UserArticleLike> w = new LambdaQueryWrapper<UserArticleLike>()
+                    .eq(UserArticleLike::getUserId, userId)
+                    .orderByDesc(UserArticleLike::getCreateTime);
+            articleIdsOrdered = userArticleLikeMapper.selectList(w).stream()
+                    .map(UserArticleLike::getArticleId)
+                    .collect(Collectors.toList());
+        } else {
+            LambdaQueryWrapper<UserArticleFavorite> w = new LambdaQueryWrapper<UserArticleFavorite>()
+                    .eq(UserArticleFavorite::getUserId, userId)
+                    .orderByDesc(UserArticleFavorite::getCreateTime);
+            articleIdsOrdered = userArticleFavoriteMapper.selectList(w).stream()
+                    .map(UserArticleFavorite::getArticleId)
+                    .collect(Collectors.toList());
+        }
+
+        List<Article> visible = new ArrayList<>();
+        for (Long aid : articleIdsOrdered) {
+            Article a = articleMapper.selectById(aid);
+            if (a != null && accessService.canViewArticle(userId, a)) {
+                fillArticleRelations(a);
+                accessService.fillArticlePermissions(a, userId);
+                fillArticleInteractionFlags(a, userId);
+                visible.add(a);
+            }
+        }
+
+        long total = visible.size();
+        int from = (page - 1) * size;
+        List<Article> records;
+        if (from >= visible.size()) {
+            records = List.of();
+        } else {
+            int to = Math.min(from + size, visible.size());
+            records = new ArrayList<>(visible.subList(from, to));
+        }
+        Page<Article> p = new Page<>(page, size, total);
+        p.setRecords(records);
+        return p;
     }
 
     @Override
@@ -378,6 +524,64 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     @Override
     public Map<String, Object> getSiteStats() {
         return articleMapper.selectSiteStats();
+    }
+
+    @Override
+    public List<ArchiveYearVO> listArchives() {
+        LambdaQueryWrapper<Article> w = new LambdaQueryWrapper<>();
+        w.eq(Article::getStatus, Article.Status.PUBLISHED)
+                .eq(Article::getVisibility, Article.Visibility.PUBLIC)
+                .isNotNull(Article::getPublishTime)
+                .orderByDesc(Article::getPublishTime);
+        w.select(Article::getId, Article::getTitle, Article::getPublishTime);
+        List<Article> rows = articleMapper.selectList(w);
+
+        Map<Integer, Map<Integer, List<ArchiveArticleItem>>> byYearMonth = new LinkedHashMap<>();
+        for (Article a : rows) {
+            LocalDateTime pt = a.getPublishTime();
+            int year = pt.getYear();
+            int month = pt.getMonthValue();
+
+            ArchiveArticleItem item = new ArchiveArticleItem();
+            item.setId(a.getId());
+            item.setTitle(a.getTitle());
+            item.setPublishTime(pt);
+            item.setTags(tagMapper.selectTagsByArticleId(a.getId()));
+
+            byYearMonth
+                    .computeIfAbsent(year, y -> new LinkedHashMap<>())
+                    .computeIfAbsent(month, m -> new ArrayList<>())
+                    .add(item);
+        }
+
+        List<Integer> years = new ArrayList<>(byYearMonth.keySet());
+        years.sort(Collections.reverseOrder());
+
+        List<ArchiveYearVO> result = new ArrayList<>();
+        for (Integer year : years) {
+            ArchiveYearVO yvo = new ArchiveYearVO();
+            yvo.setYear(year);
+            Map<Integer, List<ArchiveArticleItem>> monthMap = byYearMonth.get(year);
+
+            List<Integer> months = new ArrayList<>(monthMap.keySet());
+            months.sort(Collections.reverseOrder());
+
+            List<ArchiveMonthVO> monthVos = new ArrayList<>();
+            int yearCount = 0;
+            for (Integer m : months) {
+                List<ArchiveArticleItem> articles = monthMap.get(m);
+                ArchiveMonthVO mvo = new ArchiveMonthVO();
+                mvo.setMonth(m);
+                mvo.setCount(articles.size());
+                mvo.setArticles(articles);
+                monthVos.add(mvo);
+                yearCount += articles.size();
+            }
+            yvo.setMonths(monthVos);
+            yvo.setCount(yearCount);
+            result.add(yvo);
+        }
+        return result;
     }
 
     /**
@@ -496,36 +700,11 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         }
     }
 
-    private void assertLikeAllowed(Long articleId, Long requesterId, String clientIp) {
-        long now = System.currentTimeMillis();
-        cleanupLikeThrottleCacheIfNeeded(now);
-
-        String actorKey = buildLikeActorKey(articleId, requesterId, clientIp);
-        Long lastLikeAt = LIKE_THROTTLE_CACHE.putIfAbsent(actorKey, now);
-        if (lastLikeAt == null) {
-            return;
+    private void assertAnonymousArticleLikeAllowed(Long articleId, String clientIp) {
+        String key = RedisKeys.articleLikeThrottle(articleId, normalizeClientIp(clientIp));
+        if (!redisUtil.setIfAbsent(key, "1", Duration.ofMillis(LIKE_COOLDOWN_MS))) {
+            throw new TooManyRequestsException("您已点过赞了，无需重复点赞");
         }
-
-        if (now - lastLikeAt < LIKE_COOLDOWN_MS) {
-            throw new TooManyRequestsException("点赞过于频繁，请稍后再试");
-        }
-
-        LIKE_THROTTLE_CACHE.put(actorKey, now);
-    }
-
-    private void cleanupLikeThrottleCacheIfNeeded(long now) {
-        if (LIKE_THROTTLE_OPS.incrementAndGet() % LIKE_THROTTLE_CLEANUP_INTERVAL != 0) {
-            return;
-        }
-        LIKE_THROTTLE_CACHE.entrySet().removeIf(entry -> now - entry.getValue() >= LIKE_COOLDOWN_MS);
-    }
-
-    private String buildLikeActorKey(Long articleId, Long requesterId, String clientIp) {
-        if (requesterId != null) {
-            return "article:" + articleId + ":user:" + requesterId;
-        }
-        String normalizedIp = normalizeClientIp(clientIp);
-        return "article:" + articleId + ":ip:" + normalizedIp;
     }
 
     private String normalizeClientIp(String clientIp) {

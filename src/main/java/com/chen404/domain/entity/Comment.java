@@ -74,6 +74,12 @@ public class Comment implements Serializable {
     @TableField(exist = false)
     private String guestDeleteKey;
 
+    /**
+     * 当前登录用户是否已点赞该评论
+     */
+    @TableField(exist = false)
+    private Boolean likedByMe;
+
     public interface Status {
         int PENDING = 0;
         int APPROVED = 1;

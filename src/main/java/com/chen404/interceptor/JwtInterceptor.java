@@ -138,13 +138,15 @@ public class JwtInterceptor implements HandlerInterceptor {
             return "GET".equalsIgnoreCase(method);
         }
 
-        // /articles：列表、详情、热门、推荐、上一篇下一篇、点赞公开；/articles/mine 与 创建/更新/删除 需 JWT
+        // /articles：列表、详情、热门、推荐、上一篇下一篇、点赞公开；/articles/mine* 与 创建/更新/删除、收藏 需 JWT
         if (path.equals("/articles") || path.startsWith("/articles/")) {
             if ("GET".equalsIgnoreCase(method)) {
                 if (path.equals("/articles") || path.equals("/articles/hot") || path.equals("/articles/recommend")) {
                     return true;
                 }
-                if (path.equals("/articles/mine")) {
+                if (path.equals("/articles/mine")
+                        || path.equals("/articles/mine/liked")
+                        || path.equals("/articles/mine/favorites")) {
                     return false;
                 }
                 // /articles/{id} 或 /articles/{id}/neighbors

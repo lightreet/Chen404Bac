@@ -2,6 +2,8 @@ package com.chen404.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.chen404.domain.dto.ArchiveYearVO;
+import com.chen404.domain.dto.ArticleLikeResult;
 import com.chen404.domain.entity.Article;
 
 import java.util.List;
@@ -48,9 +50,24 @@ public interface ArticleService extends IService<Article> {
     void deleteArticle(Long id, Long operatorId);
 
     /**
-     * 点赞文章
+     * 点赞文章：匿名每次 +1（限流）；登录用户为切换赞/取消
      */
-    Integer likeArticle(Long id, Long requesterId, String clientIp);
+    ArticleLikeResult likeArticle(Long id, Long requesterId, String clientIp);
+
+    /**
+     * 切换收藏（需登录）
+     */
+    boolean toggleFavorite(Long articleId, Long userId);
+
+    /**
+     * 个人中心：我点赞过的文章（仅仍可见的）
+     */
+    Page<Article> getMyLikedArticlePage(Long userId, Integer page, Integer size);
+
+    /**
+     * 个人中心：我的收藏
+     */
+    Page<Article> getMyFavoriteArticlePage(Long userId, Integer page, Integer size);
 
     /**
      * 获取热门文章
@@ -66,4 +83,9 @@ public interface ArticleService extends IService<Article> {
      * 获取站点统计
      */
     Map<String, Object> getSiteStats();
+
+    /**
+     * 归档：按年、月分组的公开已发布文章时间线
+     */
+    List<ArchiveYearVO> listArchives();
 }

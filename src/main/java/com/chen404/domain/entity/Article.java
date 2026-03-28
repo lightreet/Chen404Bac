@@ -189,6 +189,18 @@ public class Article implements Serializable {
     @TableField(exist = false)
     private Boolean canComment;
 
+    /**
+     * 当前登录用户是否已点赞（匿名无此字段）
+     */
+    @TableField(exist = false)
+    private Boolean liked;
+
+    /**
+     * 当前登录用户是否已收藏
+     */
+    @TableField(exist = false)
+    private Boolean favorited;
+
     public interface Status {
         int DRAFT = 0;
         int PUBLISHED = 1;

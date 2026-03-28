@@ -3,6 +3,7 @@ package com.chen404.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.chen404.domain.PageResult;
 import com.chen404.domain.Result;
+import com.chen404.domain.dto.CommentLikeResult;
 import com.chen404.domain.dto.CreateCommentDTO;
 import com.chen404.domain.entity.Comment;
 import com.chen404.service.CommentService;
@@ -29,8 +30,10 @@ public class CommentController {
     public Result<PageResult<Comment>> getComments(
             @RequestParam(required = false) Long articleId,
             @RequestParam(defaultValue = "1") Integer page,
-            @RequestParam(defaultValue = "10") Integer size) {
-        Page<Comment> result = commentService.getCommentsByArticleId(articleId, page, size);
+            @RequestParam(defaultValue = "10") Integer size,
+            HttpServletRequest request) {
+        Page<Comment> result = commentService.getCommentsByArticleId(
+                articleId, page, size, RequestAttrUtil.getUserId(request));
         return Result.success(PageResult.of(result));
     }
 
@@ -80,9 +83,9 @@ public class CommentController {
 
     @Operation(summary = "点赞评论")
     @PostMapping("/{id}/like")
-    public Result<Map<String, Integer>> likeComment(@PathVariable Long id) {
-        int likes = commentService.likeComment(id);
-        return Result.success(Map.of("likes", likes));
+    public Result<CommentLikeResult> likeComment(@PathVariable Long id, HttpServletRequest request) {
+        CommentLikeResult result = commentService.likeComment(id, RequestAttrUtil.getUserId(request), getClientIp(request));
+        return Result.success(result);
     }
 
     private String getClientIp(HttpServletRequest request) {

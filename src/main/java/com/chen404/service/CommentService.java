@@ -1,6 +1,7 @@
 package com.chen404.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.chen404.domain.dto.CommentLikeResult;
 import com.chen404.domain.dto.CreateCommentDTO;
 import com.chen404.domain.entity.Comment;
 
@@ -8,7 +9,7 @@ import java.util.List;
 
 public interface CommentService {
 
-    Page<Comment> getCommentsByArticleId(Long articleId, int page, int size);
+    Page<Comment> getCommentsByArticleId(Long articleId, int page, int size, Long requesterId);
 
     Page<Comment> getGuestbookComments(int page, int size);
 
@@ -22,5 +23,5 @@ public interface CommentService {
 
     Comment reviewComment(Long id, int status);
 
-    int likeComment(Long id);
+    CommentLikeResult likeComment(Long id, Long userId, String clientIp);
 }

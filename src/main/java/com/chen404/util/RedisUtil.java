@@ -54,6 +54,19 @@ public class RedisUtil {
         }
     }
 
+    /**
+     * 不存在时写入并设置 TTL；存在则返回 false（用于限流）
+     */
+    public boolean setIfAbsent(String key, String value, Duration ttl) {
+        if (!StringUtils.hasText(key)) {
+            return false;
+        }
+        Boolean ok = ttl == null
+                ? redis.opsForValue().setIfAbsent(key, value)
+                : redis.opsForValue().setIfAbsent(key, value, ttl);
+        return Boolean.TRUE.equals(ok);
+    }
+
     public Long increment(String key) {
         return redis.opsForValue().increment(key);
     }

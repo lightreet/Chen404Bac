@@ -3,6 +3,7 @@ package com.chen404.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.chen404.domain.PageResult;
 import com.chen404.domain.Result;
+import com.chen404.domain.dto.ArticleLikeResult;
 import com.chen404.domain.entity.Article;
 import com.chen404.exception.ForbiddenException;
 import com.chen404.exception.UnauthorizedException;
@@ -45,16 +46,38 @@ public class ArticleController {
         return Result.success(PageResult.of(articlePage));
     }
 
+    @Operation(summary = "我的点赞文章", description = "分页获取当前用户点赞过的、仍可见的文章，需登录")
+    @GetMapping("/mine/liked")
+    public Result<PageResult<Article>> getMyLikedArticles(
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "10") Integer size,
+            HttpServletRequest request) {
+        Long userId = RequestAttrUtil.requireUserId(request);
+        Page<Article> articlePage = articleService.getMyLikedArticlePage(userId, page, size);
+        return Result.success(PageResult.of(articlePage));
+    }
+
+    @Operation(summary = "我的收藏文章", description = "分页获取当前用户收藏的文章，需登录")
+    @GetMapping("/mine/favorites")
+    public Result<PageResult<Article>> getMyFavoriteArticles(
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "10") Integer size,
+            HttpServletRequest request) {
+        Long userId = RequestAttrUtil.requireUserId(request);
+        Page<Article> articlePage = articleService.getMyFavoriteArticlePage(userId, page, size);
+        return Result.success(PageResult.of(articlePage));
+    }
+
     /**
      * 获取文章列表（公开）
      */
-    @Operation(summary = "获取文章列表", description = "支持分页、分类筛选、标签筛选、关键词搜索")
+    @Operation(summary = "获取文章列表", description = "支持分页、分类筛选、标签筛选；关键词仅按文章标题模糊匹配")
     @Parameter(name = "page", description = "页码，默认1")
     @Parameter(name = "size", description = "每页数量，默认10")
     @Parameter(name = "status", description = "文章状态：0-草稿 1-已发布 2-回收站")
     @Parameter(name = "categoryId", description = "分类ID")
     @Parameter(name = "tagId", description = "标签ID")
-    @Parameter(name = "keyword", description = "搜索关键词")
+    @Parameter(name = "keyword", description = "搜索关键词（仅匹配文章标题）")
     @GetMapping("")
     public Result<PageResult<Article>> getArticles(
             @RequestParam(defaultValue = "1") Integer page,
@@ -104,9 +127,17 @@ public class ArticleController {
     @Operation(summary = "点赞文章", description = "为文章点赞")
     @Parameter(name = "id", description = "文章ID", required = true)
     @PostMapping("/{id}/like")
-    public Result<Map<String, Integer>> likeArticle(@PathVariable Long id, HttpServletRequest request) {
-        Integer likes = articleService.likeArticle(id, RequestAttrUtil.getUserId(request), getClientIp(request));
-        return Result.success(Map.of("likes", likes));
+    public Result<ArticleLikeResult> likeArticle(@PathVariable Long id, HttpServletRequest request) {
+        ArticleLikeResult result = articleService.likeArticle(id, RequestAttrUtil.getUserId(request), getClientIp(request));
+        return Result.success(result);
+    }
+
+    @Operation(summary = "切换收藏", description = "登录用户收藏/取消收藏文章")
+    @PostMapping("/{id}/favorite")
+    public Result<Map<String, Boolean>> toggleFavorite(@PathVariable Long id, HttpServletRequest request) {
+        Long userId = RequestAttrUtil.requireUserId(request);
+        boolean favorited = articleService.toggleFavorite(id, userId);
+        return Result.success(Map.of("favorited", favorited));
     }
 
     /**

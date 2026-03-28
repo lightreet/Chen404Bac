@@ -55,6 +55,12 @@ public interface ArticleMapper extends BaseMapper<Article> {
     int incrementLikeCount(@Param("id") Long id);
 
     /**
+     * 减少点赞数（不低于 0）
+     */
+    @Update("UPDATE article SET like_count = GREATEST(like_count - 1, 0) WHERE id = #{id}")
+    int decrementLikeCount(@Param("id") Long id);
+
+    /**
      * 获取站点统计
      */
     @Select("SELECT " +

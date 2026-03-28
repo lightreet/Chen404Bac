@@ -3,18 +3,24 @@ package com.chen404.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.chen404.domain.dto.CommentLikeResult;
 import com.chen404.domain.dto.CreateCommentDTO;
 import com.chen404.domain.entity.Article;
 import com.chen404.domain.entity.Comment;
 import com.chen404.domain.entity.CommentGuestToken;
 import com.chen404.domain.entity.User;
+import com.chen404.domain.entity.UserCommentLike;
 import com.chen404.exception.ForbiddenException;
+import com.chen404.exception.TooManyRequestsException;
 import com.chen404.mapper.ArticleMapper;
 import com.chen404.mapper.CommentMapper;
 import com.chen404.mapper.CommentGuestTokenMapper;
+import com.chen404.mapper.UserCommentLikeMapper;
 import com.chen404.service.AccessService;
 import com.chen404.service.CommentService;
 import com.chen404.service.support.UserAccessProfileSupport;
+import com.chen404.util.RedisKeys;
+import com.chen404.util.RedisUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,12 +29,15 @@ import org.springframework.util.StringUtils;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.Base64;
 
 @Service
 public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> implements CommentService {
+
+    private static final long COMMENT_LIKE_COOLDOWN_MS = 60_000L;
 
     @Autowired
     private CommentMapper commentMapper;
@@ -45,8 +54,14 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
     @Autowired
     private CommentGuestTokenMapper commentGuestTokenMapper;
 
+    @Autowired
+    private UserCommentLikeMapper userCommentLikeMapper;
+
+    @Autowired
+    private RedisUtil redisUtil;
+
     @Override
-    public Page<Comment> getCommentsByArticleId(Long articleId, int page, int size) {
+    public Page<Comment> getCommentsByArticleId(Long articleId, int page, int size, Long requesterId) {
         Page<Comment> pageParam = new Page<>(page, size);
 
         LambdaQueryWrapper<Comment> rootWrapper = new LambdaQueryWrapper<>();
@@ -82,7 +97,40 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
             root.setChildren(childrenByRoot.getOrDefault(root.getId(), Collections.emptyList()));
         }
 
+        fillLikedByMe(rootPage, requesterId);
         return rootPage;
+    }
+
+    private void fillLikedByMe(Page<Comment> rootPage, Long requesterId) {
+        if (requesterId == null || rootPage.getRecords().isEmpty()) {
+            return;
+        }
+        List<Long> ids = new ArrayList<>();
+        for (Comment root : rootPage.getRecords()) {
+            ids.add(root.getId());
+            List<Comment> ch = root.getChildren();
+            if (ch != null) {
+                for (Comment c : ch) {
+                    ids.add(c.getId());
+                }
+            }
+        }
+        if (ids.isEmpty()) {
+            return;
+        }
+        List<UserCommentLike> rows = userCommentLikeMapper.selectList(new LambdaQueryWrapper<UserCommentLike>()
+                .eq(UserCommentLike::getUserId, requesterId)
+                .in(UserCommentLike::getCommentId, ids));
+        Set<Long> likedIds = rows.stream().map(UserCommentLike::getCommentId).collect(Collectors.toSet());
+        for (Comment root : rootPage.getRecords()) {
+            root.setLikedByMe(likedIds.contains(root.getId()));
+            List<Comment> ch = root.getChildren();
+            if (ch != null) {
+                for (Comment c : ch) {
+                    c.setLikedByMe(likedIds.contains(c.getId()));
+                }
+            }
+        }
     }
 
     @Override
@@ -311,13 +359,42 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
     }
 
     @Override
-    public int likeComment(Long id) {
+    @Transactional(rollbackFor = Exception.class)
+    public CommentLikeResult likeComment(Long id, Long userId, String clientIp) {
         Comment comment = commentMapper.selectById(id);
         if (comment == null) {
             throw new IllegalArgumentException("评论不存在");
         }
+        if (userId != null) {
+            LambdaQueryWrapper<UserCommentLike> w = new LambdaQueryWrapper<UserCommentLike>()
+                    .eq(UserCommentLike::getUserId, userId)
+                    .eq(UserCommentLike::getCommentId, id);
+            if (userCommentLikeMapper.selectCount(w) > 0) {
+                int likes = comment.getLikeCount() == null ? 0 : comment.getLikeCount();
+                return new CommentLikeResult(likes, true);
+            }
+            UserCommentLike row = new UserCommentLike();
+            row.setUserId(userId);
+            row.setCommentId(id);
+            userCommentLikeMapper.insert(row);
+            commentMapper.incrementLikeCount(id);
+            Comment fresh = commentMapper.selectById(id);
+            int likes = fresh.getLikeCount() == null ? 0 : fresh.getLikeCount();
+            return new CommentLikeResult(likes, true);
+        }
+        assertAnonymousCommentLikeAllowed(id, clientIp);
         commentMapper.incrementLikeCount(id);
-        return (comment.getLikeCount() == null ? 0 : comment.getLikeCount()) + 1;
+        Comment fresh = commentMapper.selectById(id);
+        int likes = fresh.getLikeCount() == null ? 0 : fresh.getLikeCount();
+        return new CommentLikeResult(likes, false);
+    }
+
+    private void assertAnonymousCommentLikeAllowed(Long commentId, String clientIp) {
+        String ip = StringUtils.hasText(clientIp) ? clientIp.trim() : "anonymous";
+        String key = RedisKeys.commentLikeThrottle(commentId, ip);
+        if (!redisUtil.setIfAbsent(key, "1", Duration.ofMillis(COMMENT_LIKE_COOLDOWN_MS))) {
+            throw new TooManyRequestsException("您已点过赞了，无需重复点赞");
+        }
     }
 
     private static final SecureRandom GUEST_TOKEN_RANDOM = new SecureRandom();
