@@ -108,9 +108,8 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
             wrapper.like(Article::getTitle, keyword);
         }
 
-        // 排序：置顶优先，然后按发布时间倒序
-        wrapper.orderByDesc(Article::getIsTop)
-                .orderByDesc(Article::getPublishTime);
+        // 排序：置顶优先，再按「展示时间」倒序（无 publish_time 时用 create_time，避免 NULL 全堆在最前）
+        wrapper.last("ORDER BY is_top DESC, COALESCE(publish_time, create_time) DESC, id DESC");
 
         Page<Article> result = articleMapper.selectPage(pageParam, wrapper);
 
@@ -136,7 +135,8 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                     .or()
                     .like(Article::getSummary, keyword));
         }
-        wrapper.orderByDesc(Article::getUpdateTime).orderByDesc(Article::getCreateTime);
+        // 已发布按发布时间、草稿按最近编辑时间，统一「最近在前」
+        wrapper.last("ORDER BY COALESCE(publish_time, update_time, create_time) DESC, id DESC");
         Page<Article> result = articleMapper.selectPage(pageParam, wrapper);
         for (Article article : result.getRecords()) {
             fillArticleRelations(article);
