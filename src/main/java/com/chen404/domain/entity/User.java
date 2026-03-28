@@ -1,6 +1,7 @@
 package com.chen404.domain.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -47,9 +48,16 @@ public class User implements Serializable {
     private String phone;
 
     /**
-     * 头像URL
+     * 头像URL（库内冗余；接口展示优先按 {@link #avatarFileId} 解析 sys_file）
      */
     private String avatar;
+
+    /**
+     * 头像对应 sys_file.id（接口不返回）
+     */
+    @JsonIgnore
+    @TableField("avatar_file_id")
+    private Long avatarFileId;
 
     /**
      * 个人简介

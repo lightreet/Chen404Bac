@@ -71,4 +71,14 @@ public interface SysFileService extends IService<SysFile> {
      * @return 对象名称
      */
     String extractObjectNameFromUrl(String fileUrl);
+
+    /**
+     * 根据用户当前头像 URL 解析对应的 sys_file 主键（须为本人 AVATAR 记录）
+     */
+    Long findAvatarFileIdForUser(Long userId, String avatarUrl);
+
+    /**
+     * 按存储 URL 查询未删除的 sys_file 记录（用于资料保存后回填 id 等）
+     */
+    SysFile findByFileUrl(String fileUrl);
 }

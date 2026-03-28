@@ -28,6 +28,7 @@ import com.chen404.service.AccessService;
 import com.chen404.service.ArticleService;
 import com.chen404.service.SysFileService;
 import com.chen404.service.TagService;
+import com.chen404.service.support.UserAccessProfileSupport;
 import com.chen404.util.RedisKeys;
 import com.chen404.util.RedisUtil;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -82,6 +83,9 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
     @Autowired
     private RedisUtil redisUtil;
+
+    @Autowired
+    private UserAccessProfileSupport userAccessProfileSupport;
 
     @Override
     public Page<Article> getArticlePage(Integer page, Integer size, Integer status, Long categoryId, Long tagId, String keyword) {
@@ -596,6 +600,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                 if (author.getTrustLevel() == null) {
                     author.setTrustLevel(User.TrustLevel.NORMAL);
                 }
+                userAccessProfileSupport.applyDisplayAvatar(author);
                 article.setAuthor(author);
             }
         }

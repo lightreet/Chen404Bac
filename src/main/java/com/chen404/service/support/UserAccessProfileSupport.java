@@ -1,11 +1,14 @@
 package com.chen404.service.support;
 
 import com.chen404.domain.entity.Role;
+import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.entity.User;
 import com.chen404.mapper.RoleMapper;
+import com.chen404.mapper.SysFileMapper;
 import com.chen404.mapper.UserMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.util.List;
 
@@ -20,6 +23,9 @@ public class UserAccessProfileSupport {
 
     @Autowired
     private RoleMapper roleMapper;
+
+    @Autowired
+    private SysFileMapper sysFileMapper;
 
     /**
      * 根据用户 ID 加载用户并补齐权限相关信息。
@@ -40,11 +46,25 @@ public class UserAccessProfileSupport {
             return null;
         }
         user.setPassword(null);
+        applyDisplayAvatar(user);
         applyRoleInfo(user);
         if (user.getTrustLevel() == null) {
             user.setTrustLevel(User.TrustLevel.NORMAL);
         }
         return user;
+    }
+
+    /**
+     * 若有 avatar_file_id，用 sys_file.file_url 覆盖展示用 avatar；查不到或文件无 URL 则保留库内 avatar。
+     */
+    public void applyDisplayAvatar(User user) {
+        if (user == null || user.getAvatarFileId() == null) {
+            return;
+        }
+        SysFile f = sysFileMapper.selectById(user.getAvatarFileId());
+        if (f != null && StringUtils.hasText(f.getFileUrl())) {
+            user.setAvatar(f.getFileUrl());
+        }
     }
 
     private void applyRoleInfo(User user) {

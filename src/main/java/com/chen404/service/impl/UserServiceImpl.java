@@ -196,17 +196,26 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
         user.setNickname(dto.getNickname());
         user.setAvatar(newAvatar);
-        userMapper.updateById(user);
 
         if (!Objects.equals(oldAvatar, newAvatar)) {
             if (StringUtils.hasText(newAvatar)) {
                 sysFileService.convertToPermanent(List.of(newAvatar), SysFile.RefType.AVATAR, userId);
+                SysFile f = sysFileService.findByFileUrl(newAvatar);
+                if (f != null && Objects.equals(f.getUserId(), userId)
+                        && SysFile.RefType.AVATAR.equals(f.getRefType())) {
+                    user.setAvatarFileId(f.getId());
+                } else {
+                    user.setAvatarFileId(null);
+                }
+            } else {
+                user.setAvatarFileId(null);
             }
             if (StringUtils.hasText(oldAvatar) && !oldAvatar.startsWith("/")) {
                 sysFileService.deleteByUrl(oldAvatar, userId);
             }
         }
 
+        userMapper.updateById(user);
         return getCurrentUser(userId);
     }
 

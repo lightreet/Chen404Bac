@@ -8,6 +8,7 @@ import com.chen404.domain.dto.CreateCommentDTO;
 import com.chen404.domain.entity.Article;
 import com.chen404.domain.entity.Comment;
 import com.chen404.domain.entity.CommentGuestToken;
+import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.entity.User;
 import com.chen404.domain.entity.UserCommentLike;
 import com.chen404.exception.ForbiddenException;
@@ -18,6 +19,7 @@ import com.chen404.mapper.CommentGuestTokenMapper;
 import com.chen404.mapper.UserCommentLikeMapper;
 import com.chen404.service.AccessService;
 import com.chen404.service.CommentService;
+import com.chen404.service.SysFileService;
 import com.chen404.service.support.UserAccessProfileSupport;
 import com.chen404.util.RedisKeys;
 import com.chen404.util.RedisUtil;
@@ -60,6 +62,9 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
     @Autowired
     private RedisUtil redisUtil;
 
+    @Autowired
+    private SysFileService sysFileService;
+
     @Override
     public Page<Comment> getCommentsByArticleId(Long articleId, int page, int size, Long requesterId) {
         Page<Comment> pageParam = new Page<>(page, size);
@@ -98,6 +103,7 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
         }
 
         fillLikedByMe(rootPage, requesterId);
+        fillAuthorAvatarsFromSysFilePage(rootPage);
         return rootPage;
     }
 
@@ -179,7 +185,9 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
                 .orderByDesc(Comment::getCreateTime)
                 .last("LIMIT " + Math.min(limit, 20));
 
-        return commentMapper.selectList(wrapper);
+        List<Comment> list = commentMapper.selectList(wrapper);
+        fillAuthorAvatarsFromCommentTree(list);
+        return list;
     }
 
     @Override
@@ -212,6 +220,11 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
             comment.setAuthorId(user.getId());
             comment.setAuthorName(user.getNickname());
             comment.setAuthorAvatar(user.getAvatar());
+            Long avatarFid = user.getAvatarFileId();
+            if (avatarFid == null && StringUtils.hasText(user.getAvatar())) {
+                avatarFid = sysFileService.findAvatarFileIdForUser(user.getId(), user.getAvatar());
+            }
+            comment.setAuthorAvatarFileId(avatarFid);
             comment.setAuthorEmail(dto.getAuthorEmail());
         } else {
             if (!StringUtils.hasText(dto.getAuthorName())) {
@@ -273,6 +286,7 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
             syncArticleCommentCount(comment.getArticleId());
         }
 
+        fillSingleCommentAvatarFromSysFile(comment);
         return comment;
     }
 
@@ -355,6 +369,7 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
             syncArticleCommentCount(comment.getArticleId());
         }
 
+        fillSingleCommentAvatarFromSysFile(comment);
         return comment;
     }
 
@@ -445,6 +460,82 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
                 child.setReplyToAuthorName(parent.getAuthorName());
                 child.setReplyToUserId(parent.getAuthorId());
             }
+        }
+    }
+
+    private void fillAuthorAvatarsFromSysFilePage(Page<Comment> page) {
+        if (page == null || page.getRecords().isEmpty()) {
+            return;
+        }
+        fillAuthorAvatarsFromCommentTree(page.getRecords());
+    }
+
+    private void fillAuthorAvatarsFromCommentTree(List<Comment> roots) {
+        if (roots == null || roots.isEmpty()) {
+            return;
+        }
+        List<Long> ids = new ArrayList<>();
+        for (Comment root : roots) {
+            collectAuthorAvatarFileIds(root, ids);
+        }
+        if (ids.isEmpty()) {
+            return;
+        }
+        Map<Long, String> idToUrl = loadAvatarUrlByFileIds(ids);
+        for (Comment root : roots) {
+            applyAuthorAvatarFromSysFile(root, idToUrl);
+        }
+    }
+
+    private void collectAuthorAvatarFileIds(Comment c, List<Long> out) {
+        if (c.getAuthorAvatarFileId() != null) {
+            out.add(c.getAuthorAvatarFileId());
+        }
+        List<Comment> ch = c.getChildren();
+        if (ch != null) {
+            for (Comment x : ch) {
+                collectAuthorAvatarFileIds(x, out);
+            }
+        }
+    }
+
+    private void applyAuthorAvatarFromSysFile(Comment c, Map<Long, String> idToUrl) {
+        if (c.getAuthorAvatarFileId() != null) {
+            String url = idToUrl.get(c.getAuthorAvatarFileId());
+            if (StringUtils.hasText(url)) {
+                c.setAuthorAvatar(url);
+            }
+        }
+        List<Comment> ch = c.getChildren();
+        if (ch != null) {
+            for (Comment x : ch) {
+                applyAuthorAvatarFromSysFile(x, idToUrl);
+            }
+        }
+    }
+
+    private Map<Long, String> loadAvatarUrlByFileIds(List<Long> rawIds) {
+        List<Long> distinct = rawIds.stream().distinct().collect(Collectors.toList());
+        if (distinct.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<SysFile> files = sysFileService.listByIds(distinct);
+        Map<Long, String> map = new HashMap<>();
+        for (SysFile f : files) {
+            if (f.getId() != null && StringUtils.hasText(f.getFileUrl())) {
+                map.put(f.getId(), f.getFileUrl());
+            }
+        }
+        return map;
+    }
+
+    private void fillSingleCommentAvatarFromSysFile(Comment c) {
+        if (c == null || c.getAuthorAvatarFileId() == null) {
+            return;
+        }
+        SysFile f = sysFileService.getById(c.getAuthorAvatarFileId());
+        if (f != null && StringUtils.hasText(f.getFileUrl())) {
+            c.setAuthorAvatar(f.getFileUrl());
         }
     }
 

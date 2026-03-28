@@ -146,4 +146,3 @@
 - `article:update:own`
 - `article:update:any`
 - `comment:review`
-- `friendlink:audit`

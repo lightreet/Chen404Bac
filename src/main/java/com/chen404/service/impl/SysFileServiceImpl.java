@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
@@ -253,6 +254,29 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
             log.error("解析URL失败: {}", fileUrl);
             return null;
         }
+    }
+
+    @Override
+    public Long findAvatarFileIdForUser(Long userId, String avatarUrl) {
+        if (userId == null || !StringUtils.hasText(avatarUrl)) {
+            return null;
+        }
+        SysFile file = baseMapper.selectByUrl(avatarUrl.trim());
+        if (file == null || !userId.equals(file.getUserId())) {
+            return null;
+        }
+        if (!SysFile.RefType.AVATAR.equals(file.getRefType())) {
+            return null;
+        }
+        return file.getId();
+    }
+
+    @Override
+    public SysFile findByFileUrl(String fileUrl) {
+        if (!StringUtils.hasText(fileUrl)) {
+            return null;
+        }
+        return baseMapper.selectByUrl(fileUrl.trim());
     }
 
     /**

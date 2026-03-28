@@ -2,6 +2,7 @@ package com.chen404.domain.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -32,6 +33,12 @@ public class Comment implements Serializable {
     private String authorWebsite;
 
     private String authorAvatar;
+
+    /**
+     * 发评时用户头像对应的 sys_file.id；API 不返回，展示用 {@link #authorAvatar} 由服务层从 sys_file 填充
+     */
+    @JsonIgnore
+    private Long authorAvatarFileId;
 
     private Long authorId;
 

@@ -132,7 +132,8 @@ CREATE TABLE `comment`  (
   `author_name` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '评论者名称',
   `author_email` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '评论者邮箱',
   `author_website` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '评论者网站',
-  `author_avatar` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '评论者头像',
+  `author_avatar` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '评论者头像（展示用，有 author_avatar_file_id 时以 sys_file 为准）',
+  `author_avatar_file_id` bigint NULL DEFAULT NULL COMMENT '评论头像 sys_file.id',
   `author_id` bigint NULL DEFAULT NULL COMMENT '注册用户ID（游客为null）',
   `ip` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT 'IP地址',
   `location` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '归属地',
@@ -148,6 +149,7 @@ CREATE TABLE `comment`  (
   INDEX `idx_parent_id`(`parent_id` ASC) USING BTREE,
   INDEX `idx_root_id`(`root_id` ASC) USING BTREE,
   INDEX `idx_author_id`(`author_id` ASC) USING BTREE,
+  INDEX `idx_author_avatar_file_id`(`author_avatar_file_id` ASC) USING BTREE,
   INDEX `idx_status`(`status` ASC) USING BTREE,
   INDEX `idx_create_time`(`create_time` ASC) USING BTREE
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '评论表' ROW_FORMAT = Dynamic;
@@ -166,30 +168,6 @@ CREATE TABLE `comment_guest_token` (
   UNIQUE INDEX `uk_comment_id`(`comment_id` ASC) USING BTREE,
   INDEX `idx_expire_at`(`expire_at` ASC) USING BTREE
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '游客评论删除token表' ROW_FORMAT = Dynamic;
-
--- ----------------------------
--- Table structure for friend_link
--- ----------------------------
-DROP TABLE IF EXISTS `friend_link`;
-CREATE TABLE `friend_link`  (
-  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '友链ID',
-  `site_name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '站点名称',
-  `site_url` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '站点链接',
-  `site_logo` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '站点Logo',
-  `description` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '站点描述',
-  `email` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '联系邮箱',
-  `owner_name` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '站长名称',
-  `sort_order` int NOT NULL DEFAULT 0 COMMENT '排序号',
-  `status` tinyint NOT NULL DEFAULT 0 COMMENT '状态：0-待审核 1-已通过 2-已拒绝',
-  `reject_reason` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '拒绝原因',
-  `view_count` int NOT NULL DEFAULT 0 COMMENT '点击次数',
-  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  `deleted` tinyint NOT NULL DEFAULT 0 COMMENT '逻辑删除',
-  PRIMARY KEY (`id`) USING BTREE,
-  INDEX `idx_status`(`status` ASC) USING BTREE,
-  INDEX `idx_sort_order`(`sort_order` ASC) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '友链表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for emoji_pack
@@ -458,7 +436,8 @@ CREATE TABLE `sys_user`  (
   `nickname` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '昵称',
   `email` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '邮箱',
   `phone` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '手机号',
-  `avatar` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT 'default-avatar.jpg' COMMENT '头像URL',
+  `avatar` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT 'default-avatar.jpg' COMMENT '头像URL（降级用，有 avatar_file_id 时接口优先返回 sys_file.file_url）',
+  `avatar_file_id` bigint NULL DEFAULT NULL COMMENT '头像 sys_file.id',
   `bio` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '个人简介',
   `status` tinyint NOT NULL DEFAULT 1 COMMENT '状态：0-禁用 1-启用',
   `trust_level` tinyint NOT NULL DEFAULT 0 COMMENT '信任级别：0-普通用户 1-好友/受信用户',
@@ -474,6 +453,7 @@ CREATE TABLE `sys_user`  (
   UNIQUE INDEX `uk_email`(`email` ASC) USING BTREE,
   UNIQUE INDEX `uk_phone`(`phone` ASC) USING BTREE,
   INDEX `idx_status`(`status` ASC) USING BTREE,
+  INDEX `idx_avatar_file_id`(`avatar_file_id` ASC) USING BTREE,
   INDEX `idx_create_time`(`create_time` ASC) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 2033818965667954691 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '用户表' ROW_FORMAT = Dynamic;
 
