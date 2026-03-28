@@ -41,7 +41,7 @@
 | 层级 | 标识方式 | 能力 |
 |------|---------|------|
 | **游客 Guest** | 未携带 JWT 或 token 无效 | 浏览公开内容；是否可评论取决于文章 `comment_policy` |
-| **注册用户 User** | JWT 有效 + `sys_user.status = 1` | 维护个人资料；创建和管理**自己的**文章；在允许的文章下评论 |
+| **注册用户 User** | JWT 有效 + `sys_user.status = 1` | 维护个人资料；在允许的文章下评论与互动；默认不具备发文权限（由 `trust_level` 决定） |
 | **好友/受信用户 Friend** | `sys_user.trust_level = 1` | 在 User 基础上，可访问"好友可见"文章和"好友可评论"互动 |
 | **管理员 Admin** | `sys_role.role_code = 'admin'` | 全站管理；编辑/删除任意文章和文件；设置置顶/推荐 |
 
@@ -50,6 +50,39 @@
 - **Admin**：从 `sys_user_role` → `sys_role` 查询角色列表，优先匹配 `role_code = 'admin'`，赋值到 `User.roleCode`。
 - **Friend**：直接读取 `sys_user.trust_level` 字段。Admin 自动拥有 Friend 级别的所有权限。
 - 判定函数集中在 `AccessServiceImpl`，前端镜像在 `src/utils/permission.ts`。
+
+---
+
+## 二点五、权限策略最终版（V2，2026-03-27）
+
+> 本节描述“目标即实现”的最终策略。若代码与本节不一致，以本节为准并按“迁移步骤”完成调整。
+
+### 1) 文章（Article）
+
+- **创建文章（POST `/articles`）**
+  - **允许**：管理员；受信任用户（`trust_level=1`）
+  - **禁止**：普通用户（已登录但 `trust_level=0`）；游客
+- **更新/删除文章（PUT/DELETE `/articles/{id}`）**
+  - **仅管理员**（用于满足“历史普通用户创建的文章仅管理员可管”的收口策略）
+  - 如后续希望放宽为“管理员或受信任作者本人”，可在服务层改为 `admin || (author && trust_level=1)`
+
+### 2) 评论（Comment）
+
+- **发表评论（POST `/comments`）**
+  - **允许**：游客与登录用户（但仍受 `comment_policy` 约束；留言板视为 `articleId=null` 的评论）
+  - **游客身份存储**：不写入 `sys_user`；`comment.author_id = null`，使用 `author_name/author_email/author_website` 存储署名信息
+- **游客自助删除（DELETE `/comments/{id}` + `guestDeleteKey`）**
+  - 创建游客评论时，后端生成一次性返回的 **delete_key**（明文仅返回一次）
+  - 服务端仅保存其 **hash**（推荐 SHA-256）与过期时间
+  - 删除时携带 `guestDeleteKey`，通过校验后允许删除对应评论
+- **登录用户删除评论**
+  - 仍遵循“本人或管理员可删”的规则
+
+### 3) 角色收口与转变
+
+- **系统只需要**：`admin` / `user` 两种角色编码（`sys_role.role_code`）
+- **受信任能力不新增角色**：使用 `sys_user.trust_level` 表达
+- **游客不是角色**：游客是“无 JWT 身份”的访问态
 
 ---
 
@@ -123,7 +156,8 @@ ALTER TABLE `article`
 | `/articles/{id}/neighbors` (GET) | 仅 GET |
 | `/articles/{id}/like` (POST) | POST |
 | `/categories`, `/categories/{id}` | 仅 GET |
-| `/home`, `/site`, `/tags`, `/archives`, `/comments`, `/friends` | 全方法 |
+| `/home`, `/site`, `/tags`, `/archives` | 全方法 |
+| `/comments` | GET 公开；POST 公开（支持游客评论）；DELETE 将由服务层二次校验（登录或 guestDeleteKey） |
 | Swagger 相关路径 | 无条件 |
 
 ### 4.2 `@RequireAdmin` 切面 (`RequireAdminAspect`)
@@ -177,9 +211,9 @@ ALTER TABLE `article`
 
 | 操作 | 权限检查 | 额外保护 |
 |------|---------|---------|
-| 创建文章 | 需登录；`isTop`/`isRecommend` 仅管理员可设 | `viewCount`/`likeCount`/`commentCount` 强制归零 |
-| 更新文章 | `canManageArticle`；保留原 `authorId` 和统计字段 | 非管理员不可改 `isTop`/`isRecommend` |
-| 删除文章 | `canManageArticle` | 逻辑删除 |
+| 创建文章 | 需登录且为管理员或受信任用户；`isTop`/`isRecommend` 仅管理员可设 | `viewCount`/`likeCount`/`commentCount` 强制归零 |
+| 更新文章 | 仅管理员 | 非管理员不可改 `isTop`/`isRecommend` |
+| 删除文章 | 仅管理员 | 逻辑删除 |
 | 查看文章详情 | `canViewArticle`；通过则填充 `canEdit`/`canDelete`/`canComment` | 不通过抛 403 |
 | 点赞 | `canViewArticle`（不可见文章不可点赞） | — |
 | 公开文章列表 | 强制 `status=PUBLISHED AND visibility=PUBLIC` | 热门/推荐/站点统计同理 |
@@ -259,30 +293,30 @@ enum ArticleCommentPolicy { CLOSED = 0, REGISTERED = 1, FRIEND = 2, PUBLIC = 3 }
 
 ### 高优先级
 
-| # | 问题 | 影响 | 建议 |
-|---|------|------|------|
-| 1 | **头像上传不走 SysFile** | 头像文件无所有权记录，旧头像永远不清理 | `uploadAvatar` 改用 `sysFileService.uploadTempFile`，`updateProfile` 时清理旧头像 |
-| 2 | **点赞无频率限制** | 可被脚本无限刷赞 | 加用户维度或 IP 维度限流（Redis SETNX 或 RateLimiter） |
-| 3 | **`/comments` 全路径公开** | 评论模块接入后 `POST /comments` 会绕过 JWT | `isPublicUri` 中 `/comments` 仅放行 GET |
-| 4 | **`trust_level` 无管理入口** | "好友"层只能直接改数据库 | 新增 admin 端点 `PUT /admin/users/{id}/trust-level` |
+| # | 问题 | 影响 | 建议 | 状态 |
+|---|------|------|------|------|
+| 1 | ~~**头像上传不走 SysFile**~~ | ~~头像文件无所有权记录，旧头像永远不清理~~ | ~~`uploadAvatar` 改用 `sysFileService.uploadTempFile`，`updateProfile` 时清理旧头像~~ | ✅ **已修复** (`UploadController.uploadAvatar` 已使用 `SysFileService`) |
+| 2 | ~~**点赞无频率限制**~~ | ~~可被脚本无限刷赞~~ | ~~加用户维度或 IP 维度限流（Redis SETNX 或 RateLimiter）~~ | ✅ **已修复** (`ArticleServiceImpl` 已实现 60 秒 IP+用户限流) |
+| 3 | ~~**游客评论”自助删除”缺失**~~ | ~~游客无法自主管理自己的留言~~ | ~~引入 guestDeleteKey（仅保存 hash + 过期时间），DELETE `/comments/{id}` 支持携带 key~~ | ✅ **已修复** (前后端均已实现，key 存储于 localStorage) |
+| 4 | ~~**`trust_level` 无管理入口**~~ | ~~”好友”层只能直接改数据库~~ | ~~新增 admin 端点 `PUT /admin/users/{id}/trust-level`~~ | ✅ **已修复** (`AdminUserController` 已提供接口) |
 
 ### 中优先级
 
-| # | 问题 | 影响 | 建议 |
-|---|------|------|------|
-| 5 | **`fillArticlePermissions` 重复查库** | 一次文章详情请求产生多次冗余 DB 调用 | 先获取 user 对象，传入各判定方法，避免重复 `getUserOrNull` |
-| 6 | **`getArticlePage` 的 `tagId` 参数无效** | 前端标签筛选功能无法工作 | 实现 tag 过滤（关联查询 `article_tag` 表） |
-| 7 | **`getArticlePage` 的 `status` 参数被忽略** | 参数签名有误导性 | 公开列表方法移除该参数；后台管理列表另建方法 |
-| 8 | **`getMyArticlePage` 不填充权限字段** | 个人文章列表无法显示操作按钮 | 遍历时调用 `fillArticlePermissions` |
-| 9 | **Logout 无服务端失效** | 被盗 token 在过期前无法撤销 | 可选：Redis token 黑名单 |
+| # | 问题 | 影响 | 建议 | 状态 |
+|---|------|------|------|------|
+| 5 | **`fillArticlePermissions` 重复查库** | 一次文章详情请求产生多次冗余 DB 调用 | 先获取 user 对象，传入各判定方法，避免重复 `getUserOrNull` | ⏳ 待优化 |
+| 6 | ~~**`getArticlePage` 的 `tagId` 参数无效**~~ | ~~前端标签筛选功能无法工作~~ | ~~实现 tag 过滤（关联查询 `article_tag` 表）~~ | ✅ **已修复** (`ArticleServiceImpl.getArticlePage` 已实现) |
+| 7 | **`getArticlePage` 的 `status` 参数被忽略** | 参数签名有误导性 | 公开列表方法移除该参数；后台管理列表另建方法 | ⏳ 待优化 |
+| 8 | ~~**`getMyArticlePage` 不填充权限字段**~~ | ~~个人文章列表无法显示操作按钮~~ | ~~遍历时调用 `fillArticlePermissions`~~ | ✅ **已修复** (已调用 `fillArticlePermissions`) |
+| 9 | **Logout 无服务端失效** | 被盗 token 在过期前无法撤销 | 可选：Redis token 黑名单 | ⏳ 待优化 |
 
 ### 低优先级
 
-| # | 问题 | 影响 | 建议 |
-|---|------|------|------|
-| 10 | **`Article.password` 与 `visibility` 并存** | 两套保护机制关系未定义 | 明确 `password` 是 `visibility=PUBLIC` 下的额外保护，或废弃其中一个 |
-| 11 | **返回实体未经 DTO 裁剪** | 公开接口可能暴露内部字段 | 引入 ArticleVO/UserVO 做响应裁剪 |
-| 12 | **前端路由守卫基于 localStorage** | 可伪造角色进入 admin 页面（API 仍安全） | 可选：route guard 发一次 `/auth/info` 校验 |
+| # | 问题 | 影响 | 建议 | 状态 |
+|---|------|------|------|------|
+| 10 | **`Article.password` 与 `visibility` 并存** | 两套保护机制关系未定义 | 明确 `password` 是 `visibility=PUBLIC` 下的额外保护，或废弃其中一个 | ⏳ 待决策 |
+| 11 | **返回实体未经 DTO 裁剪** | 公开接口可能暴露内部字段 | 引入 ArticleVO/UserVO 做响应裁剪 | ⏳ 待优化 |
+| 12 | **前端路由守卫基于 localStorage** | 可伪造角色进入 admin 页面（API 仍安全） | 可选：route guard 发一次 `/auth/info` 校验 | ⏳ 待优化 |
 
 ---
 
@@ -381,7 +415,7 @@ enum ArticleCommentPolicy { CLOSED = 0, REGISTERED = 1, FRIEND = 2, PUBLIC = 3 }
 ## 十、未来演进方向
 
 1. **评论模块落地** — 接入 `comment_policy` 判定 + 评论审核 / 隐藏 / 删除 / 置顶
-2. **好友管理入口** — 后台管理 `trust_level`，支持好友白名单和友链联动
+2. **好友管理入口** — 后台管理 `trust_level`，支持好友白名单能力
 3. **RBAC 升级**（可选，多人协作时考虑）— 引入 `EDITOR` 角色 + 细粒度权限点（`article:update:own` 等）
 4. **Token 黑名单** — Redis 存储已注销 token，实现真正的服务端登出
 5. **响应 DTO 裁剪** — 引入 VO 层，避免实体字段直接暴露

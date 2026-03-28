@@ -68,6 +68,12 @@ public class Comment implements Serializable {
     @TableField(exist = false)
     private String replyToAuthorName;
 
+    /**
+     * 游客评论自助删除 key（明文仅在创建时返回一次；不入库）
+     */
+    @TableField(exist = false)
+    private String guestDeleteKey;
+
     public interface Status {
         int PENDING = 0;
         int APPROVED = 1;

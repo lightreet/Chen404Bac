@@ -6,10 +6,12 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.chen404.domain.dto.CreateCommentDTO;
 import com.chen404.domain.entity.Article;
 import com.chen404.domain.entity.Comment;
+import com.chen404.domain.entity.CommentGuestToken;
 import com.chen404.domain.entity.User;
 import com.chen404.exception.ForbiddenException;
 import com.chen404.mapper.ArticleMapper;
 import com.chen404.mapper.CommentMapper;
+import com.chen404.mapper.CommentGuestTokenMapper;
 import com.chen404.service.AccessService;
 import com.chen404.service.CommentService;
 import com.chen404.service.support.UserAccessProfileSupport;
@@ -18,8 +20,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.Base64;
 
 @Service
 public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> implements CommentService {
@@ -35,6 +41,9 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
 
     @Autowired
     private UserAccessProfileSupport userAccessProfileSupport;
+
+    @Autowired
+    private CommentGuestTokenMapper commentGuestTokenMapper;
 
     @Override
     public Page<Comment> getCommentsByArticleId(Long articleId, int page, int size) {
@@ -200,6 +209,18 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
             commentMapper.updateById(comment);
         }
 
+        // 游客评论：生成自助删除 key（明文仅返回一次），仅保存 hash
+        if (user == null) {
+            String deleteKey = generateGuestDeleteKey();
+            CommentGuestToken token = new CommentGuestToken();
+            token.setCommentId(comment.getId());
+            token.setTokenHash(sha256Hex(deleteKey));
+            token.setExpireAt(java.time.LocalDateTime.now().plusDays(30));
+            token.setCreateTime(java.time.LocalDateTime.now());
+            commentGuestTokenMapper.insert(token);
+            comment.setGuestDeleteKey(deleteKey);
+        }
+
         if (comment.getArticleId() != null) {
             syncArticleCommentCount(comment.getArticleId());
         }
@@ -226,6 +247,41 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
         List<Long> idsToDelete = collectDescendantIds(id);
         idsToDelete.add(id);
         commentMapper.deleteBatchIds(idsToDelete);
+        commentGuestTokenMapper.delete(new LambdaQueryWrapper<CommentGuestToken>()
+                .in(CommentGuestToken::getCommentId, idsToDelete));
+
+        if (comment.getArticleId() != null) {
+            syncArticleCommentCount(comment.getArticleId());
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteCommentAsGuest(Long id, String guestDeleteKey) {
+        if (!StringUtils.hasText(guestDeleteKey)) {
+            throw new ForbiddenException("缺少 guestDeleteKey");
+        }
+        Comment comment = commentMapper.selectById(id);
+        if (comment == null) {
+            throw new IllegalArgumentException("评论不存在");
+        }
+        CommentGuestToken token = commentGuestTokenMapper.selectByCommentId(id);
+        if (token == null) {
+            throw new ForbiddenException("该评论不支持游客删除");
+        }
+        if (token.getExpireAt() != null && token.getExpireAt().isBefore(java.time.LocalDateTime.now())) {
+            throw new ForbiddenException("guestDeleteKey 已过期");
+        }
+        String keyHash = sha256Hex(guestDeleteKey.trim());
+        if (!Objects.equals(keyHash, token.getTokenHash())) {
+            throw new ForbiddenException("guestDeleteKey 无效");
+        }
+
+        List<Long> idsToDelete = collectDescendantIds(id);
+        idsToDelete.add(id);
+        commentMapper.deleteBatchIds(idsToDelete);
+        commentGuestTokenMapper.delete(new LambdaQueryWrapper<CommentGuestToken>()
+                .in(CommentGuestToken::getCommentId, idsToDelete));
 
         if (comment.getArticleId() != null) {
             syncArticleCommentCount(comment.getArticleId());
@@ -262,6 +318,28 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
         }
         commentMapper.incrementLikeCount(id);
         return (comment.getLikeCount() == null ? 0 : comment.getLikeCount()) + 1;
+    }
+
+    private static final SecureRandom GUEST_TOKEN_RANDOM = new SecureRandom();
+
+    private String generateGuestDeleteKey() {
+        byte[] bytes = new byte[24];
+        GUEST_TOKEN_RANDOM.nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private String sha256Hex(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            throw new RuntimeException("hash 计算失败");
+        }
     }
 
     private void syncArticleCommentCount(Long articleId) {

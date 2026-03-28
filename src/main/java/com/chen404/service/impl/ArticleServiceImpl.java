@@ -10,6 +10,7 @@ import com.chen404.domain.entity.Tag;
 import com.chen404.domain.entity.User;
 import com.chen404.exception.ForbiddenException;
 import com.chen404.exception.TooManyRequestsException;
+import com.chen404.exception.UnauthorizedException;
 import com.chen404.mapper.ArticleMapper;
 import com.chen404.mapper.ArticleTagMapper;
 import com.chen404.mapper.CategoryMapper;
@@ -192,6 +193,12 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     @Transactional(rollbackFor = Exception.class)
     public Article createArticle(Article article) {
         User operator = accessService.getUserOrNull(article.getAuthorId());
+        if (operator == null) {
+            throw new UnauthorizedException();
+        }
+        if (!accessService.isAdmin(operator) && !accessService.isFriend(operator)) {
+            throw new ForbiddenException("仅受信任用户可创建文章");
+        }
 
         // 设置默认值
         article.setViewCount(0);
@@ -254,10 +261,13 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         if (existing == null) {
             throw new RuntimeException("文章不存在");
         }
-        if (!accessService.canManageArticle(operatorId, existing)) {
-            throw new ForbiddenException("仅作者本人或管理员可修改该文章");
-        }
         User operator = accessService.getUserOrNull(operatorId);
+        if (operator == null) {
+            throw new UnauthorizedException();
+        }
+        if (!accessService.isAdmin(operator)) {
+            throw new ForbiddenException("仅管理员可修改文章");
+        }
 
         article.setId(id);
         article.setAuthorId(existing.getAuthorId());
@@ -323,8 +333,12 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         if (article == null) {
             throw new RuntimeException("文章不存在");
         }
-        if (!accessService.canManageArticle(operatorId, article)) {
-            throw new ForbiddenException("仅作者本人或管理员可删除该文章");
+        User operator = accessService.getUserOrNull(operatorId);
+        if (operator == null) {
+            throw new UnauthorizedException();
+        }
+        if (!accessService.isAdmin(operator)) {
+            throw new ForbiddenException("仅管理员可删除文章");
         }
 
         // 逻辑删除

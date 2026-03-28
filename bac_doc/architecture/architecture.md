@@ -78,7 +78,6 @@ src/main/java/com/chen404/
 当前仓库中未见完整的：
 
 - `CommentController`
-- `FriendController`
 - 独立 `AdminController`
 
 因此架构文档只记录目前代码里真实存在的模块。

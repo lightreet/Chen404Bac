@@ -18,6 +18,8 @@ public interface CommentService {
 
     void deleteComment(Long id, Long userId);
 
+    void deleteCommentAsGuest(Long id, String guestDeleteKey);
+
     Comment reviewComment(Long id, int status);
 
     int likeComment(Long id);

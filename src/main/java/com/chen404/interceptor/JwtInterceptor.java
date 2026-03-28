@@ -166,13 +166,16 @@ public class JwtInterceptor implements HandlerInterceptor {
             if ("POST".equalsIgnoreCase(method)) {
                 return path.equals("/comments") || path.matches("/comments/[^/]+/like");
             }
+            if ("DELETE".equalsIgnoreCase(method)) {
+                // 游客评论自助删除：由 Controller/Service 二次校验 guestDeleteKey 或登录身份
+                return path.matches("/comments/[^/]+");
+            }
             return false;
         }
 
         return path.equals("/home") || path.startsWith("/home/") ||
                path.equals("/site") || path.startsWith("/site/") ||
                path.equals("/tags") || path.startsWith("/tags/") ||
-               path.equals("/archives") || path.startsWith("/archives/") ||
-               path.equals("/friends") || path.startsWith("/friends/");
+               path.equals("/archives") || path.startsWith("/archives/");
     }
 }

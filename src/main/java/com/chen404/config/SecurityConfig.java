@@ -48,7 +48,7 @@ public class SecurityConfig {
                         "/categories", "/categories/**",
                         "/tags", "/tags/**",
                         "/archives", "/archives/**",
-                        "/comments/**", "/friends/**").permitAll()
+                        "/comments/**").permitAll()
                 // 静态资源
                 .requestMatchers("/", "/uploads/**").permitAll()
                 // 以下接口在 Controller/拦截器层做权限控制，Spring Security 放行

@@ -57,7 +57,7 @@ public class CommentController {
             @RequestBody CreateCommentDTO dto,
             HttpServletRequest request) {
         Long userId = RequestAttrUtil.getUserId(request);
-        String ip = request.getRemoteAddr();
+        String ip = getClientIp(request);
         String userAgent = request.getHeader("User-Agent");
         Comment comment = commentService.createComment(dto, userId, ip, userAgent);
         return Result.success(comment);
@@ -67,9 +67,14 @@ public class CommentController {
     @DeleteMapping("/{id}")
     public Result<Void> deleteComment(
             @PathVariable Long id,
+            @RequestParam(required = false) String guestDeleteKey,
             HttpServletRequest request) {
-        Long userId = RequestAttrUtil.requireUserId(request);
-        commentService.deleteComment(id, userId);
+        Long userId = RequestAttrUtil.getUserId(request);
+        if (userId != null) {
+            commentService.deleteComment(id, userId);
+            return Result.success("评论已删除");
+        }
+        commentService.deleteCommentAsGuest(id, guestDeleteKey);
         return Result.success("评论已删除");
     }
 
@@ -78,5 +83,26 @@ public class CommentController {
     public Result<Map<String, Integer>> likeComment(@PathVariable Long id) {
         int likes = commentService.likeComment(id);
         return Result.success(Map.of("likes", likes));
+    }
+
+    private String getClientIp(HttpServletRequest request) {
+        String ip = request.getHeader("X-Forwarded-For");
+        if (ip != null && !ip.isBlank() && !"unknown".equalsIgnoreCase(ip)) {
+            int commaIndex = ip.indexOf(',');
+            ip = commaIndex >= 0 ? ip.substring(0, commaIndex).trim() : ip.trim();
+        } else {
+            ip = request.getHeader("X-Real-IP");
+            if (ip != null && !ip.isBlank() && !"unknown".equalsIgnoreCase(ip)) {
+                ip = ip.trim();
+            } else {
+                ip = request.getRemoteAddr();
+            }
+        }
+
+        // 兼容本机 IPv6 回环
+        if ("0:0:0:0:0:0:0:1".equals(ip) || "::1".equals(ip)) {
+            return "127.0.0.1";
+        }
+        return ip;
     }
 }

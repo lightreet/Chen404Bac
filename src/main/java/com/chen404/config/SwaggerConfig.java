@@ -60,7 +60,6 @@ public class SwaggerConfig {
                         "/tags/**",
                         "/archives/**",
                         "/comments/**",
-                        "/friends/**",
                         "/site/**",
                         "/home/**"
                 )

@@ -153,6 +153,21 @@ CREATE TABLE `comment`  (
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '评论表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
+-- Table structure for comment_guest_token
+-- ----------------------------
+DROP TABLE IF EXISTS `comment_guest_token`;
+CREATE TABLE `comment_guest_token` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `comment_id` bigint NOT NULL COMMENT '评论ID（comment.id）',
+  `token_hash` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'SHA-256 hex',
+  `expire_at` datetime NULL DEFAULT NULL COMMENT '过期时间（可为空）',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_comment_id`(`comment_id` ASC) USING BTREE,
+  INDEX `idx_expire_at`(`expire_at` ASC) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '游客评论删除token表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
 -- Table structure for friend_link
 -- ----------------------------
 DROP TABLE IF EXISTS `friend_link`;

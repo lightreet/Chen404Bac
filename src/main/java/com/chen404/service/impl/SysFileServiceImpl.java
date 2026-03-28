@@ -9,7 +9,6 @@ import com.chen404.service.FileStorageService;
 import com.chen404.service.SysFileService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -132,7 +131,6 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
 
     @Override
     @Transactional
-    @Async
     public int cleanExpiredTempFiles() {
         List<SysFile> expiredFiles = baseMapper.selectExpiredTempFiles();
         int count = 0;
