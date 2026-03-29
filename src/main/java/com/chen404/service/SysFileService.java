@@ -81,4 +81,9 @@ public interface SysFileService extends IService<SysFile> {
      * 按存储 URL 查询未删除的 sys_file 记录（用于资料保存后回填 id 等）
      */
     SysFile findByFileUrl(String fileUrl);
+
+    /**
+     * 根据文章 ID 与封面 URL 解析 sys_file 主键（须为 ARTICLE_COVER 且 ref_id 为本文章）
+     */
+    Long findCoverFileIdForArticle(Long articleId, String coverImageUrl);
 }

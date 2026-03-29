@@ -100,6 +100,18 @@
             <version>8.5.7</version>
         </dependency>
 
+        <!-- 上传图片：缩放（Thumbnailator）与 WebP 编解码（含 libwebp 原生，见部署说明） -->
+        <dependency>
+            <groupId>net.coobird</groupId>
+            <artifactId>thumbnailator</artifactId>
+            <version>0.4.20</version>
+        </dependency>
+        <dependency>
+            <groupId>org.sejda.imageio</groupId>
+            <artifactId>webp-imageio</artifactId>
+            <version>0.1.6</version>
+        </dependency>
+
         <!-- 邮件发送 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

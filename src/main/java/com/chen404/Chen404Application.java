@@ -3,7 +3,9 @@ package com.chen404;
 import lombok.extern.slf4j.Slf4j;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
+import com.chen404.config.ImageProcessingProperties;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.web.servlet.ServletComponentScan;
 import org.springframework.core.env.Environment;
 import org.springframework.scheduling.annotation.EnableAsync;
@@ -11,6 +13,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 @Slf4j
 @SpringBootApplication
+@EnableConfigurationProperties(ImageProcessingProperties.class)
 @MapperScan("com.chen404.mapper")
 @ServletComponentScan("com.chen404.filter")
 @EnableAsync

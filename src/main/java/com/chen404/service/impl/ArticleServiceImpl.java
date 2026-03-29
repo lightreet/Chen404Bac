@@ -1,6 +1,7 @@
 package com.chen404.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.chen404.domain.dto.ArchiveArticleItem;
@@ -8,6 +9,7 @@ import com.chen404.domain.dto.ArchiveMonthVO;
 import com.chen404.domain.dto.ArchiveYearVO;
 import com.chen404.domain.dto.ArticleLikeResult;
 import com.chen404.domain.entity.Article;
+import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.entity.ArticleTag;
 import com.chen404.domain.entity.Category;
 import com.chen404.domain.entity.Tag;
@@ -25,6 +27,7 @@ import com.chen404.mapper.UserArticleFavoriteMapper;
 import com.chen404.mapper.UserArticleLikeMapper;
 import com.chen404.mapper.UserMapper;
 import com.chen404.service.AccessService;
+import com.chen404.service.ArticleFileRefService;
 import com.chen404.service.ArticleService;
 import com.chen404.service.SysFileService;
 import com.chen404.service.TagService;
@@ -68,6 +71,9 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
     @Autowired
     private SysFileService sysFileService;
+
+    @Autowired
+    private ArticleFileRefService articleFileRefService;
 
     @Autowired
     private TagService tagService;
@@ -285,6 +291,9 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         // 将文章中引用的文件转为永久状态
         convertArticleFilesToPermanent(article);
 
+        articleFileRefService.syncForArticle(article.getId(), article.getContent(), article.getCoverImage());
+        persistCoverFileId(article.getId(), article.getCoverImage());
+
         return article;
     }
 
@@ -357,6 +366,9 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         // 将新引用的文件转为永久状态
         convertArticleFilesToPermanent(article);
 
+        articleFileRefService.syncForArticle(id, article.getContent(), article.getCoverImage());
+        persistCoverFileId(id, article.getCoverImage());
+
         return getArticleById(id, false, operatorId);
     }
 
@@ -374,6 +386,8 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         if (!accessService.isAdmin(operator)) {
             throw new ForbiddenException("仅管理员可删除文章");
         }
+
+        articleFileRefService.removeByArticleId(id);
 
         // 逻辑删除
         articleMapper.deleteById(id);
@@ -522,7 +536,13 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
     @Override
     public List<Article> getRecommendArticles(Integer limit) {
-        return articleMapper.selectRecommendArticles(limit);
+        List<Article> list = articleMapper.selectRecommendArticles(limit);
+        if (list != null) {
+            for (Article a : list) {
+                resolveCoverImageFromSysFile(a);
+            }
+        }
+        return list;
     }
 
     @Override
@@ -614,6 +634,30 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         // 填充标签信息
         List<Tag> tags = tagMapper.selectTagsByArticleId(article.getId());
         article.setTags(tags);
+
+        resolveCoverImageFromSysFile(article);
+    }
+
+    /** 有 cover_file_id 时，用 sys_file 当前 URL 覆盖展示字段（换域名/桶时仍正确） */
+    private void resolveCoverImageFromSysFile(Article article) {
+        if (article == null || article.getCoverFileId() == null) {
+            return;
+        }
+        SysFile f = sysFileService.getById(article.getCoverFileId());
+        if (f != null && StringUtils.hasText(f.getFileUrl())) {
+            article.setCoverImage(f.getFileUrl());
+        }
+    }
+
+    /** 保存/更新文章后，将封面 URL 解析为 sys_file.id 写入 article.cover_file_id */
+    private void persistCoverFileId(Long articleId, String coverImage) {
+        if (articleId == null) {
+            return;
+        }
+        Long fid = sysFileService.findCoverFileIdForArticle(articleId, coverImage);
+        articleMapper.update(null, new LambdaUpdateWrapper<Article>()
+                .eq(Article::getId, articleId)
+                .set(Article::getCoverFileId, fid));
     }
 
     /**

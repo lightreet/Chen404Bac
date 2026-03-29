@@ -37,7 +37,7 @@ public interface ArticleMapper extends BaseMapper<Article> {
     /**
      * 获取推荐文章
      */
-    @Select("SELECT id, title, cover_image, summary FROM article " +
+    @Select("SELECT id, title, cover_image, cover_file_id, summary FROM article " +
             "WHERE status = 1 AND visibility = 0 AND is_recommend = 1 AND deleted = 0 " +
             "ORDER BY create_time DESC LIMIT #{limit}")
     List<Article> selectRecommendArticles(@Param("limit") Integer limit);

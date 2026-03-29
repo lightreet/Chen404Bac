@@ -18,6 +18,14 @@ spring:
 app:
   cors:
     allowed-origins: "http://localhost:5173,http://127.0.0.1:5173,http://192.168.1.6:5173"
+  # 上传图片压缩为 WebP（动图 GIF 不处理）；依赖 webp-imageio 自带 win/linux/mac x64 原生库
+  image-processing:
+    enabled: true
+    webp-quality: 82
+    lossless-webp-for-alpha: false
+    max-edge-article-content: 1920
+    max-edge-article-cover: 1600
+    avatar-size: 512
 
 mybatis-plus:
   configuration:

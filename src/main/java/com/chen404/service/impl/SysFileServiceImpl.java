@@ -6,6 +6,8 @@ import com.chen404.exception.ForbiddenException;
 import com.chen404.mapper.SysFileMapper;
 import com.chen404.service.AccessService;
 import com.chen404.service.FileStorageService;
+import com.chen404.service.ImageProcessingService;
+import com.chen404.service.ProcessedImage;
 import com.chen404.service.SysFileService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,8 +16,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayInputStream;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Optional;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -34,6 +38,9 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
     @Autowired
     private AccessService accessService;
 
+    @Autowired
+    private ImageProcessingService imageProcessingService;
+
     // 临时文件过期时间（小时）
     private static final int TEMP_FILE_EXPIRE_HOURS = 24;
 
@@ -46,22 +53,46 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
     @Override
     @Transactional
     public SysFile uploadTempFile(MultipartFile file, Long userId, String refType) {
-        // 生成对象名称
-        String objectName = generateObjectName(refType.toLowerCase().replace("article_", ""), file.getOriginalFilename());
-
-        // 上传文件到存储
-        String fileUrl = fileStorageService.uploadFile(file, objectName);
-
-        // 保存文件记录
         String originalFilename = file.getOriginalFilename() != null ? file.getOriginalFilename() : "unknown";
+        String prefix = refType.toLowerCase().replace("article_", "");
+
+        Optional<ProcessedImage> processed = imageProcessingService.process(file, refType);
+
+        final String objectName;
+        final String fileUrl;
+        final long fileSize;
+        final String contentType;
+        final String storedFileName;
+
+        if (processed.isPresent()) {
+            ProcessedImage p = processed.get();
+            byte[] payload = p.bytes();
+            storedFileName = replaceExtension(originalFilename, p.extension());
+            objectName = generateObjectName(prefix, storedFileName);
+            fileUrl = fileStorageService.uploadFile(
+                    new ByteArrayInputStream(payload),
+                    objectName,
+                    p.contentType(),
+                    payload.length
+            );
+            fileSize = (long) payload.length;
+            contentType = p.contentType();
+        } else {
+            storedFileName = originalFilename;
+            objectName = generateObjectName(prefix, originalFilename);
+            fileUrl = fileStorageService.uploadFile(file, objectName);
+            fileSize = file.getSize();
+            contentType = file.getContentType();
+        }
+
         SysFile sysFile = new SysFile();
-        sysFile.setFileName(originalFilename);
-        sysFile.setFileOriginalName(originalFilename);  // 兼容旧表 file_original_name NOT NULL
+        sysFile.setFileName(storedFileName);
+        sysFile.setFileOriginalName(originalFilename);
         sysFile.setObjectName(objectName);
-        sysFile.setFilePath(objectName);               // 兼容旧表 file_path NOT NULL
+        sysFile.setFilePath(objectName);
         sysFile.setFileUrl(fileUrl);
-        sysFile.setFileSize(file.getSize());
-        sysFile.setContentType(file.getContentType());
+        sysFile.setFileSize(fileSize);
+        sysFile.setContentType(contentType);
         sysFile.setUserId(userId);
         sysFile.setStatus(SysFile.Status.TEMP);
         sysFile.setRefType(refType);
@@ -277,6 +308,31 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
             return null;
         }
         return baseMapper.selectByUrl(fileUrl.trim());
+    }
+
+    @Override
+    public Long findCoverFileIdForArticle(Long articleId, String coverImageUrl) {
+        if (articleId == null || !StringUtils.hasText(coverImageUrl)) {
+            return null;
+        }
+        SysFile file = baseMapper.selectByUrl(coverImageUrl.trim());
+        if (file == null || file.getId() == null) {
+            return null;
+        }
+        if (!articleId.equals(file.getRefId())) {
+            return null;
+        }
+        if (!SysFile.RefType.ARTICLE_COVER.equals(file.getRefType())) {
+            return null;
+        }
+        return file.getId();
+    }
+
+    private static String replaceExtension(String originalName, String newExtension) {
+        if (!StringUtils.hasText(originalName) || !originalName.contains(".")) {
+            return "image" + newExtension;
+        }
+        return originalName.substring(0, originalName.lastIndexOf('.')) + newExtension;
     }
 
     /**

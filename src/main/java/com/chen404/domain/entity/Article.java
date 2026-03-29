@@ -51,6 +51,13 @@ public class Article implements Serializable {
     private String coverImage;
 
     /**
+     * 封面对应 sys_file.id（接口不返回；列表/详情展示优先用 sys_file.file_url 覆盖 {@link #coverImage}）
+     */
+    @JsonIgnore
+    @TableField("cover_file_id")
+    private Long coverFileId;
+
+    /**
      * 作者ID
      */
     private Long authorId;

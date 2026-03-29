@@ -46,6 +46,14 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 请求不合法（如损坏的图片）
+     */
+    @ExceptionHandler(BadRequestException.class)
+    public ResponseEntity<Result<String>> handleBadRequest(BadRequestException e) {
+        return ResponseEntity.badRequest().body(Result.error(400, e.getMessage()));
+    }
+
+    /**
      * 处理参数校验异常
      */
     @ExceptionHandler(BindException.class)
