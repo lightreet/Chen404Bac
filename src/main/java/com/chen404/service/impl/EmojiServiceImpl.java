@@ -1,6 +1,7 @@
 package com.chen404.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.chen404.domain.dto.EmojiItemUpsertDTO;
 import com.chen404.domain.dto.EmojiPackUpsertDTO;
 import com.chen404.domain.entity.EmojiItem;
@@ -25,10 +26,46 @@ public class EmojiServiceImpl implements EmojiService {
     private EmojiItemMapper emojiItemMapper;
 
     @Override
+    public Page<EmojiPack> pageAllPacks(int page, int size) {
+        Page<EmojiPack> pageParam = new Page<>(page, size);
+        LambdaQueryWrapper<EmojiPack> wrapper = new LambdaQueryWrapper<>();
+        wrapper.orderByAsc(EmojiPack::getSort).orderByAsc(EmojiPack::getId);
+        return emojiPackMapper.selectPage(pageParam, wrapper);
+    }
+
+    @Override
+    public List<EmojiPack> listAllPacks() {
+        LambdaQueryWrapper<EmojiPack> wrapper = new LambdaQueryWrapper<>();
+        wrapper.orderByAsc(EmojiPack::getSort).orderByAsc(EmojiPack::getId);
+        return emojiPackMapper.selectList(wrapper);
+    }
+
+    @Override
     public List<EmojiPack> listEnabledPacks() {
         LambdaQueryWrapper<EmojiPack> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(EmojiPack::getEnabled, 1).orderByAsc(EmojiPack::getSort).orderByAsc(EmojiPack::getId);
         return emojiPackMapper.selectList(wrapper);
+    }
+
+    @Override
+    public Page<EmojiItem> pageAllItems(int page, int size, String packCode) {
+        Page<EmojiItem> pageParam = new Page<>(page, size);
+        LambdaQueryWrapper<EmojiItem> wrapper = new LambdaQueryWrapper<>();
+        if (StringUtils.hasText(packCode)) {
+            wrapper.eq(EmojiItem::getPackCode, packCode);
+        }
+        wrapper.orderByAsc(EmojiItem::getSort).orderByAsc(EmojiItem::getId);
+        return emojiItemMapper.selectPage(pageParam, wrapper);
+    }
+
+    @Override
+    public List<EmojiItem> listAllItems(String packCode) {
+        LambdaQueryWrapper<EmojiItem> wrapper = new LambdaQueryWrapper<>();
+        if (StringUtils.hasText(packCode)) {
+            wrapper.eq(EmojiItem::getPackCode, packCode);
+        }
+        wrapper.orderByAsc(EmojiItem::getSort).orderByAsc(EmojiItem::getId);
+        return emojiItemMapper.selectList(wrapper);
     }
 
     @Override

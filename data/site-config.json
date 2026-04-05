@@ -1,0 +1,12 @@
+{
+  "siteName" : "Chen404 Blog",
+  "siteDescription" : "一个热爱技术分享的博客",
+  "siteLogo" : "/logo.svg",
+  "siteFavicon" : "/favicon.ico",
+  "icp" : "",
+  "github" : "https://github.com/chen404",
+  "email" : "admin@chen404.com",
+  "heroImages" : {
+    "archive" : "https://www.chen404.cn/minio/chen404/cover/2026/04/967d19d0bdfb44e6.webp"
+  }
+}

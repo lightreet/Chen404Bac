@@ -163,7 +163,7 @@ public class UploadController {
     /**
      * 上传封面图
      */
-    @Operation(summary = "上传封面图", description = "文章封面上传，建议尺寸 1200×630")
+    @Operation(summary = "上传封面图", description = "文章封面上传，支持静态图片与 GIF 动图，建议尺寸 1200×630")
     @PostMapping("/cover")
     public Result<Map<String, String>> uploadCover(
             @Parameter(description = "封面图片", required = true) @RequestParam("file") MultipartFile file,
@@ -271,7 +271,7 @@ public class UploadController {
 
         String contentType = file.getContentType();
         if (contentType == null || !ALLOWED_IMAGE_TYPES.contains(contentType.toLowerCase())) {
-            return Result.error(400, "只允许上传图片文件 (jpg, png, gif, webp, bmp)");
+            return Result.error(400, "只允许上传图片文件（支持 jpg、png、gif 动图、webp、bmp）");
         }
 
         return null;

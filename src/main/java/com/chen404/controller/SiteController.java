@@ -1,17 +1,23 @@
 package com.chen404.controller;
 
+import com.chen404.annotation.RequireAdmin;
 import com.chen404.domain.Result;
+import com.chen404.domain.dto.SiteConfigDTO;
+import com.chen404.domain.dto.SiteOwnerDTO;
 import com.chen404.domain.entity.Banner;
+import com.chen404.domain.entity.User;
 import com.chen404.service.BannerService;
+import com.chen404.service.SiteConfigService;
+import com.chen404.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * 站点控制器
@@ -22,6 +28,12 @@ public class SiteController {
 
     @Autowired
     private BannerService bannerService;
+
+    @Autowired
+    private SiteConfigService siteConfigService;
+
+    @Autowired
+    private UserService userService;
 
     /**
      * 获取轮播图列表
@@ -36,15 +48,48 @@ public class SiteController {
      * 获取站点配置
      */
     @GetMapping("/config")
-    public Result<Map<String, Object>> getSiteConfig() {
-        // 返回站点基础配置
-        Map<String, Object> config = new HashMap<>();
-        config.put("siteName", "Chen404 Blog");
-        config.put("siteDescription", "一个热爱技术分享的博客");
-        config.put("siteLogo", "/logo.svg");
-        config.put("siteFavicon", "/favicon.ico");
-        config.put("github", "https://github.com/chen404");
-        config.put("email", "admin@chen404.com");
-        return Result.success(config);
+    public Result<SiteConfigDTO> getSiteConfig() {
+        return Result.success(toPublicConfig(siteConfigService.getConfig()));
+    }
+
+    /**
+     * 获取站点管理员公开资料。
+     */
+    @GetMapping("/owner")
+    public Result<SiteOwnerDTO> getSiteOwner() {
+        return Result.success(toPublicOwner(userService.getCurrentUser(1L)));
+    }
+
+    /**
+     * 更新站点配置（管理员）
+     */
+    @RequireAdmin
+    @PutMapping("/config")
+    public Result<SiteConfigDTO> updateSiteConfig(@RequestBody SiteConfigDTO request) {
+        return Result.success("保存成功", siteConfigService.updateConfig(request));
+    }
+
+    private static SiteConfigDTO toPublicConfig(SiteConfigDTO source) {
+        SiteConfigDTO config = new SiteConfigDTO();
+        config.setSiteName(source.getSiteName());
+        config.setSiteDescription(source.getSiteDescription());
+        config.setSiteLogo(source.getSiteLogo());
+        config.setSiteFavicon(source.getSiteFavicon());
+        config.setIcp(source.getIcp());
+        config.setHeroImages(source.getHeroImages());
+        return config;
+    }
+
+    private static SiteOwnerDTO toPublicOwner(User source) {
+        if (source == null) {
+            return null;
+        }
+        SiteOwnerDTO owner = new SiteOwnerDTO();
+        owner.setId(source.getId());
+        owner.setUsername(source.getUsername());
+        owner.setNickname(source.getNickname());
+        owner.setAvatar(source.getAvatar());
+        owner.setBio(source.getBio());
+        return owner;
     }
 }

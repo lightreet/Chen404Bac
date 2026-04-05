@@ -30,7 +30,7 @@ import java.util.Iterator;
 import java.util.Optional;
 
 /**
- * 静图转 WebP；动图 GIF 不处理。
+ * 静图转 WebP；动图 GIF 不处理，保持原图上传以支持动态封面。
  */
 @Slf4j
 @Service

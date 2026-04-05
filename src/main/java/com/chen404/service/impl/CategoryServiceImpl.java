@@ -1,5 +1,7 @@
 package com.chen404.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.chen404.domain.entity.Category;
 import com.chen404.mapper.CategoryMapper;
@@ -18,6 +20,14 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
     @Override
     public List<Category> getAllCategories() {
         return baseMapper.selectAllActive();
+    }
+
+    @Override
+    public Page<Category> getAdminCategoryPage(int page, int size) {
+        Page<Category> pageParam = new Page<>(page, size);
+        LambdaQueryWrapper<Category> wrapper = new LambdaQueryWrapper<>();
+        wrapper.orderByAsc(Category::getSortOrder).orderByAsc(Category::getId);
+        return baseMapper.selectPage(pageParam, wrapper);
     }
 
     @Override

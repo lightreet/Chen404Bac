@@ -76,11 +76,13 @@ public class LoggingInterceptor implements HandlerInterceptor {
             if (!headers.isEmpty()) {
                 log.debug("[API-REQ] headers={}", formatMap(headers));
             }
-            Map<String, String[]> paramMap = request.getParameterMap();
-            if (!paramMap.isEmpty()) {
-                Map<String, String> params = new HashMap<>();
-                paramMap.forEach((k, v) -> params.put(k, maskSensitiveField(k, v.length == 1 ? v[0] : String.join(",", v))));
-                log.debug("[API-REQ] params={}", formatMap(params));
+            if (!isMultipartRequest(request)) {
+                Map<String, String[]> paramMap = request.getParameterMap();
+                if (!paramMap.isEmpty()) {
+                    Map<String, String> params = new HashMap<>();
+                    paramMap.forEach((k, v) -> params.put(k, maskSensitiveField(k, v.length == 1 ? v[0] : String.join(",", v))));
+                    log.debug("[API-REQ] params={}", formatMap(params));
+                }
             }
             if (isJsonRequest(request)) {
                 String body = getRequestBody(request);
@@ -193,6 +195,11 @@ public class LoggingInterceptor implements HandlerInterceptor {
     private boolean isJsonRequest(HttpServletRequest request) {
         String contentType = request.getContentType();
         return contentType != null && contentType.contains("application/json");
+    }
+
+    private boolean isMultipartRequest(HttpServletRequest request) {
+        String contentType = request.getContentType();
+        return contentType != null && contentType.toLowerCase().startsWith("multipart/");
     }
 
     /**

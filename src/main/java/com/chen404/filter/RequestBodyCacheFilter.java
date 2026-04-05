@@ -1,7 +1,6 @@
 package com.chen404.filter;
 
 import jakarta.servlet.*;
-import jakarta.servlet.annotation.WebFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletRequestWrapper;
 import lombok.extern.slf4j.Slf4j;
@@ -18,7 +17,6 @@ import java.io.*;
  */
 @Slf4j
 @Component
-@WebFilter(filterName = "RequestBodyCacheFilter", urlPatterns = "/*")
 @Order(2) // 在TraceIdFilter之后
 public class RequestBodyCacheFilter implements Filter {
 

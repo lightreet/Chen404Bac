@@ -30,7 +30,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 用户服务实现类
+ * 用户服务实现
  */
 @Service
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService {
@@ -67,7 +67,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         String account = loginDTO.getUsername();
         User user = null;
 
-        // 判断登录方式：用户名、邮箱或手机号
+        // 支持邮箱、手机号或用户名登录
         if (account.contains("@")) {
             user = userMapper.selectByEmail(account);
         } else if (account.matches("^1[3-9]\\d{9}$")) {
@@ -77,29 +77,29 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         }
 
         if (user == null) {
-            throw new RuntimeException("用户名或密码错误");
+            throw new RuntimeException("用户不存在或密码错误");
         }
 
-        // 检查用户状态
+        // 检查账号是否禁用
         if (user.getStatus() == 0) {
             throw new RuntimeException("账号已被禁用");
         }
 
-        // 验证密码（前端明文 + 后端BCrypt）
+        // 校验密码（BCrypt）
         boolean passwordValid = passwordEncoder.matches(loginDTO.getPassword(), user.getPassword());
         if (!passwordValid) {
-            throw new RuntimeException("用户名或密码错误");
+            throw new RuntimeException("用户不存在或密码错误");
         }
 
-        // 更新登录信息
+        // 更新最后登录时间
         user.setLastLoginTime(LocalDateTime.now());
-        // 更新IP（从request获取，这里简化处理）
+        // 最后登录 IP：暂无请求上下文时使用占位（可从 request 注入真实 IP）
         user.setLastLoginIp("0.0.0.0");
         userMapper.updateById(user);
 
         userAccessProfileSupport.enrichUserProfile(user);
 
-        // 生成Token
+        // 生成 Token
         String token = jwtUtil.generateToken(user.getId(), user.getUsername());
         String refreshToken = jwtUtil.generateRefreshToken(user.getId(), user.getUsername());
 
@@ -109,25 +109,25 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     @Transactional(rollbackFor = Exception.class)
     public User register(RegisterDTO registerDTO) {
-        // 检查用户名是否存在
+        // 用户名唯一
         if (isUsernameExists(registerDTO.getUsername())) {
             throw new RuntimeException("用户名已存在");
         }
 
-        // 检查邮箱是否存在
+        // 邮箱唯一
         if (StringUtils.hasText(registerDTO.getEmail()) && isEmailExists(registerDTO.getEmail())) {
             throw new RuntimeException("邮箱已被注册");
         }
 
-        // 检查手机号是否存在
+        // 手机号唯一
         if (StringUtils.hasText(registerDTO.getPhone()) && isPhoneExists(registerDTO.getPhone())) {
             throw new RuntimeException("手机号已被注册");
         }
 
-        // 创建用户
+        // 构造用户实体
         User user = new User();
         user.setUsername(registerDTO.getUsername());
-        // 密码加密（BCrypt）
+        // 密码 BCrypt 加密
         user.setPassword(passwordEncoder.encode(registerDTO.getPassword()));
         user.setNickname(StringUtils.hasText(registerDTO.getNickname()) ?
                 registerDTO.getNickname() : registerDTO.getUsername());
@@ -137,17 +137,17 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setStatus(1);
         user.setTrustLevel(User.TrustLevel.NORMAL);
 
-        // 设置验证状态（邮箱已验证）
+        // 填写邮箱则标记为已验证；手机号默认未验证（需后续验证流程）
         if (StringUtils.hasText(registerDTO.getEmail())) {
             user.setEmailVerified(1);
         }
         if (StringUtils.hasText(registerDTO.getPhone())) {
-            user.setPhoneVerified(0); // 手机号暂未验证
+            user.setPhoneVerified(0);
         }
 
         userMapper.insert(user);
 
-        // 分配默认角色（普通用户）
+        // 绑定默认 user 角色
         Role userRole = roleMapper.selectByRoleCode("user");
         if (userRole != null) {
             UserRole ur = new UserRole();
@@ -224,7 +224,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     public User updateTrustLevel(Long userId, Integer trustLevel) {
         if (!Objects.equals(trustLevel, User.TrustLevel.NORMAL)
                 && !Objects.equals(trustLevel, User.TrustLevel.FRIEND)) {
-            throw new RuntimeException("仅支持设置为普通用户(0)或好友/受信用户(1)");
+            throw new RuntimeException("信任级别无效，仅允许普通用户(0)或好友(1)");
         }
 
         User user = userMapper.selectById(userId);
@@ -253,15 +253,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setPassword(passwordEncoder.encode(dto.getNewPassword()));
         userMapper.updateById(user);
 
-        // 修改密码后发送提醒邮件（尽力而为，不影响主流程）
+        // 若已绑定邮箱则发送密码修改提醒
         if (StringUtils.hasText(user.getEmail())) {
             try {
-                String subject = "Chen404 博客：密码已修改提醒";
-                String content = "你的账号密码刚刚被修改。\n\n"
+                String subject = "Chen404 账号密码已修改提醒";
+                String content = "您好，您的账号密码已在下列环境下完成修改：\n"
                         + "时间：" + LocalDateTime.now() + "\n"
                         + "IP：" + (clientIp == null ? "-" : clientIp) + "\n"
                         + "设备：" + (userAgent == null ? "-" : userAgent) + "\n\n"
-                        + "若这不是你本人操作，请尽快登录并修改密码，或联系管理员。";
+                        + "如非本人操作，请尽快登录并修改密码。";
                 emailService.sendEmail(user.getEmail(), subject, content);
             } catch (Exception ignored) {
                 // ignore
