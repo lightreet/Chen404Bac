@@ -196,6 +196,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
         user.setNickname(dto.getNickname());
         user.setAvatar(newAvatar);
+        user.setBio(StringUtils.hasText(dto.getBio()) ? dto.getBio().trim() : null);
 
         if (!Objects.equals(oldAvatar, newAvatar)) {
             if (StringUtils.hasText(newAvatar)) {

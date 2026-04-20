@@ -20,4 +20,7 @@ public class UpdateProfileDTO {
     @Schema(description = "头像 URL", required = true)
     @NotBlank(message = "头像不能为空")
     private String avatar;
+
+    @Size(max = 160, message = "个人介绍长度不能超过 160 个字符")
+    private String bio;
 }
