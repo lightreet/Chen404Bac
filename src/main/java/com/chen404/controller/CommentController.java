@@ -1,10 +1,12 @@
 package com.chen404.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.chen404.annotation.RequireAdmin;
 import com.chen404.domain.PageResult;
 import com.chen404.domain.Result;
 import com.chen404.domain.dto.CommentLikeResult;
 import com.chen404.domain.dto.CreateCommentDTO;
+import com.chen404.domain.dto.ReviewCommentDTO;
 import com.chen404.domain.entity.Comment;
 import com.chen404.service.CommentService;
 import com.chen404.util.RequestAttrUtil;
@@ -12,21 +14,26 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
-import java.util.Map;
 
-@Tag(name = "评论", description = "评论列表、发表、删除、点赞")
+@Tag(name = "评论", description = "评论列表、发表、删除、点赞与管理员审核")
 @RestController
-@RequestMapping("/comments")
 public class CommentController {
 
     @Autowired
     private CommentService commentService;
 
     @Operation(summary = "获取评论列表", description = "按 articleId 分页查询已审核评论树")
-    @GetMapping("")
+    @GetMapping("/comments")
     public Result<PageResult<Comment>> getComments(
             @RequestParam(required = false) Long articleId,
             @RequestParam(defaultValue = "1") Integer page,
@@ -38,7 +45,7 @@ public class CommentController {
     }
 
     @Operation(summary = "获取留言板评论")
-    @GetMapping("/guestbook")
+    @GetMapping("/comments/guestbook")
     public Result<PageResult<Comment>> getGuestbookComments(
             @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "10") Integer size) {
@@ -47,7 +54,7 @@ public class CommentController {
     }
 
     @Operation(summary = "获取最新评论")
-    @GetMapping("/recent")
+    @GetMapping("/comments/recent")
     public Result<List<Comment>> getRecentComments(
             @RequestParam(defaultValue = "5") Integer limit) {
         List<Comment> list = commentService.getRecentComments(limit);
@@ -55,7 +62,7 @@ public class CommentController {
     }
 
     @Operation(summary = "发表评论")
-    @PostMapping("")
+    @PostMapping("/comments")
     public Result<Comment> createComment(
             @RequestBody CreateCommentDTO dto,
             HttpServletRequest request) {
@@ -67,7 +74,7 @@ public class CommentController {
     }
 
     @Operation(summary = "删除评论")
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/comments/{id}")
     public Result<Void> deleteComment(
             @PathVariable Long id,
             @RequestParam(required = false) String guestDeleteKey,
@@ -82,10 +89,20 @@ public class CommentController {
     }
 
     @Operation(summary = "点赞评论")
-    @PostMapping("/{id}/like")
+    @PostMapping("/comments/{id}/like")
     public Result<CommentLikeResult> likeComment(@PathVariable Long id, HttpServletRequest request) {
         CommentLikeResult result = commentService.likeComment(id, RequestAttrUtil.getUserId(request), getClientIp(request));
         return Result.success(result);
+    }
+
+    @RequireAdmin
+    @Operation(summary = "审核评论", description = "仅管理员")
+    @PutMapping("/admin/comments/{id}/review")
+    public Result<Comment> reviewComment(
+            @PathVariable Long id,
+            @RequestBody ReviewCommentDTO dto) {
+        Comment comment = commentService.reviewComment(id, dto.getStatus());
+        return Result.success(comment);
     }
 
     private String getClientIp(HttpServletRequest request) {

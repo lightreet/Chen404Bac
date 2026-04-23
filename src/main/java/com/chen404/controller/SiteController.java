@@ -3,6 +3,7 @@ package com.chen404.controller;
 import com.chen404.annotation.RequireAdmin;
 import com.chen404.domain.Result;
 import com.chen404.domain.dto.SiteConfigDTO;
+import com.chen404.domain.dto.SiteMemberDTO;
 import com.chen404.domain.dto.SiteOwnerDTO;
 import com.chen404.domain.entity.Banner;
 import com.chen404.domain.entity.User;
@@ -60,6 +61,13 @@ public class SiteController {
         return Result.success(toPublicOwner(userService.getCurrentUser(1L)));
     }
 
+    @GetMapping("/members")
+    public Result<List<SiteMemberDTO>> getSiteMembers() {
+        return Result.success(userService.listPublicUsers().stream()
+                .map(SiteController::toPublicMember)
+                .toList());
+    }
+
     /**
      * 更新站点配置（管理员）
      */
@@ -76,6 +84,8 @@ public class SiteController {
         config.setSiteLogo(source.getSiteLogo());
         config.setSiteFavicon(source.getSiteFavicon());
         config.setIcp(source.getIcp());
+        config.setGithub(source.getGithub());
+        config.setEmail(source.getEmail());
         config.setHeroImages(source.getHeroImages());
         return config;
     }
@@ -91,5 +101,20 @@ public class SiteController {
         owner.setAvatar(source.getAvatar());
         owner.setBio(source.getBio());
         return owner;
+    }
+
+    private static SiteMemberDTO toPublicMember(User source) {
+        if (source == null) {
+            return null;
+        }
+        SiteMemberDTO member = new SiteMemberDTO();
+        member.setId(source.getId());
+        member.setUsername(source.getUsername());
+        member.setNickname(source.getNickname());
+        member.setAvatar(source.getAvatar());
+        member.setBio(source.getBio());
+        member.setTrustLevel(source.getTrustLevel());
+        member.setCreateTime(source.getCreateTime());
+        return member;
     }
 }

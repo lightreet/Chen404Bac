@@ -8,6 +8,8 @@ import com.chen404.domain.dto.ChangePasswordDTO;
 import com.chen404.domain.dto.UpdateProfileDTO;
 import com.chen404.domain.entity.User;
 
+import java.util.List;
+
 /**
  * 用户服务接口
  */
@@ -47,6 +49,8 @@ public interface UserService extends IService<User> {
      * 获取当前登录用户
      */
     User getCurrentUser(Long userId);
+
+    List<User> listPublicUsers();
 
     /**
      * 更新个人资料（昵称、头像）

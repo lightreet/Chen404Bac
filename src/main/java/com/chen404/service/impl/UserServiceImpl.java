@@ -35,6 +35,8 @@ import java.util.Objects;
 @Service
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService {
 
+    private static final String DEFAULT_MEMBER_AVATAR = "/default-member-avatar.svg";
+
     @Autowired
     private UserMapper userMapper;
 
@@ -133,7 +135,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 registerDTO.getNickname() : registerDTO.getUsername());
         user.setEmail(registerDTO.getEmail());
         user.setPhone(registerDTO.getPhone());
-        user.setAvatar("/default-avatar.jpg");
+        user.setAvatar(DEFAULT_MEMBER_AVATAR);
         user.setStatus(1);
         user.setTrustLevel(User.TrustLevel.NORMAL);
 
@@ -182,6 +184,18 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     public User getCurrentUser(Long userId) {
         return userAccessProfileSupport.loadUserProfile(userId);
+    }
+
+    @Override
+    public List<User> listPublicUsers() {
+        return lambdaQuery()
+                .eq(User::getStatus, 1)
+                .orderByDesc(User::getTrustLevel)
+                .orderByAsc(User::getCreateTime)
+                .list()
+                .stream()
+                .map(userAccessProfileSupport::enrichUserProfile)
+                .toList();
     }
 
     @Override

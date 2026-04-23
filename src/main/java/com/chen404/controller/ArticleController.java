@@ -3,6 +3,7 @@ package com.chen404.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.chen404.domain.PageResult;
 import com.chen404.domain.Result;
+import com.chen404.domain.dto.ArchiveYearVO;
 import com.chen404.domain.dto.ArticleLikeResult;
 import com.chen404.domain.entity.Article;
 import com.chen404.exception.ForbiddenException;
@@ -14,27 +15,31 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Map;
 
 /**
- * 文章控制器：列表/详情/热门/推荐等公开；我的文章/创建/更新/删除需登录（JWT 校验后取 userId）
+ * 文章控制器：列表/详情/热门/推荐等公开；我的文章/创建/更新/删除需登录。
+ * 归档接口也归属于文章资源，因此统一收口到当前控制器。
  */
-@Tag(name = "文章", description = "文章列表、详情、点赞、热门、推荐及个人文章管理")
+@Tag(name = "文章", description = "文章列表、详情、点赞、热门、推荐、归档及个人文章管理")
 @RestController
-@RequestMapping("/articles")
 public class ArticleController {
 
     @Autowired
     private ArticleService articleService;
 
-    /**
-     * 我的文章列表（需登录，个人中心管理用）
-     */
     @Operation(summary = "我的文章列表", description = "分页获取当前登录用户的文章，需登录")
-    @GetMapping("/mine")
+    @GetMapping("/articles/mine")
     public Result<PageResult<Article>> getMyArticles(
             @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "10") Integer size,
@@ -47,7 +52,7 @@ public class ArticleController {
     }
 
     @Operation(summary = "我的点赞文章", description = "分页获取当前用户点赞过的、仍可见的文章，需登录")
-    @GetMapping("/mine/liked")
+    @GetMapping("/articles/mine/liked")
     public Result<PageResult<Article>> getMyLikedArticles(
             @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "10") Integer size,
@@ -58,7 +63,7 @@ public class ArticleController {
     }
 
     @Operation(summary = "我的收藏文章", description = "分页获取当前用户收藏的文章，需登录")
-    @GetMapping("/mine/favorites")
+    @GetMapping("/articles/mine/favorites")
     public Result<PageResult<Article>> getMyFavoriteArticles(
             @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "10") Integer size,
@@ -68,9 +73,6 @@ public class ArticleController {
         return Result.success(PageResult.of(articlePage));
     }
 
-    /**
-     * 获取文章列表（公开）
-     */
     @Operation(summary = "获取文章列表", description = "支持分页、分类筛选、标签筛选；关键词仅按文章标题模糊匹配")
     @Parameter(name = "page", description = "页码，默认1")
     @Parameter(name = "size", description = "每页数量，默认10")
@@ -78,7 +80,7 @@ public class ArticleController {
     @Parameter(name = "categoryId", description = "分类ID")
     @Parameter(name = "tagId", description = "标签ID")
     @Parameter(name = "keyword", description = "搜索关键词（仅匹配文章标题）")
-    @GetMapping("")
+    @GetMapping("/articles")
     public Result<PageResult<Article>> getArticles(
             @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "10") Integer size,
@@ -86,23 +88,18 @@ public class ArticleController {
             @RequestParam(required = false) Long categoryId,
             @RequestParam(required = false) Long tagId,
             @RequestParam(required = false) String keyword) {
-
         Page<Article> articlePage = articleService.getArticlePage(page, size, status, categoryId, tagId, keyword);
         return Result.success(PageResult.of(articlePage));
     }
 
-    /**
-     * 获取文章详情
-     */
     @Operation(summary = "获取文章详情", description = "获取单篇文章的详细信息")
     @Parameter(name = "id", description = "文章ID", required = true)
     @Parameter(name = "incrementView", description = "是否增加浏览量，默认true")
-    @GetMapping("/{id}")
+    @GetMapping("/articles/{id}")
     public Result<Article> getArticleById(
             @PathVariable Long id,
             @RequestParam(defaultValue = "true") Boolean incrementView,
             HttpServletRequest request) {
-
         Article article = articleService.getArticleById(id, incrementView, RequestAttrUtil.getUserId(request));
         if (article == null) {
             return Result.error(404, "文章不存在");
@@ -110,65 +107,56 @@ public class ArticleController {
         return Result.success(article);
     }
 
-    /**
-     * 获取上一篇、下一篇文章
-     */
     @Operation(summary = "上一篇/下一篇", description = "按发布时间获取相邻文章")
     @Parameter(name = "id", description = "当前文章ID", required = true)
-    @GetMapping("/{id}/neighbors")
+    @GetMapping("/articles/{id}/neighbors")
     public Result<Map<String, Article>> getArticleNeighbors(@PathVariable Long id, HttpServletRequest request) {
         Map<String, Article> neighbors = articleService.getNeighbors(id, RequestAttrUtil.getUserId(request));
         return Result.success(neighbors);
     }
 
-    /**
-     * 点赞文章
-     */
+    @Operation(summary = "归档时间线", description = "仅包含已发布且公开可见、有发布时间的文章，按发布时间倒序分组")
+    @GetMapping("/archives")
+    public Result<List<ArchiveYearVO>> listArchives() {
+        return Result.success(articleService.listArchives());
+    }
+
     @Operation(summary = "点赞文章", description = "为文章点赞")
     @Parameter(name = "id", description = "文章ID", required = true)
-    @PostMapping("/{id}/like")
+    @PostMapping("/articles/{id}/like")
     public Result<ArticleLikeResult> likeArticle(@PathVariable Long id, HttpServletRequest request) {
         ArticleLikeResult result = articleService.likeArticle(id, RequestAttrUtil.getUserId(request), getClientIp(request));
         return Result.success(result);
     }
 
     @Operation(summary = "切换收藏", description = "登录用户收藏/取消收藏文章")
-    @PostMapping("/{id}/favorite")
+    @PostMapping("/articles/{id}/favorite")
     public Result<Map<String, Boolean>> toggleFavorite(@PathVariable Long id, HttpServletRequest request) {
         Long userId = RequestAttrUtil.requireUserId(request);
         boolean favorited = articleService.toggleFavorite(id, userId);
         return Result.success(Map.of("favorited", favorited));
     }
 
-    /**
-     * 获取热门文章
-     */
     @Operation(summary = "获取热门文章", description = "根据浏览量排序获取热门文章")
     @Parameter(name = "limit", description = "返回数量，默认10")
-    @GetMapping("/hot")
+    @GetMapping("/articles/hot")
     public Result<List<Article>> getHotArticles(
             @RequestParam(defaultValue = "10") Integer limit) {
         List<Article> articles = articleService.getHotArticles(limit);
         return Result.success(articles);
     }
 
-    /**
-     * 获取推荐文章
-     */
     @Operation(summary = "获取推荐文章", description = "获取管理员推荐的文章列表")
     @Parameter(name = "limit", description = "返回数量，默认6")
-    @GetMapping("/recommend")
+    @GetMapping("/articles/recommend")
     public Result<List<Article>> getRecommendArticles(
             @RequestParam(defaultValue = "6") Integer limit) {
         List<Article> articles = articleService.getRecommendArticles(limit);
         return Result.success(articles);
     }
 
-    /**
-     * 创建文章（需登录）
-     */
     @Operation(summary = "创建文章", description = "发布新文章或保存草稿，需登录")
-    @PostMapping("")
+    @PostMapping("/articles")
     public Result<Article> createArticle(@RequestBody Article article, HttpServletRequest request) {
         Long userId = RequestAttrUtil.requireUserId(request);
         article.setAuthorId(userId);
@@ -180,12 +168,9 @@ public class ArticleController {
         }
     }
 
-    /**
-     * 更新文章（需登录）
-     */
     @Operation(summary = "更新文章", description = "更新已有文章，需登录")
     @Parameter(name = "id", description = "文章ID", required = true)
-    @PutMapping("/{id}")
+    @PutMapping("/articles/{id}")
     public Result<Article> updateArticle(
             @PathVariable Long id,
             @RequestBody Article article,
@@ -201,12 +186,9 @@ public class ArticleController {
         }
     }
 
-    /**
-     * 删除文章（需登录，逻辑删除）
-     */
     @Operation(summary = "删除文章", description = "逻辑删除，需登录")
     @Parameter(name = "id", description = "文章ID", required = true)
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/articles/{id}")
     public Result<Void> deleteArticle(@PathVariable Long id, HttpServletRequest request) {
         Long userId = RequestAttrUtil.requireUserId(request);
         try {

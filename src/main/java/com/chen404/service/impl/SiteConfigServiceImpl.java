@@ -26,6 +26,8 @@ import java.util.stream.Collectors;
 public class SiteConfigServiceImpl implements SiteConfigService {
 
     private static final long SITE_CONFIG_REF_ID = 1L;
+    private static final String DEFAULT_GITHUB_URL = "https://github.com/lightreet";
+    private static final String LEGACY_GITHUB_URL = "https://github.com/chen404";
 
     private static final String KEY_SITE_NAME = "site.name";
     private static final String KEY_SITE_DESCRIPTION = "site.description";
@@ -164,8 +166,8 @@ public class SiteConfigServiceImpl implements SiteConfigService {
         config.setSiteDescription("一个热爱技术分享的博客");
         config.setSiteLogo("/logo.svg");
         config.setSiteFavicon("/favicon.ico");
-        config.setIcp("");
-        config.setGithub("https://github.com/chen404");
+        config.setIcp("湘ICP备2026010852号-1");
+        config.setGithub(DEFAULT_GITHUB_URL);
         config.setEmail("admin@chen404.com");
         config.setHeroImages(new LinkedHashMap<>());
         return config;
@@ -245,8 +247,8 @@ public class SiteConfigServiceImpl implements SiteConfigService {
         config.setSiteDescription(trimToDefault(config.getSiteDescription(), "一个热爱技术分享的博客"));
         config.setSiteLogo(trimToDefault(config.getSiteLogo(), "/logo.svg"));
         config.setSiteFavicon(trimToDefault(config.getSiteFavicon(), "/favicon.ico"));
-        config.setIcp(trimToDefault(config.getIcp(), ""));
-        config.setGithub(trimToDefault(config.getGithub(), "https://github.com/chen404"));
+        config.setIcp(trimToDefault(config.getIcp(), "湘ICP备2026010852号-1"));
+        config.setGithub(normalizeGithub(config.getGithub()));
         config.setEmail(trimToDefault(config.getEmail(), "admin@chen404.com"));
 
         Map<String, String> normalizedHeroImages = new LinkedHashMap<>();
@@ -291,5 +293,10 @@ public class SiteConfigServiceImpl implements SiteConfigService {
 
     private static String trimToDefault(String value, String defaultValue) {
         return StringUtils.hasText(value) ? value.trim() : defaultValue;
+    }
+
+    private static String normalizeGithub(String value) {
+        String normalized = trimToDefault(value, DEFAULT_GITHUB_URL);
+        return LEGACY_GITHUB_URL.equalsIgnoreCase(normalized) ? DEFAULT_GITHUB_URL : normalized;
     }
 }
