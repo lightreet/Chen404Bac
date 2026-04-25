@@ -37,6 +37,13 @@ public class AccessServiceImpl implements AccessService {
         return Objects.equals(user.getTrustLevel(), User.TrustLevel.FRIEND);
     }
 
+    private boolean isArticleOwner(Long userId, Article article) {
+        if (userId == null || article == null) {
+            return false;
+        }
+        return Objects.equals(article.getAuthorId(), userId);
+    }
+
     @Override
     public boolean canManageArticle(Long userId, Article article) {
         if (article == null) {
@@ -46,7 +53,7 @@ public class AccessServiceImpl implements AccessService {
         if (user == null) {
             return false;
         }
-        return isAdmin(user) || Objects.equals(article.getAuthorId(), user.getId());
+        return isAdmin(user);
     }
 
     @Override
@@ -55,7 +62,7 @@ public class AccessServiceImpl implements AccessService {
             return false;
         }
 
-        if (canManageArticle(userId, article)) {
+        if (isArticleOwner(userId, article) || canManageArticle(userId, article)) {
             return true;
         }
 
@@ -81,7 +88,7 @@ public class AccessServiceImpl implements AccessService {
             return false;
         }
 
-        if (canManageArticle(userId, article)) {
+        if (isArticleOwner(userId, article) || canManageArticle(userId, article)) {
             return true;
         }
 

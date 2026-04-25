@@ -23,7 +23,7 @@ public class AdminUserController {
     private UserService userService;
 
     @RequireAdmin
-    @Operation(summary = "更新用户信任级别", description = "仅管理员可设置普通用户/好友受信状态")
+    @Operation(summary = "更新用户信任级别", description = "仅管理员可设置读者/知友状态")
     @Parameter(name = "id", description = "用户 ID", required = true)
     @PutMapping("/{id}/trust-level")
     public Result<User> updateTrustLevel(@PathVariable Long id, @RequestBody UpdateTrustLevelDTO dto) {

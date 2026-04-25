@@ -10,6 +10,6 @@ import lombok.Data;
 @Schema(description = "更新用户信任级别请求参数")
 public class UpdateTrustLevelDTO {
 
-    @Schema(description = "信任级别：0-普通用户 1-好友/受信用户", example = "1")
+    @Schema(description = "信任级别：0-读者 1-知友", example = "1")
     private Integer trustLevel;
 }

@@ -66,6 +66,7 @@ public class SysFile implements Serializable {
         String ARTICLE_COVER = "ARTICLE_COVER";
         String SITE_HERO = "SITE_HERO";
         String AVATAR = "AVATAR";
+        String TRUST_REQUEST_ATTACHMENT = "TRUST_REQUEST_ATTACHMENT";
         String OTHER = "OTHER";
     }
 }

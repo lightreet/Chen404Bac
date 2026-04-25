@@ -70,7 +70,7 @@ public class User implements Serializable {
     private Integer status;
 
     /**
-     * 信任级别：0-普通用户 1-好友/受信用户
+     * 信任级别：0-读者 1-知友
      */
     private Integer trustLevel;
 
@@ -123,6 +123,18 @@ public class User implements Serializable {
      */
     @TableField(exist = false)
     private String roleCode;
+
+    @TableField(exist = false)
+    private String roleName;
+
+    @TableField(exist = false)
+    private String trustLevelName;
+
+    @TableField(exist = false)
+    private String memberLabel;
+
+    @TableField(exist = false)
+    private String memberSecondaryLabel;
 
     public interface RoleValue {
         int USER = 0;

@@ -45,6 +45,7 @@ public class SecurityConfig {
                                 "/auth/**",
                                 "/home/**",
                                 "/site/**",
+                                "/trust-requests/**",
                                 "/articles",
                                 "/articles/**",
                                 "/categories",

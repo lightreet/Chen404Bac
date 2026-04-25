@@ -22,4 +22,9 @@ public interface EmailService {
      * @param content 内容
      */
     void sendEmail(String toEmail, String subject, String content);
+
+    /**
+     * 鍙戦€丠TML 閭欢
+     */
+    void sendHtmlEmail(String toEmail, String subject, String htmlContent);
 }

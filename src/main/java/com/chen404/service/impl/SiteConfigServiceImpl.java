@@ -30,6 +30,10 @@ public class SiteConfigServiceImpl implements SiteConfigService {
     private static final String LEGACY_GITHUB_URL = "https://github.com/chen404";
     private static final String DEFAULT_SITE_EMAIL = "helychen@outlook.com";
     private static final String LEGACY_SITE_EMAIL = "admin@chen404.com";
+    private static final String DEFAULT_SITE_LOGO = "/logo.png";
+    private static final String LEGACY_SITE_LOGO = "/logo.svg";
+    private static final String DEFAULT_SITE_FAVICON = "/favicon.png";
+    private static final String LEGACY_SITE_FAVICON = "/favicon.ico";
 
     private static final String KEY_SITE_NAME = "site.name";
     private static final String KEY_SITE_DESCRIPTION = "site.description";
@@ -166,8 +170,8 @@ public class SiteConfigServiceImpl implements SiteConfigService {
         SiteConfigDTO config = new SiteConfigDTO();
         config.setSiteName("Chen404 Blog");
         config.setSiteDescription("一个热爱技术分享的博客");
-        config.setSiteLogo("/logo.svg");
-        config.setSiteFavicon("/favicon.ico");
+        config.setSiteLogo(DEFAULT_SITE_LOGO);
+        config.setSiteFavicon(DEFAULT_SITE_FAVICON);
         config.setIcp("湘ICP备2026010852号-1");
         config.setGithub(DEFAULT_GITHUB_URL);
         config.setEmail(DEFAULT_SITE_EMAIL);
@@ -247,8 +251,8 @@ public class SiteConfigServiceImpl implements SiteConfigService {
     private static void normalize(SiteConfigDTO config) {
         config.setSiteName(trimToDefault(config.getSiteName(), "Chen404 Blog"));
         config.setSiteDescription(trimToDefault(config.getSiteDescription(), "一个热爱技术分享的博客"));
-        config.setSiteLogo(trimToDefault(config.getSiteLogo(), "/logo.svg"));
-        config.setSiteFavicon(trimToDefault(config.getSiteFavicon(), "/favicon.ico"));
+        config.setSiteLogo(normalizeSiteLogo(config.getSiteLogo()));
+        config.setSiteFavicon(normalizeSiteFavicon(config.getSiteFavicon()));
         config.setIcp(trimToDefault(config.getIcp(), "湘ICP备2026010852号-1"));
         config.setGithub(normalizeGithub(config.getGithub()));
         config.setEmail(normalizeEmail(config.getEmail()));
@@ -305,5 +309,15 @@ public class SiteConfigServiceImpl implements SiteConfigService {
     private static String normalizeEmail(String value) {
         String normalized = trimToDefault(value, DEFAULT_SITE_EMAIL);
         return LEGACY_SITE_EMAIL.equalsIgnoreCase(normalized) ? DEFAULT_SITE_EMAIL : normalized;
+    }
+
+    private static String normalizeSiteLogo(String value) {
+        String normalized = trimToDefault(value, DEFAULT_SITE_LOGO);
+        return LEGACY_SITE_LOGO.equalsIgnoreCase(normalized) ? DEFAULT_SITE_LOGO : normalized;
+    }
+
+    private static String normalizeSiteFavicon(String value) {
+        String normalized = trimToDefault(value, DEFAULT_SITE_FAVICON);
+        return LEGACY_SITE_FAVICON.equalsIgnoreCase(normalized) ? DEFAULT_SITE_FAVICON : normalized;
     }
 }

@@ -61,6 +61,10 @@ public class ImageProcessingServiceImpl implements ImageProcessingService {
         if (!ImageIO.getImageWritersByFormatName(WEBP_FORMAT).hasNext()) {
             return Optional.empty();
         }
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.toLowerCase().startsWith("image/")) {
+            return Optional.empty();
+        }
 
         final byte[] raw;
         try {

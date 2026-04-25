@@ -100,6 +100,8 @@ public class SiteController {
         owner.setNickname(source.getNickname());
         owner.setAvatar(source.getAvatar());
         owner.setBio(source.getBio());
+        owner.setMemberLabel(source.getMemberLabel());
+        owner.setMemberSecondaryLabel(source.getMemberSecondaryLabel());
         return owner;
     }
 
@@ -114,6 +116,7 @@ public class SiteController {
         member.setAvatar(source.getAvatar());
         member.setBio(source.getBio());
         member.setTrustLevel(source.getTrustLevel());
+        member.setMemberLabel(source.getMemberLabel());
         member.setCreateTime(source.getCreateTime());
         return member;
     }

@@ -177,6 +177,7 @@ public class JwtInterceptor implements HandlerInterceptor {
 
         return path.equals("/home") || path.startsWith("/home/") ||
                path.equals("/site") || path.startsWith("/site/") ||
+               path.equals("/trust-requests/email-approve") ||
                path.equals("/tags") || path.startsWith("/tags/") ||
                path.equals("/archives") || path.startsWith("/archives/");
     }

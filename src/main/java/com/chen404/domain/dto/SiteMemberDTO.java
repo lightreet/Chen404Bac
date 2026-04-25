@@ -13,5 +13,6 @@ public class SiteMemberDTO {
     private String avatar;
     private String bio;
     private Integer trustLevel;
+    private String memberLabel;
     private LocalDateTime createTime;
 }

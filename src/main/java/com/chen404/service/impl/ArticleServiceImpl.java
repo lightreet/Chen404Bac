@@ -236,8 +236,8 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         if (operator == null) {
             throw new UnauthorizedException();
         }
-        if (!accessService.isAdmin(operator) && !accessService.isFriend(operator)) {
-            throw new ForbiddenException("仅受信任用户可创建文章");
+        if (!accessService.isAdmin(operator)) {
+            throw new ForbiddenException("仅管理员可创建文章");
         }
 
         // 设置默认值

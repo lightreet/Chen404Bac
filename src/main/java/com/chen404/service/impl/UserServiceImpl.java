@@ -239,7 +239,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     public User updateTrustLevel(Long userId, Integer trustLevel) {
         if (!Objects.equals(trustLevel, User.TrustLevel.NORMAL)
                 && !Objects.equals(trustLevel, User.TrustLevel.FRIEND)) {
-            throw new RuntimeException("信任级别无效，仅允许普通用户(0)或好友(1)");
+            throw new RuntimeException("信任级别无效，仅允许读者(0)或知友(1)");
         }
 
         User user = userMapper.selectById(userId);

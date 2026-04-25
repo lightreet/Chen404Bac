@@ -1,5 +1,7 @@
 package com.chen404.service.support;
 
+import com.chen404.domain.enums.UserRoleEnum;
+import com.chen404.domain.enums.UserTrustLevelEnum;
 import com.chen404.domain.entity.Role;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.entity.User;
@@ -51,6 +53,7 @@ public class UserAccessProfileSupport {
         if (user.getTrustLevel() == null) {
             user.setTrustLevel(User.TrustLevel.NORMAL);
         }
+        applyIdentityLabels(user);
         return user;
     }
 
@@ -84,5 +87,25 @@ public class UserAccessProfileSupport {
         user.setRole(User.RoleCode.ADMIN.equals(primaryRole.getRoleCode())
                 ? User.RoleValue.ADMIN
                 : User.RoleValue.USER);
+        user.setRoleName(primaryRole.getRoleName());
+    }
+
+    private void applyIdentityLabels(User user) {
+        UserRoleEnum roleEnum = UserRoleEnum.fromRoleCode(user.getRoleCode());
+        UserTrustLevelEnum trustLevelEnum = UserTrustLevelEnum.fromLevel(user.getTrustLevel());
+
+        if (!StringUtils.hasText(user.getRoleName())) {
+            user.setRoleName(roleEnum.getDisplayName());
+        }
+        user.setTrustLevelName(trustLevelEnum.getDisplayName());
+
+        if (roleEnum == UserRoleEnum.ADMIN) {
+            user.setMemberLabel(roleEnum.getDisplayName());
+            user.setMemberSecondaryLabel("站点管理");
+            return;
+        }
+
+        user.setMemberLabel(trustLevelEnum.getDisplayName());
+        user.setMemberSecondaryLabel(null);
     }
 }

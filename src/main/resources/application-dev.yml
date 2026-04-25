@@ -63,6 +63,10 @@ jwt:
   expiration: ${JWT_EXPIRATION:7200000}
   refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
 
+app:
+  frontend-base-url: ${APP_FRONTEND_BASE_URL:http://localhost:5173}
+  backend-base-url: ${APP_BACKEND_BASE_URL:http://localhost:10404/api}
+
 logging:
   level:
     com.chen404: debug
