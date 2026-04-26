@@ -57,6 +57,8 @@ import java.util.stream.Collectors;
 public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> implements ArticleService {
 
     private static final long LIKE_COOLDOWN_MS = 60_000L;
+    private static final int DEFAULT_VISIBLE_SCAN_LIMIT = 60;
+    private static final int NEIGHBOR_SCAN_LIMIT = 20;
 
     @Autowired
     private ArticleMapper articleMapper;
@@ -98,14 +100,11 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     private UserAccessProfileSupport userAccessProfileSupport;
 
     @Override
-    public Page<Article> getArticlePage(Integer page, Integer size, Integer status, Long categoryId, Long tagId, Long authorId, String keyword) {
-        Page<Article> pageParam = new Page<>(page, size);
-
+    public Page<Article> getArticlePage(Integer page, Integer size, Integer status, Long categoryId, Long tagId, Long authorId, String keyword, Long requesterId) {
         LambdaQueryWrapper<Article> wrapper = new LambdaQueryWrapper<>();
 
-        // 公开列表只返回已发布 + 公开可见文章
+        // 公共文章流只返回已发布文章；具体是否对当前访问者可见，再按访问控制过滤。
         wrapper.eq(Article::getStatus, ArticleStatusEnum.PUBLISHED.getValue());
-        wrapper.eq(Article::getVisibility, ArticleVisibilityEnum.PUBLIC.getValue());
 
         // 分类筛选
         if (categoryId != null) {
@@ -129,15 +128,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         // 排序：置顶优先，再按「展示时间」倒序（无 publish_time 时用 create_time，避免 NULL 全堆在最前）
         wrapper.last("ORDER BY is_top DESC, COALESCE(publish_time, create_time) DESC, id DESC");
 
-        Page<Article> result = articleMapper.selectPage(pageParam, wrapper);
-
-        // 填充关联数据
-        List<Article> records = result.getRecords();
-        for (Article article : records) {
-            fillArticleRelations(article);
-        }
-
-        return result;
+        return buildVisibleArticlePage(page, size, wrapper, requesterId);
     }
 
     @Override
@@ -209,15 +200,18 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
             return Map.of();
         }
         Map<String, Article> result = new java.util.HashMap<>();
+        User viewer = accessService.getUserOrNull(requesterId);
 
         // 上一篇：发布时间早于当前，取最近一篇
         LambdaQueryWrapper<Article> prevWrapper = new LambdaQueryWrapper<>();
         prevWrapper.eq(Article::getStatus, ArticleStatusEnum.PUBLISHED.getValue())
-                .eq(Article::getVisibility, ArticleVisibilityEnum.PUBLIC.getValue())
                 .lt(Article::getPublishTime, current.getPublishTime())
                 .orderByDesc(Article::getPublishTime)
-                .last("LIMIT 1");
-        Article prev = articleMapper.selectOne(prevWrapper);
+                .last("LIMIT " + NEIGHBOR_SCAN_LIMIT);
+        Article prev = articleMapper.selectList(prevWrapper).stream()
+                .filter(article -> canViewPublishedArticle(article, requesterId, viewer))
+                .findFirst()
+                .orElse(null);
         if (prev != null) {
             result.put("prev", prev);
         }
@@ -225,11 +219,13 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         // 下一篇：发布时间晚于当前，取最早一篇
         LambdaQueryWrapper<Article> nextWrapper = new LambdaQueryWrapper<>();
         nextWrapper.eq(Article::getStatus, ArticleStatusEnum.PUBLISHED.getValue())
-                .eq(Article::getVisibility, ArticleVisibilityEnum.PUBLIC.getValue())
                 .gt(Article::getPublishTime, current.getPublishTime())
                 .orderByAsc(Article::getPublishTime)
-                .last("LIMIT 1");
-        Article next = articleMapper.selectOne(nextWrapper);
+                .last("LIMIT " + NEIGHBOR_SCAN_LIMIT);
+        Article next = articleMapper.selectList(nextWrapper).stream()
+                .filter(article -> canViewPublishedArticle(article, requesterId, viewer))
+                .findFirst()
+                .orElse(null);
         if (next != null) {
             result.put("next", next);
         }
@@ -541,19 +537,24 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     }
 
     @Override
-    public List<Article> getHotArticles(Integer limit) {
-        return articleMapper.selectHotArticles(limit);
+    public List<Article> getHotArticles(Integer limit, Long requesterId) {
+        int safeLimit = limit == null || limit < 1 ? 10 : limit;
+        LambdaQueryWrapper<Article> wrapper = new LambdaQueryWrapper<Article>()
+                .eq(Article::getStatus, ArticleStatusEnum.PUBLISHED.getValue())
+                .orderByDesc(Article::getViewCount)
+                .last("LIMIT " + DEFAULT_VISIBLE_SCAN_LIMIT);
+        return filterVisibleArticles(articleMapper.selectList(wrapper), requesterId, safeLimit, false);
     }
 
     @Override
-    public List<Article> getRecommendArticles(Integer limit) {
-        List<Article> list = articleMapper.selectRecommendArticles(limit);
-        if (list != null) {
-            for (Article a : list) {
-                resolveCoverImageFromSysFile(a);
-            }
-        }
-        return list;
+    public List<Article> getRecommendArticles(Integer limit, Long requesterId) {
+        int safeLimit = limit == null || limit < 1 ? 6 : limit;
+        LambdaQueryWrapper<Article> wrapper = new LambdaQueryWrapper<Article>()
+                .eq(Article::getStatus, ArticleStatusEnum.PUBLISHED.getValue())
+                .eq(Article::getIsRecommend, 1)
+                .orderByDesc(Article::getCreateTime)
+                .last("LIMIT " + DEFAULT_VISIBLE_SCAN_LIMIT);
+        return filterVisibleArticles(articleMapper.selectList(wrapper), requesterId, safeLimit, false);
     }
 
     @Override
@@ -562,14 +563,13 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     }
 
     @Override
-    public List<ArchiveYearVO> listArchives() {
+    public List<ArchiveYearVO> listArchives(Long requesterId) {
         LambdaQueryWrapper<Article> w = new LambdaQueryWrapper<>();
         w.eq(Article::getStatus, ArticleStatusEnum.PUBLISHED.getValue())
-                .eq(Article::getVisibility, ArticleVisibilityEnum.PUBLIC.getValue())
                 .isNotNull(Article::getPublishTime)
                 .orderByDesc(Article::getPublishTime);
         w.select(Article::getId, Article::getTitle, Article::getPublishTime);
-        List<Article> rows = articleMapper.selectList(w);
+        List<Article> rows = filterVisibleArticles(articleMapper.selectList(w), requesterId, null, false);
 
         Map<Integer, Map<Integer, List<ArchiveArticleItem>>> byYearMonth = new LinkedHashMap<>();
         for (Article a : rows) {
@@ -765,6 +765,75 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         if (!redisUtil.setIfAbsent(key, "1", Duration.ofMillis(LIKE_COOLDOWN_MS))) {
             throw new TooManyRequestsException("您已点过赞了，无需重复点赞");
         }
+    }
+
+    private Page<Article> buildVisibleArticlePage(Integer page, Integer size, LambdaQueryWrapper<Article> wrapper, Long requesterId) {
+        int current = page == null || page < 1 ? 1 : page;
+        int pageSize = size == null || size < 1 ? 10 : size;
+
+        List<Article> visibleArticles = filterVisibleArticles(articleMapper.selectList(wrapper), requesterId, null, true);
+        long total = visibleArticles.size();
+        int fromIndex = Math.max((current - 1) * pageSize, 0);
+        List<Article> records;
+        if (fromIndex >= visibleArticles.size()) {
+            records = List.of();
+        } else {
+            int toIndex = Math.min(fromIndex + pageSize, visibleArticles.size());
+            records = new ArrayList<>(visibleArticles.subList(fromIndex, toIndex));
+        }
+
+        Page<Article> result = new Page<>(current, pageSize, total);
+        result.setRecords(records);
+        return result;
+    }
+
+    private List<Article> filterVisibleArticles(List<Article> candidates, Long requesterId, Integer limit, boolean fillRelations) {
+        if (candidates == null || candidates.isEmpty()) {
+            return List.of();
+        }
+
+        User viewer = accessService.getUserOrNull(requesterId);
+        List<Article> result = new ArrayList<>();
+        for (Article article : candidates) {
+            if (!canViewPublishedArticle(article, requesterId, viewer)) {
+                continue;
+            }
+            if (fillRelations) {
+                fillArticleRelations(article);
+                accessService.fillArticlePermissions(article, requesterId);
+            } else {
+                resolveCoverImageFromSysFile(article);
+            }
+            result.add(article);
+            if (limit != null && result.size() >= limit) {
+                break;
+            }
+        }
+        return result;
+    }
+
+    private boolean canViewPublishedArticle(Article article, Long requesterId, User viewer) {
+        if (article == null) {
+            return false;
+        }
+        if (requesterId != null && Objects.equals(article.getAuthorId(), requesterId)) {
+            return true;
+        }
+        if (viewer != null && accessService.isAdmin(viewer)) {
+            return true;
+        }
+        if (!ArticleStatusEnum.is(article.getStatus(), ArticleStatusEnum.PUBLISHED)) {
+            return false;
+        }
+
+        ArticleVisibilityEnum visibility = ArticleVisibilityEnum.fromValue(article.getVisibility());
+        return switch (visibility) {
+            case PUBLIC -> true;
+            case LOGIN -> viewer != null;
+            case FRIEND -> viewer != null && accessService.isFriend(viewer);
+            case PRIVATE -> false;
+            default -> false;
+        };
     }
 
     private String normalizeClientIp(String clientIp) {

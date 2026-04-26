@@ -17,7 +17,7 @@ public interface ArticleService extends IService<Article> {
     /**
      * 分页查询文章列表
      */
-    Page<Article> getArticlePage(Integer page, Integer size, Integer status, Long categoryId, Long tagId, Long authorId, String keyword);
+    Page<Article> getArticlePage(Integer page, Integer size, Integer status, Long categoryId, Long tagId, Long authorId, String keyword, Long requesterId);
 
     /**
      * 管理端：分页查询当前用户的文章列表（可按状态筛选）
@@ -72,12 +72,12 @@ public interface ArticleService extends IService<Article> {
     /**
      * 获取热门文章
      */
-    List<Article> getHotArticles(Integer limit);
+    List<Article> getHotArticles(Integer limit, Long requesterId);
 
     /**
      * 获取推荐文章
      */
-    List<Article> getRecommendArticles(Integer limit);
+    List<Article> getRecommendArticles(Integer limit, Long requesterId);
 
     /**
      * 获取站点统计
@@ -87,5 +87,5 @@ public interface ArticleService extends IService<Article> {
     /**
      * 归档：按年、月分组的公开已发布文章时间线
      */
-    List<ArchiveYearVO> listArchives();
+    List<ArchiveYearVO> listArchives(Long requesterId);
 }

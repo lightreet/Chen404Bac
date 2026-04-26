@@ -7,6 +7,8 @@ import com.chen404.domain.entity.Comment;
 import com.chen404.service.ArticleService;
 import com.chen404.service.BannerService;
 import com.chen404.service.CommentService;
+import com.chen404.util.RequestAttrUtil;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -37,8 +39,9 @@ public class HomeController {
      * 获取首页聚合数据
      */
     @GetMapping("")
-    public Result<Map<String, Object>> getHomeData() {
+    public Result<Map<String, Object>> getHomeData(HttpServletRequest request) {
         Map<String, Object> data = new HashMap<>();
+        Long requesterId = RequestAttrUtil.getUserId(request);
 
         // 轮播图
         List<Banner> banners = bannerService.getBannersByPosition(1);
@@ -49,7 +52,7 @@ public class HomeController {
         data.put("stats", stats);
 
         // 热门文章
-        List<Article> hotArticles = articleService.getHotArticles(10);
+        List<Article> hotArticles = articleService.getHotArticles(10, requesterId);
         data.put("hotArticles", hotArticles);
 
         // 最新评论

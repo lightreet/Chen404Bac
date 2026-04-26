@@ -89,8 +89,18 @@ public class ArticleController {
             @RequestParam(required = false) Long categoryId,
             @RequestParam(required = false) Long tagId,
             @RequestParam(required = false) Long authorId,
-            @RequestParam(required = false) String keyword) {
-        Page<Article> articlePage = articleService.getArticlePage(page, size, status, categoryId, tagId, authorId, keyword);
+            @RequestParam(required = false) String keyword,
+            HttpServletRequest request) {
+        Page<Article> articlePage = articleService.getArticlePage(
+                page,
+                size,
+                status,
+                categoryId,
+                tagId,
+                authorId,
+                keyword,
+                RequestAttrUtil.getUserId(request)
+        );
         return Result.success(PageResult.of(articlePage));
     }
 
@@ -119,8 +129,8 @@ public class ArticleController {
 
     @Operation(summary = "归档时间线", description = "仅包含已发布且公开可见、有发布时间的文章，按发布时间倒序分组")
     @GetMapping("/archives")
-    public Result<List<ArchiveYearVO>> listArchives() {
-        return Result.success(articleService.listArchives());
+    public Result<List<ArchiveYearVO>> listArchives(HttpServletRequest request) {
+        return Result.success(articleService.listArchives(RequestAttrUtil.getUserId(request)));
     }
 
     @Operation(summary = "点赞文章", description = "为文章点赞")
@@ -143,8 +153,9 @@ public class ArticleController {
     @Parameter(name = "limit", description = "返回数量，默认10")
     @GetMapping("/articles/hot")
     public Result<List<Article>> getHotArticles(
-            @RequestParam(defaultValue = "10") Integer limit) {
-        List<Article> articles = articleService.getHotArticles(limit);
+            @RequestParam(defaultValue = "10") Integer limit,
+            HttpServletRequest request) {
+        List<Article> articles = articleService.getHotArticles(limit, RequestAttrUtil.getUserId(request));
         return Result.success(articles);
     }
 
@@ -152,8 +163,9 @@ public class ArticleController {
     @Parameter(name = "limit", description = "返回数量，默认6")
     @GetMapping("/articles/recommend")
     public Result<List<Article>> getRecommendArticles(
-            @RequestParam(defaultValue = "6") Integer limit) {
-        List<Article> articles = articleService.getRecommendArticles(limit);
+            @RequestParam(defaultValue = "6") Integer limit,
+            HttpServletRequest request) {
+        List<Article> articles = articleService.getRecommendArticles(limit, RequestAttrUtil.getUserId(request));
         return Result.success(articles);
     }
 
