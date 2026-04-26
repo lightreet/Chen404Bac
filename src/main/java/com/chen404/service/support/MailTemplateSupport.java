@@ -2,6 +2,7 @@ package com.chen404.service.support;
 
 import com.chen404.domain.dto.SiteConfigDTO;
 import com.chen404.service.SiteConfigService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -19,10 +20,15 @@ public class MailTemplateSupport {
     private static final String DEFAULT_SITE_DESCRIPTION = "一个写下技术，也收藏温柔日常的小小角落";
 
     private final SiteConfigService siteConfigService;
+    private final String frontendBaseUrl;
     private final Map<String, String> templateCache = new ConcurrentHashMap<>();
 
-    public MailTemplateSupport(SiteConfigService siteConfigService) {
+    public MailTemplateSupport(
+            SiteConfigService siteConfigService,
+            @Value("${app.frontend-base-url:http://localhost:5173}") String frontendBaseUrl
+    ) {
         this.siteConfigService = siteConfigService;
+        this.frontendBaseUrl = frontendBaseUrl;
     }
 
     public String render(String templatePath, Map<String, String> variables) {
@@ -88,14 +94,14 @@ public class MailTemplateSupport {
         String logoUrl = resolveAbsoluteLogoUrl(config);
         if (StringUtils.hasText(logoUrl)) {
             return """
-                    <div style="width: 64px; height: 64px; border-radius: 22px; background: rgba(255,255,255,0.88); box-shadow: 0 14px 30px rgba(245,155,188,0.18); display: inline-flex; align-items: center; justify-content: center;">
-                      <img src="%s" alt="%s" style="width: 42px; height: 42px; object-fit: contain; display: block;" />
+                    <div style="width: 72px; height: 72px; border-radius: 24px; background: linear-gradient(145deg, rgba(255,255,255,0.96), rgba(255,247,251,0.98)); border: 1px solid rgba(233, 204, 220, 0.72); box-shadow: 0 18px 34px rgba(213, 143, 176, 0.16); display: inline-flex; align-items: center; justify-content: center;">
+                      <img src="%s" alt="%s" style="width: 48px; height: 48px; object-fit: contain; display: block;" />
                     </div>
                     """.formatted(safeAttribute(logoUrl), safeSiteName);
         }
 
         return """
-                <div style="width: 64px; height: 64px; border-radius: 22px; background: linear-gradient(135deg, rgba(255,255,255,0.94), rgba(255,243,248,0.96)); box-shadow: 0 14px 30px rgba(245,155,188,0.18); display: inline-flex; align-items: center; justify-content: center; color: #d85f8f; font-size: 18px; font-weight: 800; letter-spacing: 0.08em;">
+                <div style="width: 72px; height: 72px; border-radius: 24px; background: linear-gradient(145deg, rgba(255,255,255,0.96), rgba(255,243,248,0.98)); border: 1px solid rgba(233, 204, 220, 0.72); box-shadow: 0 18px 34px rgba(213, 143, 176, 0.16); display: inline-flex; align-items: center; justify-content: center; color: #d85f8f; font-size: 18px; font-weight: 800; letter-spacing: 0.08em;">
                   C404
                 </div>
                 """;
@@ -109,6 +115,23 @@ public class MailTemplateSupport {
         if (logo.startsWith("http://") || logo.startsWith("https://")) {
             return logo;
         }
-        return null;
+        if (!StringUtils.hasText(frontendBaseUrl)) {
+            return null;
+        }
+        if (logo.startsWith("/")) {
+            return joinUrl(frontendBaseUrl, logo);
+        }
+        return joinUrl(frontendBaseUrl, "/" + logo);
+    }
+
+    private String joinUrl(String baseUrl, String path) {
+        String safeBaseUrl = baseUrl.trim();
+        if (safeBaseUrl.endsWith("/") && path.startsWith("/")) {
+            return safeBaseUrl.substring(0, safeBaseUrl.length() - 1) + path;
+        }
+        if (!safeBaseUrl.endsWith("/") && !path.startsWith("/")) {
+            return safeBaseUrl + "/" + path;
+        }
+        return safeBaseUrl + path;
     }
 }

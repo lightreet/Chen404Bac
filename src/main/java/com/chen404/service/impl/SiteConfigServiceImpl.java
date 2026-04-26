@@ -40,8 +40,12 @@ public class SiteConfigServiceImpl implements SiteConfigService {
     private static final String KEY_SITE_LOGO = "site.logo";
     private static final String KEY_SITE_FAVICON = "site.favicon";
     private static final String KEY_SITE_ICP = "site.icp";
+    private static final String KEY_SITE_BEIAN = "site.beian";
     private static final String KEY_SITE_GITHUB = "site.github";
     private static final String KEY_SITE_EMAIL = "site.email";
+    private static final String KEY_SITE_COPYRIGHT = "site.copyright";
+    private static final String KEY_SEO_KEYWORDS = "seo.keywords";
+    private static final String KEY_SEO_DESCRIPTION = "seo.description";
     private static final String KEY_HERO_IMAGES = "site.hero_images";
 
     private final ObjectMapper objectMapper;
@@ -95,8 +99,12 @@ public class SiteConfigServiceImpl implements SiteConfigService {
                 case KEY_SITE_LOGO -> dto.setSiteLogo(value);
                 case KEY_SITE_FAVICON -> dto.setSiteFavicon(value);
                 case KEY_SITE_ICP -> dto.setIcp(value);
+                case KEY_SITE_BEIAN -> dto.setBeian(value);
                 case KEY_SITE_GITHUB -> dto.setGithub(value);
                 case KEY_SITE_EMAIL -> dto.setEmail(value);
+                case KEY_SITE_COPYRIGHT -> dto.setCopyright(value);
+                case KEY_SEO_KEYWORDS -> dto.setSeoKeywords(value);
+                case KEY_SEO_DESCRIPTION -> dto.setSeoDescription(value);
                 case KEY_HERO_IMAGES -> dto.setHeroImages(parseHeroImages(value));
                 default -> {
                 }
@@ -120,8 +128,12 @@ public class SiteConfigServiceImpl implements SiteConfigService {
         upsertValue(existing, KEY_SITE_LOGO, config.getSiteLogo(), "Site logo", 1);
         upsertValue(existing, KEY_SITE_FAVICON, config.getSiteFavicon(), "Site favicon", 1);
         upsertValue(existing, KEY_SITE_ICP, config.getIcp(), "ICP number", 1);
+        upsertValue(existing, KEY_SITE_BEIAN, config.getBeian(), "Police filing number", 1);
         upsertValue(existing, KEY_SITE_GITHUB, config.getGithub(), "GitHub link", 1);
         upsertValue(existing, KEY_SITE_EMAIL, config.getEmail(), "Contact email", 1);
+        upsertValue(existing, KEY_SITE_COPYRIGHT, config.getCopyright(), "Copyright text", 1);
+        upsertValue(existing, KEY_SEO_KEYWORDS, config.getSeoKeywords(), "SEO keywords", 1);
+        upsertValue(existing, KEY_SEO_DESCRIPTION, config.getSeoDescription(), "SEO description", 1);
         upsertValue(existing, KEY_HERO_IMAGES, toHeroImagesJson(config.getHeroImages()), "Hero images", 4);
     }
 
@@ -173,8 +185,12 @@ public class SiteConfigServiceImpl implements SiteConfigService {
         config.setSiteLogo(DEFAULT_SITE_LOGO);
         config.setSiteFavicon(DEFAULT_SITE_FAVICON);
         config.setIcp("湘ICP备2026010852号-1");
+        config.setBeian("");
         config.setGithub(DEFAULT_GITHUB_URL);
         config.setEmail(DEFAULT_SITE_EMAIL);
+        config.setCopyright("Copyright 2024 Chen404");
+        config.setSeoKeywords("博客,技术,前端,后端,Java,Vue");
+        config.setSeoDescription("Chen404的个人技术博客，一个写下技术，也收藏温柔日常的小小角落");
         config.setHeroImages(new LinkedHashMap<>());
         return config;
     }
@@ -221,11 +237,23 @@ public class SiteConfigServiceImpl implements SiteConfigService {
         if (patch.getIcp() != null) {
             target.setIcp(patch.getIcp());
         }
+        if (patch.getBeian() != null) {
+            target.setBeian(patch.getBeian());
+        }
         if (patch.getGithub() != null) {
             target.setGithub(patch.getGithub());
         }
         if (patch.getEmail() != null) {
             target.setEmail(patch.getEmail());
+        }
+        if (patch.getCopyright() != null) {
+            target.setCopyright(patch.getCopyright());
+        }
+        if (patch.getSeoKeywords() != null) {
+            target.setSeoKeywords(patch.getSeoKeywords());
+        }
+        if (patch.getSeoDescription() != null) {
+            target.setSeoDescription(patch.getSeoDescription());
         }
         if (patch.getHeroImages() != null) {
             Map<String, String> merged = new LinkedHashMap<>();
@@ -254,8 +282,15 @@ public class SiteConfigServiceImpl implements SiteConfigService {
         config.setSiteLogo(normalizeSiteLogo(config.getSiteLogo()));
         config.setSiteFavicon(normalizeSiteFavicon(config.getSiteFavicon()));
         config.setIcp(trimToDefault(config.getIcp(), "湘ICP备2026010852号-1"));
+        config.setBeian(trimToEmpty(config.getBeian()));
         config.setGithub(normalizeGithub(config.getGithub()));
         config.setEmail(normalizeEmail(config.getEmail()));
+        config.setCopyright(trimToDefault(config.getCopyright(), "Copyright 2024 Chen404"));
+        config.setSeoKeywords(trimToEmpty(config.getSeoKeywords()));
+        config.setSeoDescription(trimToDefault(
+                config.getSeoDescription(),
+                "Chen404的个人技术博客，一个写下技术，也收藏温柔日常的小小角落"
+        ));
 
         Map<String, String> normalizedHeroImages = new LinkedHashMap<>();
         if (config.getHeroImages() != null) {
@@ -299,6 +334,10 @@ public class SiteConfigServiceImpl implements SiteConfigService {
 
     private static String trimToDefault(String value, String defaultValue) {
         return StringUtils.hasText(value) ? value.trim() : defaultValue;
+    }
+
+    private static String trimToEmpty(String value) {
+        return StringUtils.hasText(value) ? value.trim() : "";
     }
 
     private static String normalizeGithub(String value) {

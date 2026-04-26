@@ -94,8 +94,12 @@ public class SiteController {
         config.setSiteLogo(source.getSiteLogo());
         config.setSiteFavicon(source.getSiteFavicon());
         config.setIcp(source.getIcp());
+        config.setBeian(source.getBeian());
         config.setGithub(source.getGithub());
         config.setEmail(source.getEmail());
+        config.setCopyright(source.getCopyright());
+        config.setSeoKeywords(source.getSeoKeywords());
+        config.setSeoDescription(source.getSeoDescription());
         config.setHeroImages(source.getHeroImages());
         return config;
     }

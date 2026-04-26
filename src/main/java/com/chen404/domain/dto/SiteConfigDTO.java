@@ -16,7 +16,11 @@ public class SiteConfigDTO {
     private String siteLogo;
     private String siteFavicon;
     private String icp;
+    private String beian;
     private String github;
     private String email;
+    private String copyright;
+    private String seoKeywords;
+    private String seoDescription;
     private Map<String, String> heroImages = new LinkedHashMap<>();
 }
