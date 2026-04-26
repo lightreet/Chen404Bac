@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class MailTemplateSupport {
 
     private static final String DEFAULT_SITE_NAME = "Chen404 Blog";
-    private static final String DEFAULT_SITE_DESCRIPTION = "一个热爱技术分享的博客";
+    private static final String DEFAULT_SITE_DESCRIPTION = "一个写下技术，也收藏温柔日常的小小角落";
 
     private final SiteConfigService siteConfigService;
     private final Map<String, String> templateCache = new ConcurrentHashMap<>();

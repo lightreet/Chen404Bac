@@ -169,7 +169,7 @@ public class SiteConfigServiceImpl implements SiteConfigService {
     private static SiteConfigDTO defaults() {
         SiteConfigDTO config = new SiteConfigDTO();
         config.setSiteName("Chen404 Blog");
-        config.setSiteDescription("一个热爱技术分享的博客");
+        config.setSiteDescription("一个写下技术，也收藏温柔日常的小小角落");
         config.setSiteLogo(DEFAULT_SITE_LOGO);
         config.setSiteFavicon(DEFAULT_SITE_FAVICON);
         config.setIcp("湘ICP备2026010852号-1");
@@ -250,7 +250,7 @@ public class SiteConfigServiceImpl implements SiteConfigService {
 
     private static void normalize(SiteConfigDTO config) {
         config.setSiteName(trimToDefault(config.getSiteName(), "Chen404 Blog"));
-        config.setSiteDescription(trimToDefault(config.getSiteDescription(), "一个热爱技术分享的博客"));
+        config.setSiteDescription(trimToDefault(config.getSiteDescription(), "一个写下技术，也收藏温柔日常的小小角落"));
         config.setSiteLogo(normalizeSiteLogo(config.getSiteLogo()));
         config.setSiteFavicon(normalizeSiteFavicon(config.getSiteFavicon()));
         config.setIcp(trimToDefault(config.getIcp(), "湘ICP备2026010852号-1"));
