@@ -16,12 +16,16 @@ public class Comment implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @TableId(type = IdType.AUTO)
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
     private Long id;
 
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
     private Long articleId;
 
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
     private Long parentId;
 
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
     private Long rootId;
 
     private String content;
@@ -40,6 +44,7 @@ public class Comment implements Serializable {
     @JsonIgnore
     private Long authorAvatarFileId;
 
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
     private Long authorId;
 
     private String ip;

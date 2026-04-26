@@ -1,5 +1,7 @@
 package com.chen404.domain.dto;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -8,7 +10,9 @@ import java.util.List;
 @Data
 public class TrustRequestVO {
 
+    @JsonSerialize(using = ToStringSerializer.class)
     private Long id;
+    @JsonSerialize(using = ToStringSerializer.class)
     private Long userId;
     private String username;
     private String nickname;
@@ -19,6 +23,7 @@ public class TrustRequestVO {
     private List<TrustRequestAttachmentVO> attachments;
     private String contactEmail;
     private String reviewNote;
+    @JsonSerialize(using = ToStringSerializer.class)
     private Long reviewedBy;
     private String reviewerName;
     private LocalDateTime reviewedAt;

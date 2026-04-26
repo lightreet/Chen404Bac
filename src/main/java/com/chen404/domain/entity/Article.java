@@ -60,6 +60,7 @@ public class Article implements Serializable {
     /**
      * 作者ID
      */
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
     private Long authorId;
 
     /**
