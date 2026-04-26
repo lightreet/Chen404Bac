@@ -98,7 +98,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     private UserAccessProfileSupport userAccessProfileSupport;
 
     @Override
-    public Page<Article> getArticlePage(Integer page, Integer size, Integer status, Long categoryId, Long tagId, String keyword) {
+    public Page<Article> getArticlePage(Integer page, Integer size, Integer status, Long categoryId, Long tagId, Long authorId, String keyword) {
         Page<Article> pageParam = new Page<>(page, size);
 
         LambdaQueryWrapper<Article> wrapper = new LambdaQueryWrapper<>();
@@ -115,6 +115,10 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         // 标签筛选
         if (tagId != null) {
             wrapper.inSql(Article::getId, "SELECT article_id FROM article_tag WHERE tag_id = " + tagId);
+        }
+
+        if (authorId != null) {
+            wrapper.eq(Article::getAuthorId, authorId);
         }
 
         // 关键词搜索（公开列表：仅匹配标题）

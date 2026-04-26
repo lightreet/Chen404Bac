@@ -12,6 +12,7 @@ import com.chen404.service.SiteConfigService;
 import com.chen404.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -68,6 +69,15 @@ public class SiteController {
                 .toList());
     }
 
+    @GetMapping("/users/{id}")
+    public Result<SiteMemberDTO> getSiteUser(@PathVariable Long id) {
+        User user = userService.getPublicUser(id);
+        if (user == null) {
+            return Result.error(404, "用户不存在");
+        }
+        return Result.success(toPublicMember(user));
+    }
+
     /**
      * 更新站点配置（管理员）
      */
@@ -98,6 +108,7 @@ public class SiteController {
         owner.setId(source.getId());
         owner.setUsername(source.getUsername());
         owner.setNickname(source.getNickname());
+        owner.setEmail(source.getEmail());
         owner.setAvatar(source.getAvatar());
         owner.setBio(source.getBio());
         owner.setMemberLabel(source.getMemberLabel());
@@ -112,6 +123,7 @@ public class SiteController {
         member.setId(source.getId());
         member.setUsername(source.getUsername());
         member.setNickname(source.getNickname());
+        member.setEmail(source.getEmail());
         member.setAvatar(source.getAvatar());
         member.setBio(source.getBio());
         member.setTrustLevel(source.getTrustLevel());

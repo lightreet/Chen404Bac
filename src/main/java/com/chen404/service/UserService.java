@@ -50,6 +50,8 @@ public interface UserService extends IService<User> {
      */
     User getCurrentUser(Long userId);
 
+    User getPublicUser(Long userId);
+
     List<User> listPublicUsers();
 
     /**

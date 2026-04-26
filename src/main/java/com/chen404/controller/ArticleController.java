@@ -79,6 +79,7 @@ public class ArticleController {
     @Parameter(name = "status", description = "文章状态：0-草稿 1-已发布 2-回收站")
     @Parameter(name = "categoryId", description = "分类ID")
     @Parameter(name = "tagId", description = "标签ID")
+    @Parameter(name = "authorId", description = "作者ID")
     @Parameter(name = "keyword", description = "搜索关键词（仅匹配文章标题）")
     @GetMapping("/articles")
     public Result<PageResult<Article>> getArticles(
@@ -87,8 +88,9 @@ public class ArticleController {
             @RequestParam(required = false) Integer status,
             @RequestParam(required = false) Long categoryId,
             @RequestParam(required = false) Long tagId,
+            @RequestParam(required = false) Long authorId,
             @RequestParam(required = false) String keyword) {
-        Page<Article> articlePage = articleService.getArticlePage(page, size, status, categoryId, tagId, keyword);
+        Page<Article> articlePage = articleService.getArticlePage(page, size, status, categoryId, tagId, authorId, keyword);
         return Result.success(PageResult.of(articlePage));
     }
 

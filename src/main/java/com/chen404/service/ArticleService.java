@@ -17,7 +17,7 @@ public interface ArticleService extends IService<Article> {
     /**
      * 分页查询文章列表
      */
-    Page<Article> getArticlePage(Integer page, Integer size, Integer status, Long categoryId, Long tagId, String keyword);
+    Page<Article> getArticlePage(Integer page, Integer size, Integer status, Long categoryId, Long tagId, Long authorId, String keyword);
 
     /**
      * 管理端：分页查询当前用户的文章列表（可按状态筛选）

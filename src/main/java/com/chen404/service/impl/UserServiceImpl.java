@@ -188,6 +188,18 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
 
     @Override
+    public User getPublicUser(Long userId) {
+        User user = lambdaQuery()
+                .eq(User::getId, userId)
+                .eq(User::getStatus, 1)
+                .one();
+        if (user == null) {
+            return null;
+        }
+        return userAccessProfileSupport.enrichUserProfile(user);
+    }
+
+    @Override
     public List<User> listPublicUsers() {
         return lambdaQuery()
                 .eq(User::getStatus, 1)
