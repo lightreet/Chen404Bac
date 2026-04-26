@@ -8,6 +8,8 @@ import com.chen404.domain.PageResult;
 import com.chen404.domain.dto.CreateTrustRequestDTO;
 import com.chen404.domain.dto.TrustRequestAttachmentVO;
 import com.chen404.domain.dto.TrustRequestVO;
+import com.chen404.domain.enums.UserRoleEnum;
+import com.chen404.domain.enums.UserTrustLevelEnum;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.entity.User;
 import com.chen404.domain.entity.UserTrustRequest;
@@ -99,10 +101,10 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
         if (currentUser == null) {
             throw new RuntimeException("用户不存在");
         }
-        if (User.RoleCode.ADMIN.equals(currentUser.getRoleCode())) {
+        if (UserRoleEnum.ADMIN.matchesRoleCode(currentUser.getRoleCode())) {
             throw new RuntimeException("管理员无需申请受信权限");
         }
-        if (Objects.equals(currentUser.getTrustLevel(), User.TrustLevel.FRIEND)) {
+        if (Objects.equals(currentUser.getTrustLevel(), UserTrustLevelEnum.FRIEND.getLevel())) {
             throw new RuntimeException("你已经是知友了");
         }
 
@@ -300,7 +302,7 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
         request.setApproveTokenUsedAt(LocalDateTime.now());
         updateById(request);
 
-        userService.updateTrustLevel(request.getUserId(), User.TrustLevel.FRIEND);
+        userService.updateTrustLevel(request.getUserId(), UserTrustLevelEnum.FRIEND.getLevel());
 
         User applicant = userService.getById(request.getUserId());
         try {

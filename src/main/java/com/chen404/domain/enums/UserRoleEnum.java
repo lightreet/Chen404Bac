@@ -29,4 +29,19 @@ public enum UserRoleEnum {
         }
         return USER;
     }
+
+    public static UserRoleEnum fromRoleValue(Integer roleValue) {
+        if (roleValue != null) {
+            for (UserRoleEnum value : values()) {
+                if (value.roleValue == roleValue) {
+                    return value;
+                }
+            }
+        }
+        return USER;
+    }
+
+    public boolean matchesRoleCode(String roleCode) {
+        return roleCode != null && this.roleCode.equalsIgnoreCase(roleCode.trim());
+    }
 }

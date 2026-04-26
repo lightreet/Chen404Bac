@@ -132,22 +132,4 @@ public class User implements Serializable {
 
     @TableField(exist = false)
     private String memberLabel;
-
-    @TableField(exist = false)
-    private String memberSecondaryLabel;
-
-    public interface RoleValue {
-        int USER = 0;
-        int ADMIN = 1;
-    }
-
-    public interface RoleCode {
-        String USER = "user";
-        String ADMIN = "admin";
-    }
-
-    public interface TrustLevel {
-        int NORMAL = 0;
-        int FRIEND = 1;
-    }
 }

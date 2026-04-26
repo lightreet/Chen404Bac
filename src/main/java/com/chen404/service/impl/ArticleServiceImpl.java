@@ -4,10 +4,14 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.chen404.domain.enums.ArticleCommentPolicyEnum;
+import com.chen404.domain.enums.ArticleStatusEnum;
+import com.chen404.domain.enums.ArticleVisibilityEnum;
 import com.chen404.domain.dto.ArchiveArticleItem;
 import com.chen404.domain.dto.ArchiveMonthVO;
 import com.chen404.domain.dto.ArchiveYearVO;
 import com.chen404.domain.dto.ArticleLikeResult;
+import com.chen404.domain.enums.UserTrustLevelEnum;
 import com.chen404.domain.entity.Article;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.entity.ArticleTag;
@@ -100,8 +104,8 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         LambdaQueryWrapper<Article> wrapper = new LambdaQueryWrapper<>();
 
         // 公开列表只返回已发布 + 公开可见文章
-        wrapper.eq(Article::getStatus, Article.Status.PUBLISHED);
-        wrapper.eq(Article::getVisibility, Article.Visibility.PUBLIC);
+        wrapper.eq(Article::getStatus, ArticleStatusEnum.PUBLISHED.getValue());
+        wrapper.eq(Article::getVisibility, ArticleVisibilityEnum.PUBLIC.getValue());
 
         // 分类筛选
         if (categoryId != null) {
@@ -204,8 +208,8 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
         // 上一篇：发布时间早于当前，取最近一篇
         LambdaQueryWrapper<Article> prevWrapper = new LambdaQueryWrapper<>();
-        prevWrapper.eq(Article::getStatus, Article.Status.PUBLISHED)
-                .eq(Article::getVisibility, Article.Visibility.PUBLIC)
+        prevWrapper.eq(Article::getStatus, ArticleStatusEnum.PUBLISHED.getValue())
+                .eq(Article::getVisibility, ArticleVisibilityEnum.PUBLIC.getValue())
                 .lt(Article::getPublishTime, current.getPublishTime())
                 .orderByDesc(Article::getPublishTime)
                 .last("LIMIT 1");
@@ -216,8 +220,8 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
         // 下一篇：发布时间晚于当前，取最早一篇
         LambdaQueryWrapper<Article> nextWrapper = new LambdaQueryWrapper<>();
-        nextWrapper.eq(Article::getStatus, Article.Status.PUBLISHED)
-                .eq(Article::getVisibility, Article.Visibility.PUBLIC)
+        nextWrapper.eq(Article::getStatus, ArticleStatusEnum.PUBLISHED.getValue())
+                .eq(Article::getVisibility, ArticleVisibilityEnum.PUBLIC.getValue())
                 .gt(Article::getPublishTime, current.getPublishTime())
                 .orderByAsc(Article::getPublishTime)
                 .last("LIMIT 1");
@@ -254,10 +258,10 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
             article.setIsOriginal(1);
         }
         if (article.getVisibility() == null) {
-            article.setVisibility(Article.Visibility.PUBLIC);
+            article.setVisibility(ArticleVisibilityEnum.PUBLIC.getValue());
         }
         if (article.getCommentPolicy() == null) {
-            article.setCommentPolicy(Article.CommentPolicy.REGISTERED);
+            article.setCommentPolicy(ArticleCommentPolicyEnum.REGISTERED.getValue());
         }
         if (operator == null || !accessService.isAdmin(operator)) {
             article.setIsTop(0);
@@ -265,7 +269,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         }
 
         // 如果是发布状态，设置发布时间
-        if (article.getStatus() == Article.Status.PUBLISHED && article.getPublishTime() == null) {
+        if (ArticleStatusEnum.is(article.getStatus(), ArticleStatusEnum.PUBLISHED) && article.getPublishTime() == null) {
             article.setPublishTime(LocalDateTime.now());
         }
 
@@ -319,11 +323,13 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         article.setCommentCount(existing.getCommentCount());
 
         if (article.getVisibility() == null) {
-            article.setVisibility(existing.getVisibility() == null ? Article.Visibility.PUBLIC : existing.getVisibility());
+            article.setVisibility(existing.getVisibility() == null
+                    ? ArticleVisibilityEnum.PUBLIC.getValue()
+                    : existing.getVisibility());
         }
         if (article.getCommentPolicy() == null) {
             article.setCommentPolicy(existing.getCommentPolicy() == null
-                    ? Article.CommentPolicy.REGISTERED
+                    ? ArticleCommentPolicyEnum.REGISTERED.getValue()
                     : existing.getCommentPolicy());
         }
         if (operator == null || !accessService.isAdmin(operator)) {
@@ -332,7 +338,8 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         }
 
         // 如果从草稿变为发布，设置发布时间
-        if (existing.getStatus() == Article.Status.DRAFT && article.getStatus() == Article.Status.PUBLISHED) {
+        if (ArticleStatusEnum.is(existing.getStatus(), ArticleStatusEnum.DRAFT)
+                && ArticleStatusEnum.is(article.getStatus(), ArticleStatusEnum.PUBLISHED)) {
             article.setPublishTime(LocalDateTime.now());
         }
 
@@ -553,8 +560,8 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     @Override
     public List<ArchiveYearVO> listArchives() {
         LambdaQueryWrapper<Article> w = new LambdaQueryWrapper<>();
-        w.eq(Article::getStatus, Article.Status.PUBLISHED)
-                .eq(Article::getVisibility, Article.Visibility.PUBLIC)
+        w.eq(Article::getStatus, ArticleStatusEnum.PUBLISHED.getValue())
+                .eq(Article::getVisibility, ArticleVisibilityEnum.PUBLIC.getValue())
                 .isNotNull(Article::getPublishTime)
                 .orderByDesc(Article::getPublishTime);
         w.select(Article::getId, Article::getTitle, Article::getPublishTime);
@@ -618,7 +625,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
             if (author != null) {
                 author.setPassword(null);
                 if (author.getTrustLevel() == null) {
-                    author.setTrustLevel(User.TrustLevel.NORMAL);
+                    author.setTrustLevel(UserTrustLevelEnum.NORMAL.getLevel());
                 }
                 userAccessProfileSupport.applyDisplayAvatar(author);
                 article.setAuthor(author);

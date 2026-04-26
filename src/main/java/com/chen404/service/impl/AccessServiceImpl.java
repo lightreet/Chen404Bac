@@ -1,5 +1,10 @@
 package com.chen404.service.impl;
 
+import com.chen404.domain.enums.ArticleCommentPolicyEnum;
+import com.chen404.domain.enums.ArticleStatusEnum;
+import com.chen404.domain.enums.ArticleVisibilityEnum;
+import com.chen404.domain.enums.UserRoleEnum;
+import com.chen404.domain.enums.UserTrustLevelEnum;
 import com.chen404.domain.entity.Article;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.entity.User;
@@ -26,7 +31,7 @@ public class AccessServiceImpl implements AccessService {
         if (user == null) {
             return false;
         }
-        return User.RoleCode.ADMIN.equals(user.getRoleCode());
+        return UserRoleEnum.ADMIN.matchesRoleCode(user.getRoleCode());
     }
 
     @Override
@@ -34,7 +39,7 @@ public class AccessServiceImpl implements AccessService {
         if (user == null) {
             return false;
         }
-        return Objects.equals(user.getTrustLevel(), User.TrustLevel.FRIEND);
+        return Objects.equals(user.getTrustLevel(), UserTrustLevelEnum.FRIEND.getLevel());
     }
 
     private boolean isArticleOwner(Long userId, Article article) {
@@ -66,18 +71,18 @@ public class AccessServiceImpl implements AccessService {
             return true;
         }
 
-        if (!Objects.equals(article.getStatus(), Article.Status.PUBLISHED)) {
+        if (!ArticleStatusEnum.is(article.getStatus(), ArticleStatusEnum.PUBLISHED)) {
             return false;
         }
 
         User user = getUserOrNull(userId);
-        int visibility = article.getVisibility() == null ? Article.Visibility.PUBLIC : article.getVisibility();
+        ArticleVisibilityEnum visibility = ArticleVisibilityEnum.fromValue(article.getVisibility());
 
         return switch (visibility) {
-            case Article.Visibility.PUBLIC -> true;
-            case Article.Visibility.LOGIN -> user != null;
-            case Article.Visibility.FRIEND -> user != null && (isAdmin(user) || isFriend(user));
-            case Article.Visibility.PRIVATE -> false;
+            case PUBLIC -> true;
+            case LOGIN -> user != null;
+            case FRIEND -> user != null && (isAdmin(user) || isFriend(user));
+            case PRIVATE -> false;
             default -> false;
         };
     }
@@ -93,15 +98,13 @@ public class AccessServiceImpl implements AccessService {
         }
 
         User user = getUserOrNull(userId);
-        int commentPolicy = article.getCommentPolicy() == null
-                ? Article.CommentPolicy.REGISTERED
-                : article.getCommentPolicy();
+        ArticleCommentPolicyEnum commentPolicy = ArticleCommentPolicyEnum.fromValue(article.getCommentPolicy());
 
         return switch (commentPolicy) {
-            case Article.CommentPolicy.CLOSED -> false;
-            case Article.CommentPolicy.REGISTERED -> user != null;
-            case Article.CommentPolicy.FRIEND -> user != null && (isAdmin(user) || isFriend(user));
-            case Article.CommentPolicy.PUBLIC -> true;
+            case CLOSED -> false;
+            case REGISTERED -> user != null;
+            case FRIEND -> user != null && (isAdmin(user) || isFriend(user));
+            case PUBLIC -> true;
             default -> false;
         };
     }

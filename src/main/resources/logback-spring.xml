@@ -129,7 +129,7 @@
     </appender>
 
     <!-- Logger：SQL/API 仅写各自文件 + 控制台，不重复写入 root 文件 -->
-    <logger name="com.chen404.interceptor.SqlPerformanceInterceptor" level="INFO" additivity="false">
+    <logger name="sys-sql" level="INFO" additivity="false">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="SQL_FILE"/>
     </logger>

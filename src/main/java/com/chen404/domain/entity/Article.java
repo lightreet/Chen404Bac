@@ -208,23 +208,4 @@ public class Article implements Serializable {
     @TableField(exist = false)
     private Boolean favorited;
 
-    public interface Status {
-        int DRAFT = 0;
-        int PUBLISHED = 1;
-        int RECYCLED = 2;
-    }
-
-    public interface Visibility {
-        int PUBLIC = 0;
-        int LOGIN = 1;
-        int FRIEND = 2;
-        int PRIVATE = 3;
-    }
-
-    public interface CommentPolicy {
-        int CLOSED = 0;
-        int REGISTERED = 1;
-        int FRIEND = 2;
-        int PUBLIC = 3;
-    }
 }

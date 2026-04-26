@@ -1,6 +1,7 @@
 package com.chen404.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.chen404.domain.enums.UserTrustLevelEnum;
 import com.chen404.domain.dto.LoginDTO;
 import com.chen404.domain.dto.LoginResultDTO;
 import com.chen404.domain.dto.RegisterDTO;
@@ -137,7 +138,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setPhone(registerDTO.getPhone());
         user.setAvatar(DEFAULT_MEMBER_AVATAR);
         user.setStatus(1);
-        user.setTrustLevel(User.TrustLevel.NORMAL);
+        user.setTrustLevel(UserTrustLevelEnum.NORMAL.getLevel());
 
         // 填写邮箱则标记为已验证；手机号默认未验证（需后续验证流程）
         if (StringUtils.hasText(registerDTO.getEmail())) {
@@ -237,8 +238,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     @Transactional(rollbackFor = Exception.class)
     public User updateTrustLevel(Long userId, Integer trustLevel) {
-        if (!Objects.equals(trustLevel, User.TrustLevel.NORMAL)
-                && !Objects.equals(trustLevel, User.TrustLevel.FRIEND)) {
+        if (!UserTrustLevelEnum.isValidLevel(trustLevel)) {
             throw new RuntimeException("信任级别无效，仅允许读者(0)或知友(1)");
         }
 

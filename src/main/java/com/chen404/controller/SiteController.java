@@ -101,7 +101,6 @@ public class SiteController {
         owner.setAvatar(source.getAvatar());
         owner.setBio(source.getBio());
         owner.setMemberLabel(source.getMemberLabel());
-        owner.setMemberSecondaryLabel(source.getMemberSecondaryLabel());
         return owner;
     }
 

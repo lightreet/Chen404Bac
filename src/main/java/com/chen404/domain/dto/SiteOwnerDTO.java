@@ -14,5 +14,4 @@ public class SiteOwnerDTO {
     private String avatar;
     private String bio;
     private String memberLabel;
-    private String memberSecondaryLabel;
 }

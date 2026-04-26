@@ -1,6 +1,7 @@
 package com.chen404.aspect;
 
 import com.chen404.annotation.RequireAdmin;
+import com.chen404.domain.enums.UserRoleEnum;
 import com.chen404.domain.entity.User;
 import com.chen404.exception.ForbiddenException;
 import com.chen404.exception.UnauthorizedException;
@@ -35,7 +36,7 @@ public class RequireAdminAspect {
             throw new UnauthorizedException();
         }
         User user = userAccessProfileSupport.loadUserProfile(userId);
-        if (user == null || !User.RoleCode.ADMIN.equals(user.getRoleCode())) {
+        if (user == null || !UserRoleEnum.ADMIN.matchesRoleCode(user.getRoleCode())) {
             throw new ForbiddenException("仅管理员可操作");
         }
         return joinPoint.proceed();

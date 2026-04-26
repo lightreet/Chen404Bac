@@ -51,7 +51,7 @@ public class UserAccessProfileSupport {
         applyDisplayAvatar(user);
         applyRoleInfo(user);
         if (user.getTrustLevel() == null) {
-            user.setTrustLevel(User.TrustLevel.NORMAL);
+            user.setTrustLevel(UserTrustLevelEnum.NORMAL.getLevel());
         }
         applyIdentityLabels(user);
         return user;
@@ -73,20 +73,20 @@ public class UserAccessProfileSupport {
     private void applyRoleInfo(User user) {
         List<Role> roles = roleMapper.selectRolesByUserId(user.getId());
         Role primaryRole = roles.stream()
-                .filter(role -> User.RoleCode.ADMIN.equals(role.getRoleCode()))
+                .filter(role -> UserRoleEnum.ADMIN.matchesRoleCode(role.getRoleCode()))
                 .findFirst()
                 .orElseGet(() -> roles.isEmpty() ? null : roles.get(0));
 
         if (primaryRole == null) {
-            user.setRole(User.RoleValue.USER);
-            user.setRoleCode(User.RoleCode.USER);
+            user.setRole(UserRoleEnum.USER.getRoleValue());
+            user.setRoleCode(UserRoleEnum.USER.getRoleCode());
             return;
         }
 
         user.setRoleCode(primaryRole.getRoleCode());
-        user.setRole(User.RoleCode.ADMIN.equals(primaryRole.getRoleCode())
-                ? User.RoleValue.ADMIN
-                : User.RoleValue.USER);
+        user.setRole(UserRoleEnum.ADMIN.matchesRoleCode(primaryRole.getRoleCode())
+                ? UserRoleEnum.ADMIN.getRoleValue()
+                : UserRoleEnum.USER.getRoleValue());
         user.setRoleName(primaryRole.getRoleName());
     }
 
@@ -101,11 +101,9 @@ public class UserAccessProfileSupport {
 
         if (roleEnum == UserRoleEnum.ADMIN) {
             user.setMemberLabel(roleEnum.getDisplayName());
-            user.setMemberSecondaryLabel("站点管理");
             return;
         }
 
         user.setMemberLabel(trustLevelEnum.getDisplayName());
-        user.setMemberSecondaryLabel(null);
     }
 }

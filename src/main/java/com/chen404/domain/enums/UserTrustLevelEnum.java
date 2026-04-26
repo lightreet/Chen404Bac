@@ -26,4 +26,16 @@ public enum UserTrustLevelEnum {
         }
         return NORMAL;
     }
+
+    public static boolean isValidLevel(Integer level) {
+        if (level == null) {
+            return false;
+        }
+        for (UserTrustLevelEnum value : values()) {
+            if (value.level == level) {
+                return true;
+            }
+        }
+        return false;
+    }
 }
