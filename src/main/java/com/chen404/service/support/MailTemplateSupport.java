@@ -94,14 +94,14 @@ public class MailTemplateSupport {
         String logoUrl = resolveAbsoluteLogoUrl(config);
         if (StringUtils.hasText(logoUrl)) {
             return """
-                    <div style="width: 72px; height: 72px; border-radius: 24px; background: linear-gradient(145deg, rgba(255,255,255,0.96), rgba(255,247,251,0.98)); border: 1px solid rgba(233, 204, 220, 0.72); box-shadow: 0 18px 34px rgba(213, 143, 176, 0.16); display: inline-flex; align-items: center; justify-content: center;">
-                      <img src="%s" alt="%s" style="width: 48px; height: 48px; object-fit: contain; display: block;" />
+                    <div style="width: 56px; height: 56px; border-radius: 18px; background: linear-gradient(145deg, rgba(255,255,255,0.96), rgba(255,247,251,0.98)); border: 1px solid rgba(233, 204, 220, 0.72); box-shadow: 0 12px 24px rgba(213, 143, 176, 0.12); display: inline-flex; align-items: center; justify-content: center;">
+                      <img src="%s" alt="%s" style="width: 34px; height: 34px; object-fit: contain; display: block;" />
                     </div>
                     """.formatted(safeAttribute(logoUrl), safeSiteName);
         }
 
         return """
-                <div style="width: 72px; height: 72px; border-radius: 24px; background: linear-gradient(145deg, rgba(255,255,255,0.96), rgba(255,243,248,0.98)); border: 1px solid rgba(233, 204, 220, 0.72); box-shadow: 0 18px 34px rgba(213, 143, 176, 0.16); display: inline-flex; align-items: center; justify-content: center; color: #d85f8f; font-size: 18px; font-weight: 800; letter-spacing: 0.08em;">
+                <div style="width: 56px; height: 56px; border-radius: 18px; background: linear-gradient(145deg, rgba(255,255,255,0.96), rgba(255,243,248,0.98)); border: 1px solid rgba(233, 204, 220, 0.72); box-shadow: 0 12px 24px rgba(213, 143, 176, 0.12); display: inline-flex; align-items: center; justify-content: center; color: #d85f8f; font-size: 15px; font-weight: 800; letter-spacing: 0.08em;">
                   C404
                 </div>
                 """;

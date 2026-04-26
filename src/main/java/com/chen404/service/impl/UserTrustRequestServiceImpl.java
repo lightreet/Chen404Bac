@@ -640,17 +640,46 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
 
     private String buildResultHtml(String title, String message, boolean success) {
         String badgeColor = success ? "#16a34a" : "#dc2626";
+        Map<String, String> brandVariables = mailTemplateSupport.buildBrandVariables();
+        String siteName = brandVariables.getOrDefault("siteName", "Chen404 Blog");
+        String siteDescription = brandVariables.getOrDefault("siteDescription", "一个写下技术，也收藏温柔日常的小小角落");
+        String brandVisual = brandVariables.getOrDefault("brandVisual", "");
         return """
-                <html>
-                <body style="font-family: Arial, sans-serif; background: #f7f7fb; padding: 24px; color: #1f2937;">
-                  <div style="max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 16px; padding: 28px; box-shadow: 0 12px 36px rgba(15, 23, 42, 0.08); text-align: center;">
-                    <div style="display: inline-block; min-width: 92px; padding: 6px 14px; border-radius: 999px; background: %s; color: #ffffff; font-weight: 600;">%s</div>
-                    <h2 style="margin: 20px 0 12px;">%s</h2>
-                    <p style="margin: 0; line-height: 1.8; color: #4b5563;">%s</p>
+                <!DOCTYPE html>
+                <html lang="zh-CN">
+                <head>
+                  <meta charset="UTF-8" />
+                  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+                  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+                  <title>%s</title>
+                </head>
+                <body style="margin:0; font-family:'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; background: radial-gradient(circle at top, #fff9fb 0%%, #fcfbfd 42%%, #f6f5fb 100%%); padding: 24px; color: #1f2937;">
+                  <div style="max-width: 560px; margin: 0 auto;">
+                    <div style="margin-bottom: 18px;">
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%%" style="border-collapse:collapse;">
+                        <tr>
+                          <td style="width:64px; vertical-align:middle; padding-right:12px;">%s</td>
+                          <td style="vertical-align:middle; text-align:left;">
+                            <div style="font-size:18px; line-height:1.25; color:#5b475c; font-weight:800;">%s</div>
+                            <div style="margin-top:4px; font-size:12px; line-height:1.7; color:#9a8899;">%s</div>
+                          </td>
+                        </tr>
+                      </table>
+                      <div style="margin-top:14px; height:1px; background:linear-gradient(90deg, rgba(227,198,215,0), rgba(227,198,215,0.92) 20%%, rgba(227,198,215,0.92) 80%%, rgba(227,198,215,0));"></div>
+                    </div>
+                    <div style="background:#ffffff; border:1px solid rgba(224,197,212,0.36); border-radius:24px; padding:32px 24px; box-shadow:0 16px 42px rgba(102,83,112,0.08); text-align: center;">
+                      <div style="display: inline-block; min-width: 92px; padding: 7px 16px; border-radius: 999px; background: %s; color: #ffffff; font-size: 13px; font-weight: 700;">%s</div>
+                      <h2 style="margin: 18px 0 10px; font-size: 28px; line-height: 1.25; color: #241b2f;">%s</h2>
+                      <p style="margin: 0; line-height: 1.85; color: #64576b; font-size: 15px;">%s</p>
+                    </div>
                   </div>
                 </body>
                 </html>
                 """.formatted(
+                mailTemplateSupport.safeAttribute(title),
+                brandVisual,
+                siteName,
+                siteDescription,
                 badgeColor,
                 success ? "Success" : "Failed",
                 mailTemplateSupport.safeText(title),

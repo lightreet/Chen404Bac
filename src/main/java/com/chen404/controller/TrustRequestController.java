@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -20,6 +21,8 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.nio.charset.StandardCharsets;
 
 @Tag(name = "受信申请", description = "受信任用户申请与审核")
 @RestController
@@ -81,10 +84,11 @@ public class TrustRequestController {
 
     @Operation(summary = "邮件中直接通过受信申请")
     @GetMapping(value = "/trust-requests/email-approve", produces = MediaType.TEXT_HTML_VALUE)
-    public ResponseEntity<String> approveByEmail(@RequestParam("token") String token) {
+    public ResponseEntity<byte[]> approveByEmail(@RequestParam("token") String token) {
         String html = userTrustRequestService.approveByEmailToken(token);
+        byte[] body = html.getBytes(StandardCharsets.UTF_8);
         return ResponseEntity.ok()
-                .contentType(MediaType.TEXT_HTML)
-                .body(html);
+                .header(HttpHeaders.CONTENT_TYPE, "text/html; charset=UTF-8")
+                .body(body);
     }
 }
