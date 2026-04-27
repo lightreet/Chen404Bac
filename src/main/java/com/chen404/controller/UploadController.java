@@ -2,6 +2,7 @@ package com.chen404.controller;
 
 import com.chen404.domain.Result;
 import com.chen404.domain.entity.SysFile;
+import com.chen404.annotation.RequireAdmin;
 import com.chen404.exception.ForbiddenException;
 import com.chen404.exception.UnauthorizedException;
 import com.chen404.service.SysFileService;
@@ -149,6 +150,29 @@ public class UploadController {
             return Result.success("上传成功", buildUploadData(sysFile));
         } catch (Exception e) {
             log.error("上传文章封面失败", e);
+            return Result.error(500, "上传失败，请稍后重试");
+        }
+    }
+
+    @RequireAdmin
+    @Operation(summary = "上传站点资源图片", description = "站点配置中的 Logo、Favicon 与页面封面图片上传，保持原图不压缩")
+    @PostMapping("/site-asset")
+    public Result<Map<String, String>> uploadSiteAsset(
+            @Parameter(description = "站点资源图片", required = true) @RequestParam("file") MultipartFile file,
+            HttpServletRequest request) {
+
+        Long userId = RequestAttrUtil.requireUserId(request);
+        Result<Map<String, String>> validateResult = validateImage(file, MAX_COVER_SIZE);
+        if (validateResult != null) {
+            return validateResult;
+        }
+
+        try {
+            SysFile sysFile = sysFileService.uploadTempFile(file, userId, SysFile.RefType.SITE_ASSET);
+            log.info("用户 {} 上传站点资源成功: {}", userId, sysFile.getFileUrl());
+            return Result.success("上传成功", buildUploadData(sysFile));
+        } catch (Exception e) {
+            log.error("上传站点资源失败", e);
             return Result.error(500, "上传失败，请稍后重试");
         }
     }

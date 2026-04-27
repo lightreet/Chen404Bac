@@ -64,6 +64,7 @@ public class SysFile implements Serializable {
     public interface RefType {
         String ARTICLE_CONTENT = "ARTICLE_CONTENT";
         String ARTICLE_COVER = "ARTICLE_COVER";
+        String SITE_ASSET = "SITE_ASSET";
         String SITE_HERO = "SITE_HERO";
         String AVATAR = "AVATAR";
         String TRUST_REQUEST_ATTACHMENT = "TRUST_REQUEST_ATTACHMENT";

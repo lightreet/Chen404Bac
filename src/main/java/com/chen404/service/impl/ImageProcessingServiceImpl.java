@@ -58,6 +58,9 @@ public class ImageProcessingServiceImpl implements ImageProcessingService {
         if (!properties.isEnabled()) {
             return Optional.empty();
         }
+        if (SysFile.RefType.SITE_ASSET.equals(refType) || SysFile.RefType.SITE_HERO.equals(refType)) {
+            return Optional.empty();
+        }
         if (!ImageIO.getImageWritersByFormatName(WEBP_FORMAT).hasNext()) {
             return Optional.empty();
         }

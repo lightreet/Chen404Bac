@@ -73,6 +73,7 @@ public class SiteConfigServiceImpl implements SiteConfigService {
         applyPatch(current, patch);
         normalize(current);
         writeToDatabase(current);
+        persistSiteAssets(current);
         persistHeroImages(current);
         return current;
     }
@@ -82,6 +83,7 @@ public class SiteConfigServiceImpl implements SiteConfigService {
         if (rows == null || rows.isEmpty()) {
             SiteConfigDTO config = defaults();
             writeToDatabase(config);
+            persistSiteAssets(config);
             persistHeroImages(config);
             return config;
         }
@@ -167,6 +169,17 @@ public class SiteConfigServiceImpl implements SiteConfigService {
                         .map(String::trim)
                         .toList(),
                 SysFile.RefType.SITE_HERO,
+                SITE_CONFIG_REF_ID
+        );
+    }
+
+    private void persistSiteAssets(SiteConfigDTO config) {
+        sysFileService.convertToPermanent(
+                List.of(config.getSiteLogo(), config.getSiteFavicon()).stream()
+                        .filter(StringUtils::hasText)
+                        .map(String::trim)
+                        .toList(),
+                SysFile.RefType.SITE_ASSET,
                 SITE_CONFIG_REF_ID
         );
     }
