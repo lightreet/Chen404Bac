@@ -10,6 +10,11 @@ public interface TagService extends IService<Tag> {
     List<Tag> getAllTags();
 
     /**
+     * 根据 ID 或 slug 查询标签详情。
+     */
+    Tag getTagByIdOrSlug(String idOrSlug);
+
+    /**
      * 按名称查找标签，不存在则创建后返回（用于文章编辑时用户输入新标签名）
      */
     Tag findOrCreateByName(String name);

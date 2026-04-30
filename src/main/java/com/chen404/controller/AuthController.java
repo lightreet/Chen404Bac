@@ -11,8 +11,11 @@ import com.chen404.domain.dto.SendCodeDTO;
 import com.chen404.domain.dto.TokenRefreshResultDTO;
 import com.chen404.domain.dto.UpdateProfileDTO;
 import com.chen404.domain.entity.User;
+import com.chen404.exception.TooManyRequestsException;
 import com.chen404.service.UserService;
 import com.chen404.service.VerificationCodeService;
+import com.chen404.util.RedisKeys;
+import com.chen404.util.RedisUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -22,6 +25,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -42,6 +46,9 @@ public class AuthController {
     @Autowired
     private com.chen404.util.JwtUtil jwtUtil;
 
+    @Autowired
+    private RedisUtil redisUtil;
+
     @Value("${jwt.expiration}")
     private Long expiration;
 
@@ -50,10 +57,12 @@ public class AuthController {
      */
     @Operation(summary = "用户登录", description = "支持用户名、邮箱、手机号三种登录方式")
     @PostMapping("/login")
-    public Result<LoginResultDTO> login(@Valid @RequestBody LoginDTO loginDTO) {
+    public Result<LoginResultDTO> login(@Valid @RequestBody LoginDTO loginDTO, HttpServletRequest request) {
         try {
-            LoginResultDTO result = userService.login(loginDTO);
+            LoginResultDTO result = userService.login(loginDTO, getClientIp(request));
             return Result.success("登录成功", result);
+        } catch (TooManyRequestsException e) {
+            throw e;
         } catch (RuntimeException e) {
             return Result.error(401, e.getMessage());
         }
@@ -146,6 +155,10 @@ public class AuthController {
             if (!"refresh".equals(type)) {
                 return Result.error(401, "refreshToken无效");
             }
+            String tokenId = decoded.getId();
+            if (tokenId == null || redisUtil.exists(RedisKeys.refreshTokenBlacklist(tokenId))) {
+                return Result.error(401, "refreshToken已失效");
+            }
             Long userId = Long.valueOf(decoded.getSubject());
             String username = decoded.getClaim("username").asString();
 
@@ -154,6 +167,7 @@ public class AuthController {
                 return Result.error(401, "用户不存在或已被禁用");
             }
 
+            revokeRefreshToken(decoded);
             String newToken = jwtUtil.generateToken(userId, username);
             String newRefreshToken = jwtUtil.generateRefreshToken(userId, username);
             int expiresSeconds = expiration == null ? 0 : (int) (expiration / 1000);
@@ -231,11 +245,52 @@ public class AuthController {
     /**
      * 退出登录
      */
-    @Operation(summary = "退出登录", description = "JWT无状态，客户端清除token即可")
+    @Operation(summary = "退出登录", description = "客户端清除 token，并吊销当前 refreshToken")
     @PostMapping("/logout")
-    public Result<Void> logout() {
-        // JWT无状态，客户端清除token即可
-        // 如需服务端控制，可将token加入黑名单（Redis）
+    public Result<Void> logout(@RequestBody(required = false) RefreshTokenDTO dto) {
+        if (dto != null && dto.getRefreshToken() != null && !dto.getRefreshToken().isBlank()) {
+            try {
+                var decoded = jwtUtil.verifyToken(dto.getRefreshToken());
+                if ("refresh".equals(decoded.getClaim("type").asString())) {
+                    revokeRefreshToken(decoded);
+                }
+            } catch (Exception ignored) {
+            }
+        }
         return Result.success("退出成功");
+    }
+
+    private void revokeRefreshToken(com.auth0.jwt.interfaces.DecodedJWT decoded) {
+        if (decoded == null || decoded.getId() == null) {
+            return;
+        }
+        long ttlMillis = jwtUtil.getRemainingMillis(decoded);
+        if (ttlMillis <= 0) {
+            return;
+        }
+        redisUtil.setString(
+                RedisKeys.refreshTokenBlacklist(decoded.getId()),
+                "1",
+                Duration.ofMillis(ttlMillis)
+        );
+    }
+
+    private String getClientIp(HttpServletRequest request) {
+        String ip = request.getHeader("X-Forwarded-For");
+        if (ip != null && !ip.isBlank() && !"unknown".equalsIgnoreCase(ip)) {
+            int commaIndex = ip.indexOf(',');
+            ip = commaIndex >= 0 ? ip.substring(0, commaIndex).trim() : ip.trim();
+        } else {
+            ip = request.getHeader("X-Real-IP");
+            if (ip != null && !ip.isBlank() && !"unknown".equalsIgnoreCase(ip)) {
+                ip = ip.trim();
+            } else {
+                ip = request.getRemoteAddr();
+            }
+        }
+        if ("0:0:0:0:0:0:0:1".equals(ip) || "::1".equals(ip)) {
+            return "127.0.0.1";
+        }
+        return ip;
     }
 }

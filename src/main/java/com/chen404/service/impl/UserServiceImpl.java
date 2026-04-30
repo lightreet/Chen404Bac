@@ -19,6 +19,9 @@ import com.chen404.service.SysFileService;
 import com.chen404.service.UserService;
 import com.chen404.service.support.UserAccessProfileSupport;
 import com.chen404.util.JwtUtil;
+import com.chen404.util.RedisKeys;
+import com.chen404.util.RedisUtil;
+import com.chen404.exception.TooManyRequestsException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -27,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 
@@ -37,6 +41,9 @@ import java.util.Objects;
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService {
 
     private static final String DEFAULT_MEMBER_AVATAR = "/default-member-avatar.svg";
+    private static final int LOGIN_FAIL_LIMIT = 5;
+    private static final Duration LOGIN_FAIL_WINDOW = Duration.ofMinutes(15);
+    private static final Duration LOGIN_BLOCK_TTL = Duration.ofMinutes(15);
 
     @Autowired
     private UserMapper userMapper;
@@ -62,12 +69,16 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Autowired
     private UserAccessProfileSupport userAccessProfileSupport;
 
+    @Autowired
+    private RedisUtil redisUtil;
+
     @Value("${jwt.expiration}")
     private Long expiration;
 
     @Override
-    public LoginResultDTO login(LoginDTO loginDTO) {
+    public LoginResultDTO login(LoginDTO loginDTO, String clientIp) {
         String account = loginDTO.getUsername();
+        assertLoginAllowed(account, clientIp);
         User user = null;
 
         // 支持邮箱、手机号或用户名登录
@@ -80,6 +91,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         }
 
         if (user == null) {
+            recordLoginFailure(account, clientIp);
             throw new RuntimeException("用户不存在或密码错误");
         }
 
@@ -91,13 +103,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         // 校验密码（BCrypt）
         boolean passwordValid = passwordEncoder.matches(loginDTO.getPassword(), user.getPassword());
         if (!passwordValid) {
+            recordLoginFailure(account, clientIp);
             throw new RuntimeException("用户不存在或密码错误");
         }
 
+        clearLoginFailureState(account, clientIp);
+
         // 更新最后登录时间
         user.setLastLoginTime(LocalDateTime.now());
-        // 最后登录 IP：暂无请求上下文时使用占位（可从 request 注入真实 IP）
-        user.setLastLoginIp("0.0.0.0");
+        user.setLastLoginIp(normalizeClientIp(clientIp));
         userMapper.updateById(user);
 
         userAccessProfileSupport.enrichUserProfile(user);
@@ -107,6 +121,49 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         String refreshToken = jwtUtil.generateRefreshToken(user.getId(), user.getUsername());
 
         return LoginResultDTO.of(token, refreshToken, (int) (expiration / 1000), user);
+    }
+
+    private void assertLoginAllowed(String account, String clientIp) {
+        if (redisUtil.exists(RedisKeys.loginBlock(loginScope("account", account)))
+                || redisUtil.exists(RedisKeys.loginBlock(loginScope("ip", normalizeClientIp(clientIp))))) {
+            throw new TooManyRequestsException("登录失败次数过多，请 15 分钟后再试");
+        }
+    }
+
+    private void recordLoginFailure(String account, String clientIp) {
+        raiseLoginFailure(loginScope("account", account));
+        raiseLoginFailure(loginScope("ip", normalizeClientIp(clientIp)));
+    }
+
+    private void raiseLoginFailure(String scope) {
+        String countKey = RedisKeys.loginFailCount(scope);
+        Long count = redisUtil.increment(countKey);
+        if (count != null && count == 1L) {
+            redisUtil.expire(countKey, LOGIN_FAIL_WINDOW);
+        }
+        if (count != null && count >= LOGIN_FAIL_LIMIT) {
+            redisUtil.setString(RedisKeys.loginBlock(scope), "1", LOGIN_BLOCK_TTL);
+        }
+    }
+
+    private void clearLoginFailureState(String account, String clientIp) {
+        String accountScope = loginScope("account", account);
+        String ipScope = loginScope("ip", normalizeClientIp(clientIp));
+        redisUtil.delete(RedisKeys.loginFailCount(accountScope));
+        redisUtil.delete(RedisKeys.loginBlock(accountScope));
+        redisUtil.delete(RedisKeys.loginFailCount(ipScope));
+        redisUtil.delete(RedisKeys.loginBlock(ipScope));
+    }
+
+    private static String loginScope(String type, String value) {
+        return type + ":" + (StringUtils.hasText(value) ? value.trim() : "anonymous");
+    }
+
+    private static String normalizeClientIp(String clientIp) {
+        if (!StringUtils.hasText(clientIp)) {
+            return "unknown";
+        }
+        return clientIp.trim().replace(':', '_');
     }
 
     @Override

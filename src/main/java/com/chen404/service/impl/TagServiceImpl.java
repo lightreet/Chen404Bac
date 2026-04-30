@@ -21,6 +21,22 @@ public class TagServiceImpl extends ServiceImpl<TagMapper, Tag> implements TagSe
     }
 
     @Override
+    public Tag getTagByIdOrSlug(String idOrSlug) {
+        if (!StringUtils.hasText(idOrSlug)) {
+            return null;
+        }
+        String trimmed = idOrSlug.trim();
+        if (trimmed.matches("^\\d+$")) {
+            Tag tag = getById(Long.valueOf(trimmed));
+            if (tag != null && Integer.valueOf(1).equals(tag.getStatus()) && !Integer.valueOf(1).equals(tag.getDeleted())) {
+                return tag;
+            }
+            return null;
+        }
+        return baseMapper.selectBySlug(trimmed);
+    }
+
+    @Override
     public Tag findOrCreateByName(String name) {
         if (!StringUtils.hasText(name)) {
             return null;

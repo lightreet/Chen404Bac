@@ -47,10 +47,13 @@ import java.time.LocalDateTime;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -147,10 +150,8 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         // 已发布按发布时间、草稿按最近编辑时间，统一「最近在前」
         wrapper.last("ORDER BY COALESCE(publish_time, update_time, create_time) DESC, id DESC");
         Page<Article> result = articleMapper.selectPage(pageParam, wrapper);
-        for (Article article : result.getRecords()) {
-            fillArticleRelations(article);
-            accessService.fillArticlePermissions(article, userId);
-        }
+        batchFillArticleRelations(result.getRecords());
+        applyArticlePermissions(result.getRecords(), userId);
         return result;
     }
 
@@ -494,46 +495,45 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
      * 按关联表时间倒序取文章，过滤当前仍可见，内存分页
      */
     private Page<Article> buildArticlePageFromUserRelation(Long userId, int page, int size, boolean likes) {
-        List<Long> articleIdsOrdered;
-        if (likes) {
-            LambdaQueryWrapper<UserArticleLike> w = new LambdaQueryWrapper<UserArticleLike>()
-                    .eq(UserArticleLike::getUserId, userId)
-                    .orderByDesc(UserArticleLike::getCreateTime);
-            articleIdsOrdered = userArticleLikeMapper.selectList(w).stream()
-                    .map(UserArticleLike::getArticleId)
-                    .collect(Collectors.toList());
-        } else {
-            LambdaQueryWrapper<UserArticleFavorite> w = new LambdaQueryWrapper<UserArticleFavorite>()
-                    .eq(UserArticleFavorite::getUserId, userId)
-                    .orderByDesc(UserArticleFavorite::getCreateTime);
-            articleIdsOrdered = userArticleFavoriteMapper.selectList(w).stream()
-                    .map(UserArticleFavorite::getArticleId)
-                    .collect(Collectors.toList());
-        }
+        int current = Math.max(page, 1);
+        int pageSize = Math.max(size, 1);
+        int visibleOffset = (current - 1) * pageSize;
+        int scanBatchSize = Math.max(pageSize * 3, DEFAULT_VISIBLE_SCAN_LIMIT);
 
-        List<Article> visible = new ArrayList<>();
-        for (Long aid : articleIdsOrdered) {
-            Article a = articleMapper.selectById(aid);
-            if (a != null && accessService.canViewArticle(userId, a)) {
-                fillArticleRelations(a);
-                accessService.fillArticlePermissions(a, userId);
-                fillArticleInteractionFlags(a, userId);
-                visible.add(a);
+        User viewer = accessService.getUserOrNull(userId);
+        List<Article> records = new ArrayList<>(pageSize);
+        long visibleTotal = 0L;
+        long relationPage = 1L;
+
+        while (true) {
+            List<Long> articleIdsOrdered = loadUserRelationArticleIds(userId, relationPage, scanBatchSize, likes);
+            if (articleIdsOrdered.isEmpty()) {
+                break;
             }
+
+            for (Article article : loadArticlesByIdsPreservingOrder(articleIdsOrdered)) {
+                if (!canViewPublishedArticle(article, userId, viewer)) {
+                    continue;
+                }
+                if (visibleTotal >= visibleOffset && records.size() < pageSize) {
+                    records.add(article);
+                }
+                visibleTotal++;
+            }
+
+            if (articleIdsOrdered.size() < scanBatchSize) {
+                break;
+            }
+            relationPage++;
         }
 
-        long total = visible.size();
-        int from = (page - 1) * size;
-        List<Article> records;
-        if (from >= visible.size()) {
-            records = List.of();
-        } else {
-            int to = Math.min(from + size, visible.size());
-            records = new ArrayList<>(visible.subList(from, to));
-        }
-        Page<Article> p = new Page<>(page, size, total);
-        p.setRecords(records);
-        return p;
+        batchFillArticleRelations(records);
+        applyArticlePermissions(records, userId);
+        batchFillArticleInteractionFlags(records, userId);
+
+        Page<Article> result = new Page<>(current, pageSize, visibleTotal);
+        result.setRecords(records);
+        return result;
     }
 
     @Override
@@ -570,6 +570,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                 .orderByDesc(Article::getPublishTime);
         w.select(Article::getId, Article::getTitle, Article::getPublishTime);
         List<Article> rows = filterVisibleArticles(articleMapper.selectList(w), requesterId, null, false);
+        Map<Long, List<Tag>> tagsByArticleId = buildTagsByArticleId(rows);
 
         Map<Integer, Map<Integer, List<ArchiveArticleItem>>> byYearMonth = new LinkedHashMap<>();
         for (Article a : rows) {
@@ -581,7 +582,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
             item.setId(a.getId());
             item.setTitle(a.getTitle());
             item.setPublishTime(pt);
-            item.setTags(tagMapper.selectTagsByArticleId(a.getId()));
+            item.setTags(tagsByArticleId.getOrDefault(a.getId(), List.of()));
 
             byYearMonth
                     .computeIfAbsent(year, y -> new LinkedHashMap<>())
@@ -770,19 +771,41 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     private Page<Article> buildVisibleArticlePage(Integer page, Integer size, LambdaQueryWrapper<Article> wrapper, Long requesterId) {
         int current = page == null || page < 1 ? 1 : page;
         int pageSize = size == null || size < 1 ? 10 : size;
+        int visibleOffset = Math.max((current - 1) * pageSize, 0);
+        int scanBatchSize = Math.max(pageSize * 3, DEFAULT_VISIBLE_SCAN_LIMIT);
 
-        List<Article> visibleArticles = filterVisibleArticles(articleMapper.selectList(wrapper), requesterId, null, true);
-        long total = visibleArticles.size();
-        int fromIndex = Math.max((current - 1) * pageSize, 0);
-        List<Article> records;
-        if (fromIndex >= visibleArticles.size()) {
-            records = List.of();
-        } else {
-            int toIndex = Math.min(fromIndex + pageSize, visibleArticles.size());
-            records = new ArrayList<>(visibleArticles.subList(fromIndex, toIndex));
+        User viewer = accessService.getUserOrNull(requesterId);
+        List<Article> records = new ArrayList<>(pageSize);
+        long visibleTotal = 0L;
+        long scanPageNo = 1L;
+
+        while (true) {
+            Page<Article> scanPage = articleMapper.selectPage(new Page<>(scanPageNo, scanBatchSize, false), wrapper);
+            List<Article> candidates = scanPage.getRecords();
+            if (candidates == null || candidates.isEmpty()) {
+                break;
+            }
+
+            for (Article article : candidates) {
+                if (!canViewPublishedArticle(article, requesterId, viewer)) {
+                    continue;
+                }
+                if (visibleTotal >= visibleOffset && records.size() < pageSize) {
+                    records.add(article);
+                }
+                visibleTotal++;
+            }
+
+            if (candidates.size() < scanBatchSize) {
+                break;
+            }
+            scanPageNo++;
         }
 
-        Page<Article> result = new Page<>(current, pageSize, total);
+        batchFillArticleRelations(records);
+        applyArticlePermissions(records, requesterId);
+
+        Page<Article> result = new Page<>(current, pageSize, visibleTotal);
         result.setRecords(records);
         return result;
     }
@@ -798,10 +821,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
             if (!canViewPublishedArticle(article, requesterId, viewer)) {
                 continue;
             }
-            if (fillRelations) {
-                fillArticleRelations(article);
-                accessService.fillArticlePermissions(article, requesterId);
-            } else {
+            if (!fillRelations) {
                 resolveCoverImageFromSysFile(article);
             }
             result.add(article);
@@ -809,7 +829,189 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                 break;
             }
         }
+        if (fillRelations) {
+            batchFillArticleRelations(result);
+            applyArticlePermissions(result, requesterId);
+        }
         return result;
+    }
+
+    private List<Long> loadUserRelationArticleIds(Long userId, long pageNo, int pageSize, boolean likes) {
+        if (likes) {
+            Page<UserArticleLike> relationPage = userArticleLikeMapper.selectPage(
+                    new Page<>(pageNo, pageSize, false),
+                    new LambdaQueryWrapper<UserArticleLike>()
+                            .eq(UserArticleLike::getUserId, userId)
+                            .orderByDesc(UserArticleLike::getCreateTime)
+            );
+            return relationPage.getRecords().stream()
+                    .map(UserArticleLike::getArticleId)
+                    .collect(Collectors.toList());
+        }
+
+        Page<UserArticleFavorite> relationPage = userArticleFavoriteMapper.selectPage(
+                new Page<>(pageNo, pageSize, false),
+                new LambdaQueryWrapper<UserArticleFavorite>()
+                        .eq(UserArticleFavorite::getUserId, userId)
+                        .orderByDesc(UserArticleFavorite::getCreateTime)
+        );
+        return relationPage.getRecords().stream()
+                .map(UserArticleFavorite::getArticleId)
+                .collect(Collectors.toList());
+    }
+
+    private List<Article> loadArticlesByIdsPreservingOrder(List<Long> orderedArticleIds) {
+        if (orderedArticleIds == null || orderedArticleIds.isEmpty()) {
+            return List.of();
+        }
+
+        Map<Long, Article> articleById = articleMapper.selectBatchIds(orderedArticleIds).stream()
+                .collect(Collectors.toMap(Article::getId, article -> article));
+
+        List<Article> orderedArticles = new ArrayList<>(orderedArticleIds.size());
+        for (Long articleId : orderedArticleIds) {
+            Article article = articleById.get(articleId);
+            if (article != null) {
+                orderedArticles.add(article);
+            }
+        }
+        return orderedArticles;
+    }
+
+    private void batchFillArticleRelations(List<Article> articles) {
+        if (articles == null || articles.isEmpty()) {
+            return;
+        }
+
+        Set<Long> authorIds = new HashSet<>();
+        Set<Long> categoryIds = new HashSet<>();
+        Set<Long> coverFileIds = new HashSet<>();
+        for (Article article : articles) {
+            if (article.getAuthorId() != null) {
+                authorIds.add(article.getAuthorId());
+            }
+            if (article.getCategoryId() != null) {
+                categoryIds.add(article.getCategoryId());
+            }
+            if (article.getCoverFileId() != null) {
+                coverFileIds.add(article.getCoverFileId());
+            }
+        }
+
+        Map<Long, User> authorById = userMapper.selectBatchIds(authorIds).stream()
+                .collect(Collectors.toMap(User::getId, author -> {
+                    author.setPassword(null);
+                    if (author.getTrustLevel() == null) {
+                        author.setTrustLevel(UserTrustLevelEnum.NORMAL.getLevel());
+                    }
+                    userAccessProfileSupport.applyDisplayAvatar(author);
+                    return author;
+                }));
+
+        Map<Long, Category> categoryById = categoryMapper.selectBatchIds(categoryIds).stream()
+                .collect(Collectors.toMap(Category::getId, category -> category));
+
+        Map<Long, List<Tag>> tagsByArticleId = buildTagsByArticleId(articles);
+
+        Map<Long, String> coverUrlByFileId = sysFileService.listByIds(coverFileIds).stream()
+                .filter(file -> file != null && file.getId() != null && StringUtils.hasText(file.getFileUrl()))
+                .collect(Collectors.toMap(SysFile::getId, SysFile::getFileUrl));
+
+        for (Article article : articles) {
+            article.setAuthor(authorById.get(article.getAuthorId()));
+            article.setCategory(categoryById.get(article.getCategoryId()));
+            article.setTags(tagsByArticleId.getOrDefault(article.getId(), List.of()));
+            if (article.getCoverFileId() != null) {
+                String coverUrl = coverUrlByFileId.get(article.getCoverFileId());
+                if (StringUtils.hasText(coverUrl)) {
+                    article.setCoverImage(coverUrl);
+                }
+            }
+        }
+    }
+
+    private Map<Long, List<Tag>> buildTagsByArticleId(List<Article> articles) {
+        if (articles == null || articles.isEmpty()) {
+            return Map.of();
+        }
+
+        List<Long> articleIds = articles.stream()
+                .map(Article::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        if (articleIds.isEmpty()) {
+            return Map.of();
+        }
+
+        List<ArticleTag> articleTags = articleTagMapper.selectList(new LambdaQueryWrapper<ArticleTag>()
+                .in(ArticleTag::getArticleId, articleIds));
+        if (articleTags.isEmpty()) {
+            return Map.of();
+        }
+
+        Set<Long> tagIds = articleTags.stream()
+                .map(ArticleTag::getTagId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, Tag> tagById = tagMapper.selectBatchIds(tagIds).stream()
+                .filter(tag -> tag != null
+                        && Objects.equals(tag.getStatus(), 1)
+                        && !Objects.equals(tag.getDeleted(), 1))
+                .collect(Collectors.toMap(Tag::getId, tag -> tag));
+
+        Map<Long, List<Tag>> tagsByArticleId = new HashMap<>();
+        for (ArticleTag articleTag : articleTags) {
+            Tag tag = tagById.get(articleTag.getTagId());
+            if (tag == null) {
+                continue;
+            }
+            tagsByArticleId
+                    .computeIfAbsent(articleTag.getArticleId(), key -> new ArrayList<>())
+                    .add(tag);
+        }
+        return tagsByArticleId;
+    }
+
+    private void applyArticlePermissions(List<Article> articles, Long requesterId) {
+        if (articles == null || articles.isEmpty()) {
+            return;
+        }
+        for (Article article : articles) {
+            accessService.fillArticlePermissions(article, requesterId);
+        }
+    }
+
+    private void batchFillArticleInteractionFlags(List<Article> articles, Long requesterId) {
+        if (articles == null || articles.isEmpty() || requesterId == null) {
+            return;
+        }
+
+        List<Long> articleIds = articles.stream()
+                .map(Article::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        if (articleIds.isEmpty()) {
+            return;
+        }
+
+        Set<Long> likedArticleIds = userArticleLikeMapper.selectList(new LambdaQueryWrapper<UserArticleLike>()
+                        .eq(UserArticleLike::getUserId, requesterId)
+                        .in(UserArticleLike::getArticleId, articleIds))
+                .stream()
+                .map(UserArticleLike::getArticleId)
+                .collect(Collectors.toSet());
+
+        Set<Long> favoritedArticleIds = userArticleFavoriteMapper.selectList(new LambdaQueryWrapper<UserArticleFavorite>()
+                        .eq(UserArticleFavorite::getUserId, requesterId)
+                        .in(UserArticleFavorite::getArticleId, articleIds))
+                .stream()
+                .map(UserArticleFavorite::getArticleId)
+                .collect(Collectors.toSet());
+
+        for (Article article : articles) {
+            article.setLiked(likedArticleIds.contains(article.getId()));
+            article.setFavorited(favoritedArticleIds.contains(article.getId()));
+        }
     }
 
     private boolean canViewPublishedArticle(Article article, Long requesterId, User viewer) {

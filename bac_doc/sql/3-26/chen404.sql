@@ -70,6 +70,22 @@ CREATE TABLE `article_tag`  (
 ) ENGINE = InnoDB AUTO_INCREMENT = 5 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '文章标签关联表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
+-- Table structure for article_file_ref
+-- ----------------------------
+DROP TABLE IF EXISTS `article_file_ref`;
+CREATE TABLE `article_file_ref`  (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `article_id` bigint NOT NULL COMMENT '文章ID',
+  `file_id` bigint NOT NULL COMMENT 'sys_file.id',
+  `ref_kind` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'CONTENT-正文图片 COVER-封面',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_article_file_kind`(`article_id` ASC, `file_id` ASC, `ref_kind` ASC) USING BTREE,
+  INDEX `idx_article_file_article_id`(`article_id` ASC) USING BTREE,
+  INDEX `idx_article_file_file_id`(`file_id` ASC) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '文章资源与 sys_file 关联表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
 -- Table structure for banner
 -- ----------------------------
 DROP TABLE IF EXISTS `banner`;

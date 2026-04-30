@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.Date;
+import java.util.UUID;
 
 /**
  * JWT工具类
@@ -50,6 +51,7 @@ public class JwtUtil {
         return JWT.create()
                 .withSubject(String.valueOf(userId))
                 .withClaim("username", username)
+                .withJWTId(UUID.randomUUID().toString())
                 .withClaim("type", "refresh")
                 .withIssuedAt(now)
                 .withExpiresAt(expireDate)
@@ -86,5 +88,12 @@ public class JwtUtil {
     public boolean isTokenExpired(String token) {
         DecodedJWT jwt = JWT.decode(token);
         return jwt.getExpiresAt().before(new Date());
+    }
+
+    public long getRemainingMillis(DecodedJWT decodedJWT) {
+        if (decodedJWT == null || decodedJWT.getExpiresAt() == null) {
+            return 0L;
+        }
+        return Math.max(decodedJWT.getExpiresAt().getTime() - System.currentTimeMillis(), 0L);
     }
 }

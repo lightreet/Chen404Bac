@@ -40,6 +40,8 @@ import java.util.Base64;
 public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> implements CommentService {
 
     private static final long COMMENT_LIKE_COOLDOWN_MS = 60_000L;
+    private static final Duration COMMENT_CREATE_USER_COOLDOWN = Duration.ofSeconds(10);
+    private static final Duration COMMENT_CREATE_GUEST_COOLDOWN = Duration.ofSeconds(30);
 
     @Autowired
     private CommentMapper commentMapper;
@@ -209,10 +211,11 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
 
         User user = userAccessProfileSupport.loadUserProfile(userId);
         boolean isAdmin = user != null && accessService.isAdmin(user);
+        assertCommentCreateAllowed(user, ip);
 
         Comment comment = new Comment();
         comment.setArticleId(dto.getArticleId());
-        comment.setContent(dto.getContent());
+        comment.setContent(dto.getContent().trim());
         comment.setIp(ip);
         comment.setUserAgent(userAgent);
 
@@ -230,9 +233,9 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
             if (!StringUtils.hasText(dto.getAuthorName())) {
                 throw new IllegalArgumentException("游客评论必须提供昵称");
             }
-            comment.setAuthorName(dto.getAuthorName());
+            comment.setAuthorName(dto.getAuthorName().trim());
             comment.setAuthorEmail(dto.getAuthorEmail());
-            comment.setAuthorWebsite(dto.getAuthorWebsite());
+            comment.setAuthorWebsite(normalizeExternalUrl(dto.getAuthorWebsite()));
         }
 
         long parentId = dto.getParentId() != null ? dto.getParentId() : 0L;
@@ -258,8 +261,7 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
         }
 
         comment.setIsAdmin(isAdmin ? 1 : 0);
-        // 当前阶段不走审核流，评论默认直接发布
-        comment.setStatus(Comment.Status.APPROVED);
+        comment.setStatus(isAdmin || user != null ? Comment.Status.APPROVED : Comment.Status.PENDING);
         comment.setLikeCount(0);
         comment.setDeleted(0);
 
@@ -288,6 +290,26 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
 
         fillSingleCommentAvatarFromSysFile(comment);
         return comment;
+    }
+
+    private void assertCommentCreateAllowed(User user, String ip) {
+        String scope = user != null ? "user:" + user.getId() : "guest:" + normalizeClientIp(ip);
+        Duration ttl = user != null ? COMMENT_CREATE_USER_COOLDOWN : COMMENT_CREATE_GUEST_COOLDOWN;
+        String key = RedisKeys.commentCreateThrottle(scope);
+        if (!redisUtil.setIfAbsent(key, "1", ttl)) {
+            throw new TooManyRequestsException("发言太频繁了，请稍后再试");
+        }
+    }
+
+    private String normalizeExternalUrl(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return null;
+        }
+        String value = raw.trim();
+        if (!value.matches("^https?://.+")) {
+            throw new IllegalArgumentException("个人网站仅支持 http/https 链接");
+        }
+        return value;
     }
 
     @Override
@@ -432,6 +454,13 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
         } catch (Exception e) {
             throw new RuntimeException("hash 计算失败");
         }
+    }
+
+    private static String normalizeClientIp(String ip) {
+        if (!StringUtils.hasText(ip)) {
+            return "anonymous";
+        }
+        return ip.trim().replace(':', '_');
     }
 
     private void syncArticleCommentCount(Long articleId) {

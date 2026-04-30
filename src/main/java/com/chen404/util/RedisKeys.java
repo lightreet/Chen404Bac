@@ -32,6 +32,22 @@ public final class RedisKeys {
         return PREFIX + "comment:like:throttle:" + commentId + ":" + sanitizeIp(clientIp);
     }
 
+    public static String commentCreateThrottle(String scope) {
+        return PREFIX + "comment:create:throttle:" + scope;
+    }
+
+    public static String loginFailCount(String scope) {
+        return PREFIX + "auth:login:fail:count:" + scope;
+    }
+
+    public static String loginBlock(String scope) {
+        return PREFIX + "auth:login:block:" + scope;
+    }
+
+    public static String refreshTokenBlacklist(String tokenId) {
+        return PREFIX + "auth:refresh:blacklist:" + tokenId;
+    }
+
     private static String sanitizeIp(String ip) {
         if (ip == null || ip.isBlank()) {
             return "anonymous";
@@ -39,4 +55,3 @@ public final class RedisKeys {
         return ip.trim().replace(':', '_');
     }
 }
-

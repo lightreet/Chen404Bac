@@ -18,7 +18,7 @@ public interface UserService extends IService<User> {
     /**
      * 用户登录
      */
-    LoginResultDTO login(LoginDTO loginDTO);
+    LoginResultDTO login(LoginDTO loginDTO, String clientIp);
 
     /**
      * 用户注册
