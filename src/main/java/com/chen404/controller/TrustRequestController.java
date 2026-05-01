@@ -6,12 +6,13 @@ import com.chen404.domain.Result;
 import com.chen404.domain.dto.CreateTrustRequestDTO;
 import com.chen404.domain.dto.ReviewTrustRequestDTO;
 import com.chen404.domain.dto.TrustRequestVO;
+import com.chen404.security.AuthenticatedUser;
 import com.chen404.service.UserTrustRequestService;
-import com.chen404.util.RequestAttrUtil;
+import com.chen404.util.CurrentUserUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -36,15 +37,17 @@ public class TrustRequestController {
 
     @Operation(summary = "提交受信申请")
     @PostMapping("/trust-requests")
-    public Result<TrustRequestVO> createRequest(@RequestBody CreateTrustRequestDTO dto, HttpServletRequest request) {
-        Long userId = RequestAttrUtil.requireUserId(request);
+    public Result<TrustRequestVO> createRequest(
+            @RequestBody CreateTrustRequestDTO dto,
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
         return Result.success("申请已提交", userTrustRequestService.createRequest(userId, dto));
     }
 
     @Operation(summary = "获取我最近的一条受信申请")
     @GetMapping("/trust-requests/me/latest")
-    public Result<TrustRequestVO> getMyLatestRequest(HttpServletRequest request) {
-        Long userId = RequestAttrUtil.requireUserId(request);
+    public Result<TrustRequestVO> getMyLatestRequest(@AuthenticationPrincipal AuthenticatedUser currentUser) {
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
         return Result.success(userTrustRequestService.getLatestForUser(userId));
     }
 
@@ -65,8 +68,8 @@ public class TrustRequestController {
     public Result<TrustRequestVO> approveRequest(
             @PathVariable Long id,
             @RequestBody(required = false) ReviewTrustRequestDTO dto,
-            HttpServletRequest request) {
-        Long adminId = RequestAttrUtil.requireUserId(request);
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        Long adminId = CurrentUserUtil.requireUserId(currentUser);
         String reviewNote = dto == null ? null : dto.getReviewNote();
         return Result.success("审核通过", userTrustRequestService.approveRequest(id, adminId, reviewNote));
     }
@@ -77,8 +80,8 @@ public class TrustRequestController {
     public Result<TrustRequestVO> rejectRequest(
             @PathVariable Long id,
             @RequestBody ReviewTrustRequestDTO dto,
-            HttpServletRequest request) {
-        Long adminId = RequestAttrUtil.requireUserId(request);
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        Long adminId = CurrentUserUtil.requireUserId(currentUser);
         return Result.success("已拒绝申请", userTrustRequestService.rejectRequest(id, adminId, dto == null ? null : dto.getReviewNote()));
     }
 

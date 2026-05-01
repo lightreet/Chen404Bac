@@ -1,30 +1,30 @@
 package com.chen404.config;
 
+import com.chen404.filter.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 public class SecurityConfig {
 
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final PublicApiRequestMatcher publicApiRequestMatcher;
 
-    @Bean
-    public UserDetailsService userDetailsService() {
-        return new InMemoryUserDetailsManager();
+    public SecurityConfig(
+            JwtAuthenticationFilter jwtAuthenticationFilter,
+            PublicApiRequestMatcher publicApiRequestMatcher) {
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.publicApiRequestMatcher = publicApiRequestMatcher;
     }
 
     @Bean
@@ -34,37 +34,13 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers(
-                                "/swagger-ui.html",
-                                "/swagger-ui/**",
-                                "/v3/api-docs/**",
-                                "/swagger-resources/**",
-                                "/webjars/**"
-                        ).permitAll()
-                        .requestMatchers(
-                                "/auth/**",
-                                "/home/**",
-                                "/site/**",
-                                "/trust-requests/**",
-                                "/articles",
-                                "/articles/**",
-                                "/categories",
-                                "/categories/**",
-                                "/emoji",
-                                "/emoji/**",
-                                "/tags",
-                                "/tags/**",
-                                "/archives",
-                                "/archives/**",
-                                "/comments/**"
-                        ).permitAll()
-                        .requestMatchers("/", "/uploads/**").permitAll()
-                        .requestMatchers("/upload/**", "/admin/**", "/api/admin/**").permitAll()
+                        .requestMatchers(publicApiRequestMatcher).permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
-                .httpBasic(AbstractHttpConfigurer::disable);
+                .httpBasic(AbstractHttpConfigurer::disable)
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }

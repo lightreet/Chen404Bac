@@ -1,6 +1,5 @@
 package com.chen404.config;
 
-import com.chen404.interceptor.JwtInterceptor;
 import com.chen404.interceptor.LoggingInterceptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,9 +15,6 @@ import java.util.Arrays;
  */
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
-
-    @Autowired
-    private JwtInterceptor jwtInterceptor;
 
     @Autowired
     private LoggingInterceptor loggingInterceptor;
@@ -58,21 +54,5 @@ public class WebConfig implements WebMvcConfigurer {
                         "/favicon.ico"
                 )
                 .order(1);
-
-        // JWT认证拦截器
-        registry.addInterceptor(jwtInterceptor)
-                // 拦截所有请求
-                .addPathPatterns("/**")
-                // 排除静态资源、Swagger和公开接口
-                .excludePathPatterns(
-                        "/uploads/**",
-                        "/static/**",
-                        "/swagger-ui.html",
-                        "/swagger-ui/**",
-                        "/v3/api-docs/**",
-                        "/swagger-resources/**",
-                        "/webjars/**"
-                )
-                .order(2);
     }
 }

@@ -1,18 +1,20 @@
 package com.chen404.controller;
 
-import com.chen404.domain.Result;
-import com.chen404.domain.entity.SysFile;
 import com.chen404.annotation.RequireAdmin;
+import com.chen404.domain.Result;
+import com.chen404.domain.dto.UploadFileVO;
+import com.chen404.domain.entity.SysFile;
 import com.chen404.exception.ForbiddenException;
 import com.chen404.exception.UnauthorizedException;
+import com.chen404.security.AuthenticatedUser;
 import com.chen404.service.SysFileService;
-import com.chen404.util.RequestAttrUtil;
+import com.chen404.util.CurrentUserUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -22,9 +24,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
@@ -58,18 +58,19 @@ public class UploadController {
     private static final long MAX_IMAGE_SIZE = 12 * 1024 * 1024;
     private static final long MAX_COVER_SIZE = 12 * 1024 * 1024;
     private static final long MAX_TRUST_ATTACHMENT_SIZE = 15 * 1024 * 1024;
+    private static final int MAX_BATCH_IMAGE_COUNT = 10;
 
     @Autowired
     private SysFileService sysFileService;
 
     @Operation(summary = "上传文章图片", description = "编辑器内单张图片上传")
     @PostMapping("/image")
-    public Result<Map<String, String>> uploadImage(
+    public Result<UploadFileVO> uploadImage(
             @Parameter(description = "图片文件", required = true) @RequestParam("file") MultipartFile file,
-            HttpServletRequest request) {
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
 
-        Long userId = RequestAttrUtil.requireUserId(request);
-        Result<Map<String, String>> validateResult = validateImage(file, MAX_IMAGE_SIZE);
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
+        Result<UploadFileVO> validateResult = validateImage(file, MAX_IMAGE_SIZE);
         if (validateResult != null) {
             return validateResult;
         }
@@ -86,33 +87,33 @@ public class UploadController {
 
     @Operation(summary = "批量上传文章图片", description = "一次最多上传 10 张图片")
     @PostMapping("/images")
-    public Result<List<Map<String, String>>> uploadImages(
+    public Result<List<UploadFileVO>> uploadImages(
             @Parameter(description = "图片文件列表", required = true) @RequestParam("files") MultipartFile[] files,
-            HttpServletRequest request) {
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
 
-        Long userId = RequestAttrUtil.requireUserId(request);
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
 
         if (files == null || files.length == 0) {
             return Result.error(400, "请选择要上传的文件");
         }
-        if (files.length > 10) {
+        if (files.length > MAX_BATCH_IMAGE_COUNT) {
             return Result.error(400, "一次最多上传 10 张图片");
         }
 
-        List<CompletableFuture<Map<String, String>>> futures = Arrays.stream(files)
+        List<CompletableFuture<UploadFileVO>> futures = Arrays.stream(files)
                 .map(file -> CompletableFuture.supplyAsync(() -> uploadSingleImage(file, userId)))
                 .toList();
 
-        List<Map<String, String>> results = new ArrayList<>();
+        List<UploadFileVO> results = new ArrayList<>();
         List<String> errors = new ArrayList<>();
 
         for (int i = 0; i < files.length; i++) {
             try {
-                Map<String, String> result = futures.get(i).get();
-                if (result.containsKey("url")) {
+                UploadFileVO result = futures.get(i).get();
+                if (result.getUrl() != null) {
                     results.add(result);
                 } else {
-                    errors.add(files[i].getOriginalFilename() + ": " + result.get("error"));
+                    errors.add(files[i].getOriginalFilename() + ": " + result.getName());
                 }
             } catch (Exception e) {
                 log.error("批量上传等待结果失败，文件名: {}", files[i].getOriginalFilename(), e);
@@ -134,12 +135,12 @@ public class UploadController {
 
     @Operation(summary = "上传文章封面", description = "文章封面上传")
     @PostMapping("/cover")
-    public Result<Map<String, String>> uploadCover(
+    public Result<UploadFileVO> uploadCover(
             @Parameter(description = "封面图片", required = true) @RequestParam("file") MultipartFile file,
-            HttpServletRequest request) {
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
 
-        Long userId = RequestAttrUtil.requireUserId(request);
-        Result<Map<String, String>> validateResult = validateImage(file, MAX_COVER_SIZE);
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
+        Result<UploadFileVO> validateResult = validateImage(file, MAX_COVER_SIZE);
         if (validateResult != null) {
             return validateResult;
         }
@@ -157,12 +158,12 @@ public class UploadController {
     @RequireAdmin
     @Operation(summary = "上传站点资源图片", description = "站点配置中的 Logo、Favicon 与页面封面图片上传，保持原图不压缩")
     @PostMapping("/site-asset")
-    public Result<Map<String, String>> uploadSiteAsset(
+    public Result<UploadFileVO> uploadSiteAsset(
             @Parameter(description = "站点资源图片", required = true) @RequestParam("file") MultipartFile file,
-            HttpServletRequest request) {
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
 
-        Long userId = RequestAttrUtil.requireUserId(request);
-        Result<Map<String, String>> validateResult = validateImage(file, MAX_COVER_SIZE);
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
+        Result<UploadFileVO> validateResult = validateImage(file, MAX_COVER_SIZE);
         if (validateResult != null) {
             return validateResult;
         }
@@ -179,12 +180,12 @@ public class UploadController {
 
     @Operation(summary = "上传头像", description = "用户头像上传")
     @PostMapping("/avatar")
-    public Result<Map<String, String>> uploadAvatar(
+    public Result<UploadFileVO> uploadAvatar(
             @Parameter(description = "头像图片", required = true) @RequestParam("file") MultipartFile file,
-            HttpServletRequest request) {
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
 
-        Long userId = RequestAttrUtil.requireUserId(request);
-        Result<Map<String, String>> validateResult = validateImage(file, MAX_IMAGE_SIZE);
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
+        Result<UploadFileVO> validateResult = validateImage(file, MAX_IMAGE_SIZE);
         if (validateResult != null) {
             return validateResult;
         }
@@ -201,12 +202,12 @@ public class UploadController {
 
     @Operation(summary = "上传受信申请附件", description = "用于受信任用户申请的附件上传")
     @PostMapping("/trust-attachment")
-    public Result<Map<String, String>> uploadTrustAttachment(
+    public Result<UploadFileVO> uploadTrustAttachment(
             @Parameter(description = "申请附件", required = true) @RequestParam("file") MultipartFile file,
-            HttpServletRequest request) {
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
 
-        Long userId = RequestAttrUtil.requireUserId(request);
-        Result<Map<String, String>> validateResult = validateFile(
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
+        Result<UploadFileVO> validateResult = validateFile(
                 file,
                 MAX_TRUST_ATTACHMENT_SIZE,
                 ALLOWED_TRUST_ATTACHMENT_TYPES,
@@ -230,9 +231,9 @@ public class UploadController {
     @DeleteMapping("/file")
     public Result<Void> deleteFile(
             @Parameter(description = "文件 URL", required = true) @RequestParam("url") String url,
-            HttpServletRequest request) {
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
 
-        Long userId = RequestAttrUtil.requireUserId(request);
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
 
         try {
             boolean success = sysFileService.deleteByUrl(url, userId);
@@ -249,25 +250,22 @@ public class UploadController {
         }
     }
 
-    private Map<String, String> uploadSingleImage(MultipartFile file, Long userId) {
-        Map<String, String> result = new HashMap<>();
-        Result<Map<String, String>> validateResult = validateImage(file, MAX_IMAGE_SIZE);
+    private UploadFileVO uploadSingleImage(MultipartFile file, Long userId) {
+        Result<UploadFileVO> validateResult = validateImage(file, MAX_IMAGE_SIZE);
         if (validateResult != null) {
-            result.put("error", validateResult.getMessage());
-            return result;
+            return buildErrorUploadResult(validateResult.getMessage());
         }
 
         try {
             SysFile sysFile = sysFileService.uploadTempFile(file, userId, SysFile.RefType.ARTICLE_CONTENT);
-            result.putAll(buildUploadData(sysFile));
+            return buildUploadData(sysFile);
         } catch (Exception e) {
             log.error("批量上传单文件失败，用户: {}, 文件名: {}", userId, file.getOriginalFilename(), e);
-            result.put("error", "上传失败");
+            return buildErrorUploadResult("上传失败");
         }
-        return result;
     }
 
-    private Result<Map<String, String>> validateImage(MultipartFile file, long maxSize) {
+    private Result<UploadFileVO> validateImage(MultipartFile file, long maxSize) {
         return validateFile(
                 file,
                 maxSize,
@@ -276,7 +274,7 @@ public class UploadController {
         );
     }
 
-    private Result<Map<String, String>> validateFile(
+    private Result<UploadFileVO> validateFile(
             MultipartFile file,
             long maxSize,
             Set<String> allowedContentTypes,
@@ -295,11 +293,17 @@ public class UploadController {
         return null;
     }
 
-    private Map<String, String> buildUploadData(SysFile sysFile) {
-        Map<String, String> data = new HashMap<>();
-        data.put("url", sysFile.getFileUrl());
-        data.put("name", sysFile.getFileName());
-        data.put("size", String.valueOf(sysFile.getFileSize()));
+    private UploadFileVO buildUploadData(SysFile sysFile) {
+        UploadFileVO data = new UploadFileVO();
+        data.setUrl(sysFile.getFileUrl());
+        data.setName(sysFile.getFileName());
+        data.setSize(String.valueOf(sysFile.getFileSize()));
         return data;
+    }
+
+    private UploadFileVO buildErrorUploadResult(String message) {
+        UploadFileVO result = new UploadFileVO();
+        result.setName(message);
+        return result;
     }
 }

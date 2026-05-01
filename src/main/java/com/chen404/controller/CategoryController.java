@@ -2,14 +2,18 @@ package com.chen404.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.chen404.annotation.RequireAdmin;
+import com.chen404.converter.CategoryConverter;
 import com.chen404.domain.PageResult;
 import com.chen404.domain.Result;
+import com.chen404.domain.dto.CategoryVO;
+import com.chen404.domain.dto.CreateCategoryCommand;
+import com.chen404.domain.dto.UpdateCategoryCommand;
 import com.chen404.domain.entity.Category;
 import com.chen404.service.CategoryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -30,51 +34,59 @@ import java.util.List;
 @RestController
 public class CategoryController {
 
-    @Autowired
-    private CategoryService categoryService;
+    private final CategoryService categoryService;
+    private final CategoryConverter categoryConverter;
+
+    public CategoryController(CategoryService categoryService, CategoryConverter categoryConverter) {
+        this.categoryService = categoryService;
+        this.categoryConverter = categoryConverter;
+    }
 
     @Operation(summary = "获取所有分类")
     @GetMapping("/categories")
-    public Result<List<Category>> getCategories(
+    public Result<List<CategoryVO>> getCategories(
             @RequestParam(defaultValue = "false") boolean withArticleCount) {
         List<Category> categories = categoryService.getAllCategories();
         if (categories == null) {
             categories = Collections.emptyList();
         }
-        return Result.success(categories);
+        return Result.success(categoryConverter.toVOList(categories));
     }
 
     @Operation(summary = "获取分类详情")
     @GetMapping("/categories/{id}")
-    public Result<Category> getCategoryById(
+    public Result<CategoryVO> getCategoryById(
             @Parameter(description = "分类ID", required = true) @PathVariable Long id) {
         Category category = categoryService.getById(id);
         if (category == null) {
             return Result.error(404, "分类不存在");
         }
-        return Result.success(category);
+        return Result.success(categoryConverter.toVO(category));
     }
 
     @RequireAdmin
     @Operation(summary = "分页获取分类", description = "仅管理员")
     @GetMapping("/admin/categories")
-    public Result<PageResult<Category>> pageCategories(
+    public Result<PageResult<CategoryVO>> pageCategories(
             @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "10") Integer size) {
         Page<Category> result = categoryService.getAdminCategoryPage(page, size);
-        return Result.success(PageResult.of(result));
+        return Result.success(new PageResult<>(
+                categoryConverter.toVOList(result.getRecords()),
+                result.getTotal(),
+                result.getCurrent(),
+                result.getSize()
+        ));
     }
 
     @RequireAdmin
     @Operation(summary = "创建分类", description = "仅管理员")
     @PostMapping("/categories")
-    public Result<Category> createCategory(@RequestBody Category category) {
-        if (category.getName() == null || category.getName().trim().isEmpty()) {
-            return Result.error(400, "分类名称不能为空");
-        }
+    public Result<CategoryVO> createCategory(@Valid @RequestBody CreateCategoryCommand command) {
+        Category category = categoryConverter.toEntity(command);
         try {
             Category created = categoryService.createCategory(category);
-            return Result.success("创建成功", created);
+            return Result.success("创建成功", categoryConverter.toVO(created));
         } catch (RuntimeException e) {
             return Result.error(400, e.getMessage());
         }
@@ -84,10 +96,11 @@ public class CategoryController {
     @Operation(summary = "更新分类", description = "仅管理员")
     @Parameter(name = "id", description = "分类ID", required = true)
     @PutMapping("/categories/{id}")
-    public Result<Category> updateCategory(@PathVariable Long id, @RequestBody Category category) {
+    public Result<CategoryVO> updateCategory(@PathVariable Long id, @Valid @RequestBody UpdateCategoryCommand command) {
+        Category category = categoryConverter.toEntity(command);
         try {
             Category updated = categoryService.updateCategory(id, category);
-            return Result.success("更新成功", updated);
+            return Result.success("更新成功", categoryConverter.toVO(updated));
         } catch (RuntimeException e) {
             return Result.error(400, e.getMessage());
         }

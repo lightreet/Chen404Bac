@@ -1,6 +1,7 @@
 package com.chen404.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.chen404.converter.UserConverter;
 import com.chen404.domain.enums.UserTrustLevelEnum;
 import com.chen404.domain.dto.LoginDTO;
 import com.chen404.domain.dto.LoginResultDTO;
@@ -72,6 +73,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Autowired
     private RedisUtil redisUtil;
 
+    @Autowired
+    private UserConverter userConverter;
+
     @Value("${jwt.expiration}")
     private Long expiration;
 
@@ -120,7 +124,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         String token = jwtUtil.generateToken(user.getId(), user.getUsername());
         String refreshToken = jwtUtil.generateRefreshToken(user.getId(), user.getUsername());
 
-        return LoginResultDTO.of(token, refreshToken, (int) (expiration / 1000), user);
+        return LoginResultDTO.of(token, refreshToken, (int) (expiration / 1000), userConverter.toVO(user));
     }
 
     private void assertLoginAllowed(String account, String clientIp) {

@@ -1,6 +1,8 @@
 package com.chen404.service.impl;
 
+import com.chen404.converter.EmojiConverter;
 import com.chen404.domain.dto.EmojiImportManifestDTO;
+import com.chen404.domain.dto.EmojiImportResultDTO;
 import com.chen404.domain.dto.EmojiItemUpsertDTO;
 import com.chen404.domain.dto.EmojiPackUpsertDTO;
 import com.chen404.domain.entity.EmojiItem;
@@ -19,7 +21,11 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.security.MessageDigest;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -36,6 +42,9 @@ public class EmojiImportServiceImpl implements EmojiImportService {
     @Autowired
     private EmojiService emojiService;
 
+    @Autowired
+    private EmojiConverter emojiConverter;
+
     @Override
     public EmojiImportManifestDTO parseManifest(byte[] manifestBytes) {
         try {
@@ -47,7 +56,7 @@ public class EmojiImportServiceImpl implements EmojiImportService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Map<String, Object> importZip(MultipartFile zipFile) {
+    public EmojiImportResultDTO importZip(MultipartFile zipFile) {
         if (zipFile == null || zipFile.isEmpty()) {
             throw new IllegalArgumentException("zip 文件不能为空");
         }
@@ -58,7 +67,9 @@ public class EmojiImportServiceImpl implements EmojiImportService {
         try (InputStream is = zipFile.getInputStream(); ZipInputStream zis = new ZipInputStream(is)) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
-                if (entry.isDirectory()) continue;
+                if (entry.isDirectory()) {
+                    continue;
+                }
                 String name = entry.getName();
                 byte[] bytes = zis.readAllBytes();
                 if ("manifest.json".equalsIgnoreCase(name)) {
@@ -80,7 +91,6 @@ public class EmojiImportServiceImpl implements EmojiImportService {
             throw new IllegalArgumentException("manifest.pack.packCode 不能为空");
         }
 
-        // upsert pack
         EmojiPackUpsertDTO packDto = new EmojiPackUpsertDTO();
         packDto.setPackCode(manifest.getPack().getPackCode());
         packDto.setName(manifest.getPack().getName());
@@ -109,12 +119,7 @@ public class EmojiImportServiceImpl implements EmojiImportService {
             }
         }
 
-        Map<String, Object> result = new HashMap<>();
-        result.put("packCode", manifest.getPack().getPackCode());
-        result.put("successCount", success);
-        result.put("failCount", failed);
-        result.put("errors", errors);
-        return result;
+        return emojiConverter.toImportResultDTO(manifest.getPack().getPackCode(), success, failed, errors);
     }
 
     private EmojiItemUpsertDTO toItemUpsertDto(String packCode, EmojiImportManifestDTO.Item item, Map<String, byte[]> fileBytes) {
@@ -146,7 +151,6 @@ public class EmojiImportServiceImpl implements EmojiImportService {
             return dto;
         }
 
-        // image
         if (!StringUtils.hasText(item.getFile())) {
             throw new IllegalArgumentException("type=image 时 item.file 不能为空");
         }
@@ -158,7 +162,6 @@ public class EmojiImportServiceImpl implements EmojiImportService {
         String ext = guessExt(item.getFile());
         String sha1 = sha1Hex(bytes);
         String objectName = "emoji/packs/" + packCode + "/items/" + item.getShortcode() + "/" + sha1 + "." + ext;
-
         String assetUrl = fileStorageService.uploadFile(new ByteArrayInputStream(bytes), objectName, guessContentType(ext), bytes.length);
 
         dto.setType(EmojiItem.Type.IMAGE);
@@ -170,7 +173,9 @@ public class EmojiImportServiceImpl implements EmojiImportService {
     private static String guessExt(String fileName) {
         String lower = fileName.toLowerCase(Locale.ROOT);
         int idx = lower.lastIndexOf('.');
-        if (idx < 0) return "webp";
+        if (idx < 0) {
+            return "webp";
+        }
         return lower.substring(idx + 1);
     }
 
@@ -199,4 +204,3 @@ public class EmojiImportServiceImpl implements EmojiImportService {
         }
     }
 }
-

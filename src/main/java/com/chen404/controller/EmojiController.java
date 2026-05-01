@@ -2,10 +2,14 @@ package com.chen404.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.chen404.annotation.RequireAdmin;
+import com.chen404.converter.EmojiConverter;
 import com.chen404.domain.PageResult;
 import com.chen404.domain.Result;
+import com.chen404.domain.dto.EmojiImportResultDTO;
 import com.chen404.domain.dto.EmojiItemUpsertDTO;
+import com.chen404.domain.dto.EmojiItemVO;
 import com.chen404.domain.dto.EmojiPackUpsertDTO;
+import com.chen404.domain.dto.EmojiPackVO;
 import com.chen404.domain.entity.EmojiItem;
 import com.chen404.domain.entity.EmojiPack;
 import com.chen404.service.EmojiImportService;
@@ -28,9 +32,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.Map;
 
-@Tag(name = "表情包", description = "表情包公共下发接口与管理员维护接口")
+@Tag(name = "表情包管理", description = "表情包公共下发接口与管理员维护接口")
 @RestController
 public class EmojiController {
 
@@ -40,15 +43,18 @@ public class EmojiController {
     @Autowired
     private EmojiImportService emojiImportService;
 
+    @Autowired
+    private EmojiConverter emojiConverter;
+
     @Operation(summary = "获取表情包列表（启用）")
     @GetMapping("/emoji/packs")
-    public Result<List<EmojiPack>> packs() {
-        return Result.success(emojiService.listEnabledPacks());
+    public Result<List<EmojiPackVO>> packs() {
+        return Result.success(emojiConverter.toPackVOList(emojiService.listEnabledPacks()));
     }
 
-    @Operation(summary = "获取表情项列表（启用）", description = "可按 scene/packCode 过滤；scene 当前仅用于前端策略，不做后端过滤")
+    @Operation(summary = "获取表情项列表（启用）", description = "可按 scene/packCode 过滤，scene 当前仅用于前端策略，不做后端过滤")
     @GetMapping("/emoji/items")
-    public Result<List<EmojiItem>> items(
+    public Result<List<EmojiItemVO>> items(
             @RequestParam(required = false) String scene,
             @RequestParam(required = false) String packCode,
             HttpServletRequest request,
@@ -64,25 +70,30 @@ public class EmojiController {
         }
 
         response.setHeader("ETag", etag);
-        return Result.success(list);
+        return Result.success(emojiConverter.toItemVOList(list));
     }
 
     @RequireAdmin
     @Operation(summary = "分页查询表情包", description = "仅管理员")
     @GetMapping("/admin/emoji/packs")
-    public Result<PageResult<EmojiPack>> listPacks(
+    public Result<PageResult<EmojiPackVO>> listPacks(
             @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "10") Integer size
     ) {
         Page<EmojiPack> result = emojiService.pageAllPacks(page, size);
-        return Result.success(PageResult.of(result));
+        return Result.success(new PageResult<>(
+                emojiConverter.toPackVOList(result.getRecords()),
+                result.getTotal(),
+                result.getCurrent(),
+                result.getSize()
+        ));
     }
 
     @RequireAdmin
     @Operation(summary = "新增或更新表情包", description = "仅管理员")
     @PostMapping("/admin/emoji/packs")
-    public Result<EmojiPack> upsertPack(@RequestBody EmojiPackUpsertDTO dto) {
-        return Result.success(emojiService.upsertPack(dto));
+    public Result<EmojiPackVO> upsertPack(@RequestBody EmojiPackUpsertDTO dto) {
+        return Result.success(emojiConverter.toPackVO(emojiService.upsertPack(dto)));
     }
 
     @RequireAdmin
@@ -96,20 +107,25 @@ public class EmojiController {
     @RequireAdmin
     @Operation(summary = "分页查询表情项", description = "仅管理员")
     @GetMapping("/admin/emoji/items")
-    public Result<PageResult<EmojiItem>> listItems(
+    public Result<PageResult<EmojiItemVO>> listItems(
             @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "12") Integer size,
             @RequestParam(required = false) String packCode
     ) {
         Page<EmojiItem> result = emojiService.pageAllItems(page, size, packCode);
-        return Result.success(PageResult.of(result));
+        return Result.success(new PageResult<>(
+                emojiConverter.toItemVOList(result.getRecords()),
+                result.getTotal(),
+                result.getCurrent(),
+                result.getSize()
+        ));
     }
 
     @RequireAdmin
     @Operation(summary = "新增或更新表情项", description = "仅管理员")
     @PostMapping("/admin/emoji/items")
-    public Result<EmojiItem> upsertItem(@RequestBody EmojiItemUpsertDTO dto) {
-        return Result.success(emojiService.upsertItem(dto));
+    public Result<EmojiItemVO> upsertItem(@RequestBody EmojiItemUpsertDTO dto) {
+        return Result.success(emojiConverter.toItemVO(emojiService.upsertItem(dto)));
     }
 
     @RequireAdmin
@@ -123,7 +139,7 @@ public class EmojiController {
     @RequireAdmin
     @Operation(summary = "导入表情包 ZIP", description = "仅管理员")
     @PostMapping("/admin/emoji/import")
-    public Result<Map<String, Object>> importZip(@RequestParam("file") MultipartFile file) {
+    public Result<EmojiImportResultDTO> importZip(@RequestParam("file") MultipartFile file) {
         return Result.success(emojiImportService.importZip(file));
     }
 

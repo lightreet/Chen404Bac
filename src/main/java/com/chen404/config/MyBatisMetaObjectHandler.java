@@ -1,17 +1,14 @@
 package com.chen404.config;
 
 import com.baomidou.mybatisplus.core.handlers.MetaObjectHandler;
-import com.chen404.util.RequestAttrUtil;
-import jakarta.servlet.http.HttpServletRequest;
+import com.chen404.util.CurrentUserUtil;
 import org.apache.ibatis.reflection.MetaObject;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 
 /**
- * MyBatis Plus 自动填充 create_time、update_time
+ * MyBatis Plus ???? create_time?update_time ??????
  */
 @Component
 public class MyBatisMetaObjectHandler implements MetaObjectHandler {
@@ -51,7 +48,7 @@ public class MyBatisMetaObjectHandler implements MetaObjectHandler {
             return;
         }
 
-        Long currentUserId = resolveCurrentUserId();
+        Long currentUserId = CurrentUserUtil.getCurrentUserId();
         if (currentUserId == null) {
             return;
         }
@@ -62,14 +59,5 @@ public class MyBatisMetaObjectHandler implements MetaObjectHandler {
         } else if (setterType == String.class) {
             setFieldValByName(fieldName, String.valueOf(currentUserId), metaObject);
         }
-    }
-
-    private Long resolveCurrentUserId() {
-        var attributes = RequestContextHolder.getRequestAttributes();
-        if (!(attributes instanceof ServletRequestAttributes servletRequestAttributes)) {
-            return null;
-        }
-        HttpServletRequest request = servletRequestAttributes.getRequest();
-        return request == null ? null : RequestAttrUtil.getUserId(request);
     }
 }
