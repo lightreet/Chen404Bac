@@ -17,7 +17,6 @@ import com.chen404.exception.TooManyRequestsException;
 import com.chen404.security.AuthenticatedUser;
 import com.chen404.service.UserService;
 import com.chen404.service.VerificationCodeService;
-import com.chen404.util.RedisKeys;
 import com.chen404.util.CurrentUserUtil;
 import com.chen404.util.RedisKeys;
 import com.chen404.util.RedisUtil;
@@ -33,7 +32,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -126,12 +124,18 @@ public class AuthController {
         }
     }
 
-    @Operation(summary = "获取当前用户信息", description = "需要登录，从 JWT Token 中解析用户信息")
-    @RequestMapping(value = "/info", method = {RequestMethod.GET, RequestMethod.POST})
+    @Operation(summary = "获取当前用户信息", description = "需要登录，从 JWT Token 中解析当前用户资料")
+    @GetMapping("/info")
     public Result<UserProfileVO> getUserInfo(@AuthenticationPrincipal AuthenticatedUser currentUser) {
         Long userId = CurrentUserUtil.requireUserId(currentUser);
         User user = userService.getCurrentUser(userId);
         return Result.success(userConverter.toVO(user));
+    }
+
+    @Operation(hidden = true)
+    @PostMapping("/info")
+    public Result<UserProfileVO> getUserInfoLegacyPost(@AuthenticationPrincipal AuthenticatedUser currentUser) {
+        return getUserInfo(currentUser);
     }
 
     @Operation(summary = "刷新 Token", description = "使用 refreshToken 换取新的访问 token，无需重新登录")
@@ -197,7 +201,7 @@ public class AuthController {
         }
     }
 
-    @Operation(summary = "检查用户名是否存在")
+    @Operation(summary = "检查用户名是否存在", description = "用于注册时校验用户名是否已被占用")
     @Parameter(name = "username", description = "用户名", required = true)
     @GetMapping("/check-username")
     public Result<Boolean> checkUsername(@RequestParam String username) {
@@ -205,7 +209,7 @@ public class AuthController {
         return Result.success(exists);
     }
 
-    @Operation(summary = "检查邮箱是否存在")
+    @Operation(summary = "检查邮箱是否存在", description = "用于注册时校验邮箱地址是否已被注册")
     @Parameter(name = "email", description = "邮箱地址", required = true)
     @GetMapping("/check-email")
     public Result<Boolean> checkEmail(@RequestParam String email) {
@@ -213,7 +217,7 @@ public class AuthController {
         return Result.success(exists);
     }
 
-    @Operation(summary = "检查手机号是否存在")
+    @Operation(summary = "检查手机号是否存在", description = "用于注册时校验手机号是否已被注册")
     @Parameter(name = "phone", description = "手机号", required = true)
     @GetMapping("/check-phone")
     public Result<Boolean> checkPhone(@RequestParam String phone) {

@@ -6,21 +6,22 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 /**
- * 更新个人资料请求 DTO
+ * ???????? DTO?
  */
-@Schema(description = "更新个人资料请求参数")
+@Schema(description = "??????????")
 @Data
 public class UpdateProfileDTO {
 
-    @Schema(description = "昵称", required = true, example = "小陈同学")
-    @NotBlank(message = "昵称不能为空")
-    @Size(min = 2, max = 20, message = "昵称长度 2-20 位")
+    @Schema(description = "??", required = true, example = "????")
+    @NotBlank(message = "??????")
+    @Size(min = 2, max = 20, message = "???? 2-20 ?")
     private String nickname;
 
-    @Schema(description = "头像 URL", required = true)
-    @NotBlank(message = "头像不能为空")
+    @Schema(description = "?? URL", required = true)
+    @NotBlank(message = "??????")
     private String avatar;
 
-    @Size(max = 160, message = "个人介绍长度不能超过 160 个字符")
+    @Schema(description = "??????? 160 ???", example = "????????????????")
+    @Size(max = 160, message = "?????????? 160 ???")
     private String bio;
 }

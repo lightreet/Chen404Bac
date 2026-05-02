@@ -1,6 +1,7 @@
 package com.chen404.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Hidden;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -21,9 +22,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ControllerSwaggerAnnotationTest {
 
     private static final List<Class<?>> CONTROLLERS_REQUIRING_SWAGGER = List.of(
+            AuthController.class,
             HomeController.class,
             SiteController.class,
-            TagController.class
+            TagController.class,
+            TrustRequestController.class,
+            UploadController.class
     );
 
     @Test
@@ -43,8 +47,14 @@ class ControllerSwaggerAnnotationTest {
                 if (!isRequestHandler(method)) {
                     continue;
                 }
+                if (method.isAnnotationPresent(Hidden.class)) {
+                    continue;
+                }
                 Operation operation = method.getAnnotation(Operation.class);
                 assertNotNull(operation, () -> controllerClass.getSimpleName() + "." + method.getName() + " 缺少 @Operation 注解");
+                if (operation.hidden()) {
+                    continue;
+                }
                 assertFalse(operation.summary().isBlank(), () -> controllerClass.getSimpleName() + "." + method.getName() + " 的 summary 不能为空");
                 assertTrue(operation.description() == null || !operation.description().isBlank(),
                         () -> controllerClass.getSimpleName() + "." + method.getName() + " 的 description 不能为空字符串");

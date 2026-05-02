@@ -2,6 +2,8 @@ package com.chen404.controller;
 
 import com.chen404.annotation.RequireAdmin;
 import com.chen404.domain.Result;
+import com.chen404.domain.dto.MultiFileUploadDTO;
+import com.chen404.domain.dto.SingleFileUploadDTO;
 import com.chen404.domain.dto.UploadFileVO;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.exception.ForbiddenException;
@@ -15,6 +17,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -29,6 +33,9 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 @Slf4j
+/**
+ * 统一处理文章、头像、站点资源与受信申请附件上传。
+ */
 @Tag(name = "文件上传", description = "图片上传、封面上传、头像上传等接口")
 @RestController
 @RequestMapping("/upload")
@@ -64,12 +71,13 @@ public class UploadController {
     private SysFileService sysFileService;
 
     @Operation(summary = "上传文章图片", description = "编辑器内单张图片上传")
-    @PostMapping("/image")
+    @PostMapping(value = "/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Result<UploadFileVO> uploadImage(
-            @Parameter(description = "图片文件", required = true) @RequestParam("file") MultipartFile file,
+            @ModelAttribute SingleFileUploadDTO form,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
 
         Long userId = CurrentUserUtil.requireUserId(currentUser);
+        MultipartFile file = form.getFile();
         Result<UploadFileVO> validateResult = validateImage(file, MAX_IMAGE_SIZE);
         if (validateResult != null) {
             return validateResult;
@@ -86,12 +94,13 @@ public class UploadController {
     }
 
     @Operation(summary = "批量上传文章图片", description = "一次最多上传 10 张图片")
-    @PostMapping("/images")
+    @PostMapping(value = "/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Result<List<UploadFileVO>> uploadImages(
-            @Parameter(description = "图片文件列表", required = true) @RequestParam("files") MultipartFile[] files,
+            @ModelAttribute MultiFileUploadDTO form,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
 
         Long userId = CurrentUserUtil.requireUserId(currentUser);
+        MultipartFile[] files = form.getFiles();
 
         if (files == null || files.length == 0) {
             return Result.error(400, "请选择要上传的文件");
@@ -134,12 +143,13 @@ public class UploadController {
     }
 
     @Operation(summary = "上传文章封面", description = "文章封面上传")
-    @PostMapping("/cover")
+    @PostMapping(value = "/cover", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Result<UploadFileVO> uploadCover(
-            @Parameter(description = "封面图片", required = true) @RequestParam("file") MultipartFile file,
+            @ModelAttribute SingleFileUploadDTO form,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
 
         Long userId = CurrentUserUtil.requireUserId(currentUser);
+        MultipartFile file = form.getFile();
         Result<UploadFileVO> validateResult = validateImage(file, MAX_COVER_SIZE);
         if (validateResult != null) {
             return validateResult;
@@ -157,12 +167,13 @@ public class UploadController {
 
     @RequireAdmin
     @Operation(summary = "上传站点资源图片", description = "站点配置中的 Logo、Favicon 与页面封面图片上传，保持原图不压缩")
-    @PostMapping("/site-asset")
+    @PostMapping(value = "/site-asset", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Result<UploadFileVO> uploadSiteAsset(
-            @Parameter(description = "站点资源图片", required = true) @RequestParam("file") MultipartFile file,
+            @ModelAttribute SingleFileUploadDTO form,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
 
         Long userId = CurrentUserUtil.requireUserId(currentUser);
+        MultipartFile file = form.getFile();
         Result<UploadFileVO> validateResult = validateImage(file, MAX_COVER_SIZE);
         if (validateResult != null) {
             return validateResult;
@@ -179,12 +190,13 @@ public class UploadController {
     }
 
     @Operation(summary = "上传头像", description = "用户头像上传")
-    @PostMapping("/avatar")
+    @PostMapping(value = "/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Result<UploadFileVO> uploadAvatar(
-            @Parameter(description = "头像图片", required = true) @RequestParam("file") MultipartFile file,
+            @ModelAttribute SingleFileUploadDTO form,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
 
         Long userId = CurrentUserUtil.requireUserId(currentUser);
+        MultipartFile file = form.getFile();
         Result<UploadFileVO> validateResult = validateImage(file, MAX_IMAGE_SIZE);
         if (validateResult != null) {
             return validateResult;
@@ -201,12 +213,13 @@ public class UploadController {
     }
 
     @Operation(summary = "上传受信申请附件", description = "用于受信任用户申请的附件上传")
-    @PostMapping("/trust-attachment")
+    @PostMapping(value = "/trust-attachment", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Result<UploadFileVO> uploadTrustAttachment(
-            @Parameter(description = "申请附件", required = true) @RequestParam("file") MultipartFile file,
+            @ModelAttribute SingleFileUploadDTO form,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
 
         Long userId = CurrentUserUtil.requireUserId(currentUser);
+        MultipartFile file = form.getFile();
         Result<UploadFileVO> validateResult = validateFile(
                 file,
                 MAX_TRUST_ATTACHMENT_SIZE,

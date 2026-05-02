@@ -57,4 +57,10 @@ public class RegisterDTO {
     @Schema(description = "验证码", required = true, example = "123456")
     @NotBlank(message = "验证码不能为空")
     private String code;
+
+    /**
+     * 注册类型（兼容前端当前 email / phone 双入口模型）
+     */
+    @Schema(description = "注册类型：email-邮箱注册 phone-手机号注册", example = "email")
+    private String registerType;
 }

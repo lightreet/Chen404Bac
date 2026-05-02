@@ -10,7 +10,7 @@
 | Web / 校验 | spring-boot-starter-web、spring-boot-starter-validation |
 | 数据访问 | MyBatis Plus 3.5.5、MySQL 8、HikariCP |
 | 缓存 | Redis |
-| 安全 | Spring Security、JWT、自定义拦截与管理员切面 |
+| 安全 | Spring Security、JWT、方法级权限校验 |
 | 存储 | MinIO |
 | 其他 | Lombok、Hutool、FastJSON2、Spring Mail、SpringDoc |
 
@@ -112,8 +112,8 @@ Chen404Bac/
 
 - 统一响应：`{ code, message, data }`
 - 鉴权方式：`Authorization: Bearer <token>`
-- 登录后接口通过 JWT 与请求属性读取 `userId`
-- 管理能力主要依赖 `@RequireAdmin`、访问控制服务与前端角色约束共同完成
+- 登录后接口统一通过 `JwtAuthenticationFilter` 写入 `SecurityContext`，控制器优先使用 `@AuthenticationPrincipal` / `CurrentUserUtil` 获取当前用户
+- 管理能力主要依赖 `@RequireAdmin`（基于 Spring Security 方法级授权）与访问控制服务共同完成
 
 ## 当前实现边界
 
@@ -132,7 +132,7 @@ Chen404Bac/
 
 ## 文档
 
-- [架构设计](bac_doc/architecture/architecture.md)
-- [数据库脚本](bac_doc/sql/3-26/chen404.sql)
-- [权限设计](bac_doc/architecture/permission-design.md)
-- [权限升级脚本](bac_doc/sql/3-20/permission-phase1-upgrade.sql)
+- [架构设计](doc/architecture/architecture.md)
+- [数据库脚本](doc/sql/3-26/chen404.sql)
+- [权限设计](doc/architecture/permission-design.md)
+- [权限升级脚本](doc/sql/3-20/permission-phase1-upgrade.sql)

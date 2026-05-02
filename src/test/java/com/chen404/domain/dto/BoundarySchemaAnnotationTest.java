@@ -19,6 +19,9 @@ class BoundarySchemaAnnotationTest {
                 UpdateArticleCommand.class,
                 CreateCategoryCommand.class,
                 UpdateCategoryCommand.class,
+                ChangePasswordDTO.class,
+                CreateTrustRequestDTO.class,
+                SingleFileUploadDTO.class,
                 ArticleListItemVO.class,
                 ArticleDetailVO.class,
                 CategoryVO.class,
@@ -31,12 +34,16 @@ class BoundarySchemaAnnotationTest {
                 RecentCommentVO.class,
                 ArticleNeighborsVO.class,
                 FavoriteToggleResultDTO.class,
+                ReviewTrustRequestDTO.class,
                 SendCodeResultDTO.class,
                 SiteStatsVO.class,
                 HomeDataVO.class,
+                MultiFileUploadDTO.class,
                 UploadFileVO.class,
+                UpdateProfileDTO.class,
                 UserProfileVO.class,
-                LoginResultDTO.class
+                LoginResultDTO.class,
+                RegisterDTO.class
         );
 
         for (Class<?> clazz : classes) {

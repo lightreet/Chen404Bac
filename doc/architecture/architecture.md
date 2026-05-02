@@ -12,8 +12,8 @@ Vue Frontend
 
 除标准的 Controller -> Service -> Mapper 主链路外，当前项目还包含：
 
-- `JwtInterceptor`：解析请求中的 JWT
-- `@RequireAdmin` + `RequireAdminAspect`：管理员权限校验
+- `JwtAuthenticationFilter`：解析请求头中的 JWT，并把当前用户写入 `SecurityContext`
+- `@RequireAdmin`：基于 Spring Security 方法级授权的管理员校验
 - `TraceIdFilter`、`RequestBodyCacheFilter`：请求链路辅助
 - `LoggingInterceptor`、`SqlPerformanceInterceptor`：日志与性能观测
 - `AccessService`：统一文章可见性、评论权限、文件删除权限判断
@@ -96,8 +96,9 @@ Login
   -> issue access token + refresh token
   -> frontend stores token
   -> request carries Authorization header
-  -> JwtInterceptor resolves userId
-  -> controller/service uses RequestAttrUtil.requireUserId()
+  -> JwtAuthenticationFilter resolves current user and authorities
+  -> SecurityContext stores AuthenticatedUser
+  -> controller prefers @AuthenticationPrincipal / CurrentUserUtil
 ```
 
 当前还补充了两层安全约束：

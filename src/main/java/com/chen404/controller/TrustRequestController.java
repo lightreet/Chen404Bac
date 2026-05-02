@@ -10,11 +10,12 @@ import com.chen404.security.AuthenticatedUser;
 import com.chen404.service.UserTrustRequestService;
 import com.chen404.util.CurrentUserUtil;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.http.MediaType;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,7 +26,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.nio.charset.StandardCharsets;
 
-@Tag(name = "受信申请", description = "受信任用户申请与审核")
+/**
+ * ??????????????????
+ */
+@Tag(name = "????", description = "??????????")
 @RestController
 public class TrustRequestController {
 
@@ -35,16 +39,16 @@ public class TrustRequestController {
         this.userTrustRequestService = userTrustRequestService;
     }
 
-    @Operation(summary = "提交受信申请")
+    @Operation(summary = "??????", description = "???????????????? URL ??")
     @PostMapping("/trust-requests")
     public Result<TrustRequestVO> createRequest(
             @RequestBody CreateTrustRequestDTO dto,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
         Long userId = CurrentUserUtil.requireUserId(currentUser);
-        return Result.success("申请已提交", userTrustRequestService.createRequest(userId, dto));
+        return Result.success("?????", userTrustRequestService.createRequest(userId, dto));
     }
 
-    @Operation(summary = "获取我最近的一条受信申请")
+    @Operation(summary = "????????????", description = "??????????????????????????????")
     @GetMapping("/trust-requests/me/latest")
     public Result<TrustRequestVO> getMyLatestRequest(@AuthenticationPrincipal AuthenticatedUser currentUser) {
         Long userId = CurrentUserUtil.requireUserId(currentUser);
@@ -52,42 +56,50 @@ public class TrustRequestController {
     }
 
     @RequireAdmin
-    @Operation(summary = "管理员分页查询受信申请")
+    @Operation(summary = "???????????", description = "???????????????????")
     @GetMapping("/admin/trust-requests")
     public Result<PageResult<TrustRequestVO>> getAdminRequests(
+            @Parameter(description = "???? 1 ??", example = "1")
             @RequestParam(defaultValue = "1") Integer page,
+            @Parameter(description = "????", example = "10")
             @RequestParam(defaultValue = "10") Integer size,
+            @Parameter(description = "?????0-??? 1-??? 2-???", example = "0")
             @RequestParam(required = false) Integer status,
+            @Parameter(description = "????????????????????", example = "chen")
             @RequestParam(required = false) String keyword) {
         return Result.success(userTrustRequestService.getAdminRequests(page, size, status, keyword));
     }
 
     @RequireAdmin
-    @Operation(summary = "管理员通过受信申请")
+    @Operation(summary = "?????????", description = "???????????????")
     @PutMapping("/admin/trust-requests/{id}/approve")
     public Result<TrustRequestVO> approveRequest(
+            @Parameter(description = "???? ID", required = true, example = "1001")
             @PathVariable Long id,
             @RequestBody(required = false) ReviewTrustRequestDTO dto,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
         Long adminId = CurrentUserUtil.requireUserId(currentUser);
         String reviewNote = dto == null ? null : dto.getReviewNote();
-        return Result.success("审核通过", userTrustRequestService.approveRequest(id, adminId, reviewNote));
+        return Result.success("????", userTrustRequestService.approveRequest(id, adminId, reviewNote));
     }
 
     @RequireAdmin
-    @Operation(summary = "管理员拒绝受信申请")
+    @Operation(summary = "?????????", description = "????????????????")
     @PutMapping("/admin/trust-requests/{id}/reject")
     public Result<TrustRequestVO> rejectRequest(
+            @Parameter(description = "???? ID", required = true, example = "1001")
             @PathVariable Long id,
             @RequestBody ReviewTrustRequestDTO dto,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
         Long adminId = CurrentUserUtil.requireUserId(currentUser);
-        return Result.success("已拒绝申请", userTrustRequestService.rejectRequest(id, adminId, dto == null ? null : dto.getReviewNote()));
+        return Result.success("?????", userTrustRequestService.rejectRequest(id, adminId, dto == null ? null : dto.getReviewNote()));
     }
 
-    @Operation(summary = "邮件中直接通过受信申请")
+    @Operation(summary = "???????????", description = "??????????????????? HTML ???")
     @GetMapping(value = "/trust-requests/email-approve", produces = MediaType.TEXT_HTML_VALUE)
-    public ResponseEntity<byte[]> approveByEmail(@RequestParam("token") String token) {
+    public ResponseEntity<byte[]> approveByEmail(
+            @Parameter(description = "??????", required = true)
+            @RequestParam("token") String token) {
         String html = userTrustRequestService.approveByEmailToken(token);
         byte[] body = html.getBytes(StandardCharsets.UTF_8);
         return ResponseEntity.ok()
