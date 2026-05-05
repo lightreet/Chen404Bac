@@ -26,11 +26,26 @@
 
 ### 1. 初始化数据库
 
-```bash
-mysql -u root -p < bac_doc/sql/3-26/chen404.sql
+先创建一个空的 `chen404` 数据库：
+
+```sql
+CREATE DATABASE chen404 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
-当前主初始化脚本已经包含 `article_file_ref` 等主链路所需表结构，不需要再额外执行独立补丁脚本才能完成首次启动。
+当前仓库已经通过 Flyway 接管数据库基线与后续核心 schema 迁移。应用启动时会自动执行 `src/main/resources/db/migration/` 下的迁移脚本：
+
+- `V2026032601__baseline_schema.sql`：当前主基线
+- `V2026032801__interaction_like_tables.sql`：点赞 / 收藏 / 评论点赞关系表
+- `V2026040201__article_cover_file_id.sql`：文章封面文件引用
+- `V2026042501__create_user_trust_request.sql`：受信申请主表
+- `V2026042502__drop_trust_request_attachment_urls.sql`：受信申请附件字段收敛
+
+兼容策略：
+
+- 新环境：空库启动时自动执行全部 Flyway 迁移
+- 已手工初始化的旧环境：通过 `baseline-on-migrate` 自动写入当前基线版本，避免重复执行历史迁移
+
+说明：`doc/sql/` 下的历史 SQL 仍保留为归档参考。其中 `seed-permission-min.sql` 这类环境相关数据脚本仍按需手工执行，不纳入自动 schema 迁移。
 
 ### 2. 配置说明
 
@@ -89,7 +104,8 @@ Chen404Bac/
 │  ├─ util/
 │  └─ Chen404Application.java
 ├─ src/main/resources/
-├─ bac_doc/
+│  └─ db/migration/
+├─ doc/
 │  ├─ architecture/
 │  └─ sql/
 └─ pom.xml
@@ -135,4 +151,4 @@ Chen404Bac/
 - [架构设计](doc/architecture/architecture.md)
 - [数据库脚本](doc/sql/3-26/chen404.sql)
 - [权限设计](doc/architecture/permission-design.md)
-- [权限升级脚本](doc/sql/3-20/permission-phase1-upgrade.sql)
+- [最小权限种子脚本](doc/sql/3-27/seed-permission-min.sql)

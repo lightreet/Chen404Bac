@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS `user_trust_request` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '申请ID',
+  `user_id` bigint NOT NULL COMMENT '申请人用户ID',
+  `status` tinyint NOT NULL DEFAULT 0 COMMENT '0-待处理 1-已通过 2-已拒绝',
+  `reason` varchar(1000) NOT NULL COMMENT '申请理由',
+  `attachment_urls` text DEFAULT NULL COMMENT '附件URL列表(JSON)',
+  `contact_email` varchar(100) DEFAULT NULL COMMENT '申请时邮箱快照',
+  `review_note` varchar(500) DEFAULT NULL COMMENT '审核说明',
+  `reviewed_by` bigint DEFAULT NULL COMMENT '审核管理员ID',
+  `reviewed_at` datetime DEFAULT NULL COMMENT '审核时间',
+  `approve_token_hash` varchar(64) DEFAULT NULL COMMENT '邮件审批token哈希',
+  `approve_token_expire_at` datetime DEFAULT NULL COMMENT '邮件审批token过期时间',
+  `approve_token_used_at` datetime DEFAULT NULL COMMENT '邮件审批token使用时间',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `deleted` tinyint NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  PRIMARY KEY (`id`) USING BTREE,
+  KEY `idx_user_status` (`user_id`, `status`) USING BTREE,
+  KEY `idx_status_create_time` (`status`, `create_time`) USING BTREE,
+  KEY `idx_approve_token_hash` (`approve_token_hash`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='受信任用户申请表';

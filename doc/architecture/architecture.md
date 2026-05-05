@@ -17,6 +17,7 @@ Vue Frontend
 - `TraceIdFilter`、`RequestBodyCacheFilter`：请求链路辅助
 - `LoggingInterceptor`、`SqlPerformanceInterceptor`：日志与性能观测
 - `AccessService`：统一文章可见性、评论权限、文件删除权限判断
+- `Flyway`：统一接管数据库基线与后续 schema 迁移
 
 ## 2. 技术栈
 
@@ -30,7 +31,7 @@ Vue Frontend
 | 鉴权 | Spring Security + JWT |
 | 对象存储 | MinIO |
 | 邮件 | Spring Mail |
-| 文档 | SpringDoc OpenAPI |
+| 文档 | SpringDoc OpenAPI、Flyway 迁移 |
 
 ## 3. 当前目录结构
 
@@ -52,6 +53,11 @@ src/main/java/com/chen404/
 ├─ service/impl/
 ├─ util/
 └─ Chen404Application.java
+
+src/main/resources/
+├─ db/migration/
+├─ mapper/
+└─ mail/
 ```
 
 需要特别注意：
@@ -119,6 +125,7 @@ Login
 - `mybatis-plus`
 - `jwt`
 - `logging`
+- `spring.flyway`
 
 文档不重复记录真实密钥，只保留结构层说明。
 
