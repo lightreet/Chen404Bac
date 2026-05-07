@@ -71,3 +71,15 @@ logging:
     org.springframework.web: warn
     org.springframework.jdbc: warn
     com.baomidou.mybatisplus: warn
+
+llm:
+  enabled: ${LLM_ENABLED:false}
+  api-key: ${LLM_API_KEY:}
+  base-url: ${LLM_BASE_URL:https://api.openai.com/v1}
+  model: ${LLM_MODEL:gpt-5.4-mini}
+  api-style: ${LLM_API_STYLE:chat-completions}
+  chat-completions-path: ${LLM_CHAT_COMPLETIONS_PATH:/chat/completions}
+  responses-path: ${LLM_RESPONSES_PATH:/responses}
+  temperature: ${LLM_TEMPERATURE:0.2}
+  max-tokens: ${LLM_MAX_TOKENS:512}
+  timeout-seconds: ${LLM_TIMEOUT_SECONDS:30}
