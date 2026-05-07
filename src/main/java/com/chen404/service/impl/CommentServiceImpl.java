@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.chen404.domain.dto.CommentLikeResult;
 import com.chen404.domain.dto.CreateCommentDTO;
+import com.chen404.domain.dto.SiteConfigDTO;
 import com.chen404.domain.entity.Article;
 import com.chen404.domain.entity.Comment;
 import com.chen404.domain.entity.CommentGuestToken;
@@ -19,6 +20,7 @@ import com.chen404.mapper.CommentGuestTokenMapper;
 import com.chen404.mapper.UserCommentLikeMapper;
 import com.chen404.service.AccessService;
 import com.chen404.service.CommentService;
+import com.chen404.service.SiteConfigService;
 import com.chen404.service.SysFileService;
 import com.chen404.service.support.UserAccessProfileSupport;
 import com.chen404.util.RedisKeys;
@@ -66,6 +68,9 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
 
     @Autowired
     private SysFileService sysFileService;
+
+    @Autowired
+    private SiteConfigService siteConfigService;
 
     @Override
     public Page<Comment> getCommentsByArticleId(Long articleId, int page, int size, Long requesterId) {
@@ -210,6 +215,10 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
         }
 
         User user = userAccessProfileSupport.loadUserProfile(userId);
+        SiteConfigDTO siteConfig = siteConfigService.getConfig();
+        if (user == null && !Boolean.TRUE.equals(siteConfig.getCommentGuest())) {
+            throw new ForbiddenException("当前站点暂不支持游客评论");
+        }
         boolean isAdmin = user != null && accessService.isAdmin(user);
         assertCommentCreateAllowed(user, ip);
 
@@ -261,7 +270,9 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
         }
 
         comment.setIsAdmin(isAdmin ? 1 : 0);
-        comment.setStatus(isAdmin || user != null ? Comment.Status.APPROVED : Comment.Status.PENDING);
+        comment.setStatus(isAdmin || !Boolean.TRUE.equals(siteConfig.getCommentAudit())
+                ? Comment.Status.APPROVED
+                : Comment.Status.PENDING);
         comment.setLikeCount(0);
         comment.setDeleted(0);
 

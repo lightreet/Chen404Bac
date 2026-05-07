@@ -22,5 +22,7 @@ public class SiteConfigDTO {
     private String copyright;
     private String seoKeywords;
     private String seoDescription;
+    private Boolean commentAudit;
+    private Boolean commentGuest;
     private Map<String, String> heroImages = new LinkedHashMap<>();
 }

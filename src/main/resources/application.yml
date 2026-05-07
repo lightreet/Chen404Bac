@@ -28,6 +28,16 @@ app:
     allowed-origins: "http://localhost:5173,http://127.0.0.1:5173,http://192.168.1.6:5173"
   frontend-base-url: "http://localhost:5173"
   backend-base-url: "http://localhost:10404/api"
+  site-runtime:
+    article-page-size: 10
+    upload-max-size: 12582912
+    upload-allow-types:
+      - jpg
+      - jpeg
+      - png
+      - gif
+      - webp
+      - bmp
   # 上传图片压缩为 WebP（动图 GIF 不处理）；依赖 webp-imageio 自带 win/linux/mac x64 原生库
   image-processing:
     enabled: true

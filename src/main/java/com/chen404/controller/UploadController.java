@@ -1,6 +1,7 @@
 package com.chen404.controller;
 
 import com.chen404.annotation.RequireAdmin;
+import com.chen404.config.SiteRuntimeProperties;
 import com.chen404.domain.Result;
 import com.chen404.domain.dto.MultiFileUploadDTO;
 import com.chen404.domain.dto.SingleFileUploadDTO;
@@ -28,7 +29,10 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
@@ -43,6 +47,14 @@ public class UploadController {
 
     private static final Set<String> ALLOWED_IMAGE_TYPES = Set.of(
             "image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp", "image/bmp"
+    );
+    private static final Map<String, String> IMAGE_EXTENSION_TO_CONTENT_TYPE = Map.ofEntries(
+            Map.entry("jpg", "image/jpeg"),
+            Map.entry("jpeg", "image/jpeg"),
+            Map.entry("png", "image/png"),
+            Map.entry("gif", "image/gif"),
+            Map.entry("webp", "image/webp"),
+            Map.entry("bmp", "image/bmp")
     );
 
     private static final Set<String> ALLOWED_TRUST_ATTACHMENT_TYPES = Set.of(
@@ -70,6 +82,9 @@ public class UploadController {
     @Autowired
     private SysFileService sysFileService;
 
+    @Autowired
+    private SiteRuntimeProperties siteRuntimeProperties;
+
     @Operation(summary = "上传文章图片", description = "编辑器内单张图片上传")
     @PostMapping(value = "/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Result<UploadFileVO> uploadImage(
@@ -78,7 +93,7 @@ public class UploadController {
 
         Long userId = CurrentUserUtil.requireUserId(currentUser);
         MultipartFile file = form.getFile();
-        Result<UploadFileVO> validateResult = validateImage(file, MAX_IMAGE_SIZE);
+        Result<UploadFileVO> validateResult = validateImage(file, resolveImageMaxSize(), resolveAllowedImageTypes());
         if (validateResult != null) {
             return validateResult;
         }
@@ -108,9 +123,11 @@ public class UploadController {
         if (files.length > MAX_BATCH_IMAGE_COUNT) {
             return Result.error(400, "一次最多上传 10 张图片");
         }
+        long maxSize = resolveImageMaxSize();
+        Set<String> allowedTypes = resolveAllowedImageTypes();
 
         List<CompletableFuture<UploadFileVO>> futures = Arrays.stream(files)
-                .map(file -> CompletableFuture.supplyAsync(() -> uploadSingleImage(file, userId)))
+                .map(file -> CompletableFuture.supplyAsync(() -> uploadSingleImage(file, userId, maxSize, allowedTypes)))
                 .toList();
 
         List<UploadFileVO> results = new ArrayList<>();
@@ -150,7 +167,7 @@ public class UploadController {
 
         Long userId = CurrentUserUtil.requireUserId(currentUser);
         MultipartFile file = form.getFile();
-        Result<UploadFileVO> validateResult = validateImage(file, MAX_COVER_SIZE);
+        Result<UploadFileVO> validateResult = validateImage(file, resolveImageMaxSize(), resolveAllowedImageTypes());
         if (validateResult != null) {
             return validateResult;
         }
@@ -174,7 +191,7 @@ public class UploadController {
 
         Long userId = CurrentUserUtil.requireUserId(currentUser);
         MultipartFile file = form.getFile();
-        Result<UploadFileVO> validateResult = validateImage(file, MAX_COVER_SIZE);
+        Result<UploadFileVO> validateResult = validateImage(file, resolveImageMaxSize(), resolveAllowedImageTypes());
         if (validateResult != null) {
             return validateResult;
         }
@@ -197,7 +214,7 @@ public class UploadController {
 
         Long userId = CurrentUserUtil.requireUserId(currentUser);
         MultipartFile file = form.getFile();
-        Result<UploadFileVO> validateResult = validateImage(file, MAX_IMAGE_SIZE);
+        Result<UploadFileVO> validateResult = validateImage(file, resolveImageMaxSize(), resolveAllowedImageTypes());
         if (validateResult != null) {
             return validateResult;
         }
@@ -263,8 +280,8 @@ public class UploadController {
         }
     }
 
-    private UploadFileVO uploadSingleImage(MultipartFile file, Long userId) {
-        Result<UploadFileVO> validateResult = validateImage(file, MAX_IMAGE_SIZE);
+    private UploadFileVO uploadSingleImage(MultipartFile file, Long userId, long maxSize, Set<String> allowedTypes) {
+        Result<UploadFileVO> validateResult = validateImage(file, maxSize, allowedTypes);
         if (validateResult != null) {
             return buildErrorUploadResult(validateResult.getMessage());
         }
@@ -278,13 +295,29 @@ public class UploadController {
         }
     }
 
-    private Result<UploadFileVO> validateImage(MultipartFile file, long maxSize) {
+    private Result<UploadFileVO> validateImage(MultipartFile file, long maxSize, Set<String> allowedTypes) {
         return validateFile(
                 file,
                 maxSize,
-                ALLOWED_IMAGE_TYPES,
+                allowedTypes,
                 "仅允许上传图片文件（支持 jpg、png、gif、webp、bmp）"
         );
+    }
+
+    private long resolveImageMaxSize() {
+        long value = siteRuntimeProperties.getUploadMaxSize();
+        return value > 0 ? value : MAX_IMAGE_SIZE;
+    }
+
+    private Set<String> resolveAllowedImageTypes() {
+        Set<String> resolved = new HashSet<>();
+        for (String extension : siteRuntimeProperties.getUploadAllowTypes()) {
+            String contentType = IMAGE_EXTENSION_TO_CONTENT_TYPE.get(Objects.toString(extension, "").trim().toLowerCase());
+            if (contentType != null) {
+                resolved.add(contentType);
+            }
+        }
+        return resolved.isEmpty() ? ALLOWED_IMAGE_TYPES : resolved;
     }
 
     private Result<UploadFileVO> validateFile(

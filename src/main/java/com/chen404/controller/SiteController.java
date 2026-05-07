@@ -120,6 +120,8 @@ public class SiteController {
         config.setCopyright(source.getCopyright());
         config.setSeoKeywords(source.getSeoKeywords());
         config.setSeoDescription(source.getSeoDescription());
+        config.setCommentAudit(source.getCommentAudit());
+        config.setCommentGuest(source.getCommentGuest());
         config.setHeroImages(source.getHeroImages());
         return config;
     }

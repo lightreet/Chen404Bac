@@ -46,6 +46,8 @@ public class SiteConfigServiceImpl implements SiteConfigService {
     private static final String KEY_SITE_COPYRIGHT = "site.copyright";
     private static final String KEY_SEO_KEYWORDS = "seo.keywords";
     private static final String KEY_SEO_DESCRIPTION = "seo.description";
+    private static final String KEY_COMMENT_AUDIT = "comment.audit";
+    private static final String KEY_COMMENT_GUEST = "comment.guest";
     private static final String KEY_HERO_IMAGES = "site.hero_images";
 
     private final ObjectMapper objectMapper;
@@ -107,6 +109,8 @@ public class SiteConfigServiceImpl implements SiteConfigService {
                 case KEY_SITE_COPYRIGHT -> dto.setCopyright(value);
                 case KEY_SEO_KEYWORDS -> dto.setSeoKeywords(value);
                 case KEY_SEO_DESCRIPTION -> dto.setSeoDescription(value);
+                case KEY_COMMENT_AUDIT -> dto.setCommentAudit(parseBoolean(value));
+                case KEY_COMMENT_GUEST -> dto.setCommentGuest(parseBoolean(value));
                 case KEY_HERO_IMAGES -> dto.setHeroImages(parseHeroImages(value));
                 default -> {
                 }
@@ -136,6 +140,8 @@ public class SiteConfigServiceImpl implements SiteConfigService {
         upsertValue(existing, KEY_SITE_COPYRIGHT, config.getCopyright(), "Copyright text", 1);
         upsertValue(existing, KEY_SEO_KEYWORDS, config.getSeoKeywords(), "SEO keywords", 1);
         upsertValue(existing, KEY_SEO_DESCRIPTION, config.getSeoDescription(), "SEO description", 1);
+        upsertValue(existing, KEY_COMMENT_AUDIT, String.valueOf(Boolean.TRUE.equals(config.getCommentAudit())), "Comment audit enabled", 3);
+        upsertValue(existing, KEY_COMMENT_GUEST, String.valueOf(Boolean.TRUE.equals(config.getCommentGuest())), "Guest comment enabled", 3);
         upsertValue(existing, KEY_HERO_IMAGES, toHeroImagesJson(config.getHeroImages()), "Hero images", 4);
     }
 
@@ -204,6 +210,8 @@ public class SiteConfigServiceImpl implements SiteConfigService {
         config.setCopyright("Copyright 2024 Chen404");
         config.setSeoKeywords("博客,技术,前端,后端,Java,Vue");
         config.setSeoDescription("Chen404的个人技术博客，一个写下技术，也收藏温柔日常的小小角落");
+        config.setCommentAudit(true);
+        config.setCommentGuest(true);
         config.setHeroImages(new LinkedHashMap<>());
         return config;
     }
@@ -268,6 +276,12 @@ public class SiteConfigServiceImpl implements SiteConfigService {
         if (patch.getSeoDescription() != null) {
             target.setSeoDescription(patch.getSeoDescription());
         }
+        if (patch.getCommentAudit() != null) {
+            target.setCommentAudit(patch.getCommentAudit());
+        }
+        if (patch.getCommentGuest() != null) {
+            target.setCommentGuest(patch.getCommentGuest());
+        }
         if (patch.getHeroImages() != null) {
             Map<String, String> merged = new LinkedHashMap<>();
             if (target.getHeroImages() != null) {
@@ -304,6 +318,8 @@ public class SiteConfigServiceImpl implements SiteConfigService {
                 config.getSeoDescription(),
                 "Chen404的个人技术博客，一个写下技术，也收藏温柔日常的小小角落"
         ));
+        config.setCommentAudit(config.getCommentAudit() == null || config.getCommentAudit());
+        config.setCommentGuest(config.getCommentGuest() == null || config.getCommentGuest());
 
         Map<String, String> normalizedHeroImages = new LinkedHashMap<>();
         if (config.getHeroImages() != null) {
@@ -317,6 +333,12 @@ public class SiteConfigServiceImpl implements SiteConfigService {
                     continue;
                 }
                 normalizedHeroImages.put(key, value);
+            }
+        }
+        if (!normalizedHeroImages.containsKey("tag")) {
+            String tagFallback = normalizedHeroImages.getOrDefault("category", normalizedHeroImages.get("home"));
+            if (StringUtils.hasText(tagFallback)) {
+                normalizedHeroImages.put("tag", tagFallback);
             }
         }
         config.setHeroImages(normalizedHeroImages);
@@ -372,4 +394,12 @@ public class SiteConfigServiceImpl implements SiteConfigService {
         String normalized = trimToDefault(value, DEFAULT_SITE_FAVICON);
         return LEGACY_SITE_FAVICON.equalsIgnoreCase(normalized) ? DEFAULT_SITE_FAVICON : normalized;
     }
+
+    private Boolean parseBoolean(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        return Boolean.parseBoolean(value.trim());
+    }
+
 }

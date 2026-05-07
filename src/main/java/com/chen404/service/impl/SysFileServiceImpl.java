@@ -17,10 +17,12 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayInputStream;
+import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Optional;
+import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -49,6 +51,23 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
             "!\\[(.*?)\\]\\((.*?)\\)|<img[^>]+src=\"([^\"]+)\"",
             Pattern.CASE_INSENSITIVE
     );
+
+    @Override
+    public List<SysFile> listByIds(Collection<? extends Serializable> idList) {
+        if (idList == null || idList.isEmpty()) {
+            return List.of();
+        }
+
+        List<Serializable> validIds = idList.stream()
+                .filter(id -> id != null && StringUtils.hasText(String.valueOf(id)))
+                .distinct()
+                .collect(Collectors.toList());
+        if (validIds.isEmpty()) {
+            return List.of();
+        }
+
+        return super.listByIds(validIds);
+    }
 
     @Override
     @Transactional
