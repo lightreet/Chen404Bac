@@ -32,6 +32,7 @@ import com.chen404.mapper.UserArticleLikeMapper;
 import com.chen404.mapper.UserMapper;
 import com.chen404.service.AccessService;
 import com.chen404.service.ArticleFileRefService;
+import com.chen404.service.ArticleKnowledgeService;
 import com.chen404.service.ArticleService;
 import com.chen404.service.SysFileService;
 import com.chen404.service.TagService;
@@ -101,6 +102,9 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
     @Autowired
     private UserAccessProfileSupport userAccessProfileSupport;
+
+    @Autowired
+    private ArticleKnowledgeService articleKnowledgeService;
 
     @Override
     public Page<Article> getArticlePage(Integer page, Integer size, Integer status, Long categoryId, Long tagId, Long authorId, String keyword, Long requesterId) {
@@ -298,6 +302,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
         articleFileRefService.syncForArticle(article.getId(), article.getContent(), article.getCoverImage());
         persistCoverFileId(article.getId(), article.getCoverImage());
+        articleKnowledgeService.syncArticleChunks(article.getId());
 
         return article;
     }
@@ -376,6 +381,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
         articleFileRefService.syncForArticle(id, article.getContent(), article.getCoverImage());
         persistCoverFileId(id, article.getCoverImage());
+        articleKnowledgeService.syncArticleChunks(id);
 
         return getArticleById(id, false, operatorId);
     }
@@ -404,6 +410,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         if (article.getCategoryId() != null) {
             categoryMapper.updateArticleCount(article.getCategoryId());
         }
+        articleKnowledgeService.removeArticleChunks(id);
     }
 
     @Override

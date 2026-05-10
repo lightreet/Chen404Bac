@@ -46,6 +46,13 @@ app:
     max-edge-article-content: 1920
     max-edge-article-cover: 1600
     avatar-size: 512
+  ai:
+    maid:
+      name: ${APP_AI_MAID_NAME:Lyra}
+      persona-version: ${APP_AI_MAID_PERSONA_VERSION:v1.1}
+      system-prompt-location: ${APP_AI_MAID_SYSTEM_PROMPT_LOCATION:classpath:prompts/ai/maid-system-prompt.txt}
+      helper-task-prompt-location: ${APP_AI_MAID_HELPER_TASK_PROMPT_LOCATION:classpath:prompts/ai/maid-helper-task-prompt.txt}
+      companion-task-prompt-location: ${APP_AI_MAID_COMPANION_TASK_PROMPT_LOCATION:classpath:prompts/ai/maid-companion-task-prompt.txt}
 
 mybatis-plus:
   configuration:

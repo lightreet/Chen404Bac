@@ -10,6 +10,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.BufferedReader;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -51,10 +54,14 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
     private static final String FIELD_MESSAGE = "message";
     private static final String FIELD_OUTPUT = "output";
     private static final String FIELD_TEXT = "text";
+    private static final String FIELD_DELTA = "delta";
+    private static final String FIELD_STREAM = "stream";
     private static final int MIN_TIMEOUT_SECONDS = 5;
     private static final int MAX_LOG_TEXT_LENGTH = 240;
     private static final String DEFAULT_ERROR_PREFIX = "LLM 服务调用失败：";
     private static final String EMPTY_TEXT_ERROR = "LLM 响应缺少文本内容";
+    private static final String SSE_DONE_MARKER = "[DONE]";
+    private static final String SSE_DATA_PREFIX = "data:";
 
     private final LlmProperties llmProperties;
     private final HttpClient httpClient;
@@ -98,6 +105,46 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
         }
     }
 
+    @Override
+    public void streamText(LlmTextRequest request, LlmTextStreamHandler handler) {
+        validateConfiguration(request);
+        if (handler == null) {
+            throw new IllegalArgumentException("LLM 流式回调不能为空");
+        }
+
+        String apiStyle = normalizeApiStyle(llmProperties.getApiStyle());
+        if (!STYLE_CHAT_COMPLETIONS.equals(apiStyle)) {
+            streamByChunkingPlainText(request, handler);
+            return;
+        }
+
+        HttpRequest httpRequest = buildStreamRequest(request);
+        try {
+            log.info("[LLM_TEXT_STREAM_REQ] model={} style={}", resolveModel(request), apiStyle);
+            HttpResponse<InputStream> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                String body = new String(response.body().readAllBytes(), StandardCharsets.UTF_8);
+                log.warn("[LLM_TEXT_STREAM_FAIL] model={} status={} body={}",
+                        resolveModel(request), response.statusCode(), body);
+                throw new IllegalStateException(DEFAULT_ERROR_PREFIX + response.statusCode());
+            }
+            try (InputStream inputStream = response.body();
+                 BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+                readChatCompletionStream(reader, handler);
+            }
+            if (!handler.isCancelled()) {
+                handler.onComplete();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("[LLM_TEXT_STREAM_INTERRUPTED] model={}", resolveModel(request), e);
+            throw new IllegalStateException(DEFAULT_ERROR_PREFIX + "请求被中断", e);
+        } catch (IOException e) {
+            log.error("[LLM_TEXT_STREAM_IO_FAIL] model={} message={}", resolveModel(request), e.getMessage(), e);
+            throw new IllegalStateException(DEFAULT_ERROR_PREFIX + "网络异常", e);
+        }
+    }
+
     private void validateConfiguration(LlmTextRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("LLM 请求不能为空");
@@ -124,6 +171,19 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
 
         return HttpRequest.newBuilder()
                 .uri(URI.create(normalizeBaseUrl(llmProperties.getBaseUrl()) + normalizePath(endpoint)))
+                .timeout(Duration.ofSeconds(resolveTimeoutSeconds()))
+                .header(AUTHORIZATION_HEADER, AUTHORIZATION_PREFIX + llmProperties.getApiKey().trim())
+                .header(CONTENT_TYPE_HEADER, JSON_CONTENT_TYPE)
+                .POST(HttpRequest.BodyPublishers.ofString(body.toJSONString()))
+                .build();
+    }
+
+    private HttpRequest buildStreamRequest(LlmTextRequest request) {
+        JSONObject body = buildChatCompletionsBody(request);
+        body.put(FIELD_STREAM, true);
+
+        return HttpRequest.newBuilder()
+                .uri(URI.create(normalizeBaseUrl(llmProperties.getBaseUrl()) + normalizePath(llmProperties.getChatCompletionsPath())))
                 .timeout(Duration.ofSeconds(resolveTimeoutSeconds()))
                 .header(AUTHORIZATION_HEADER, AUTHORIZATION_PREFIX + llmProperties.getApiKey().trim())
                 .header(CONTENT_TYPE_HEADER, JSON_CONTENT_TYPE)
@@ -203,6 +263,72 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
         }
 
         return null;
+    }
+
+    private void readChatCompletionStream(BufferedReader reader, LlmTextStreamHandler handler) throws IOException {
+        String line;
+        while ((line = reader.readLine()) != null) {
+            if (handler.isCancelled()) {
+                return;
+            }
+            String trimmed = line.trim();
+            if (!trimmed.startsWith(SSE_DATA_PREFIX)) {
+                continue;
+            }
+            String payload = trimmed.substring(SSE_DATA_PREFIX.length()).trim();
+            if (SSE_DONE_MARKER.equals(payload)) {
+                return;
+            }
+            String deltaText = extractDeltaText(payload);
+            if (StringUtils.hasText(deltaText)) {
+                handler.onTextDelta(deltaText);
+            }
+        }
+    }
+
+    private String extractDeltaText(String payload) {
+        JSONObject root = JSON.parseObject(payload);
+        JSONArray choices = root.getJSONArray(FIELD_CHOICES);
+        if (choices == null || choices.isEmpty()) {
+            return null;
+        }
+        JSONObject firstChoice = choices.getJSONObject(0);
+        JSONObject delta = firstChoice.getJSONObject(FIELD_DELTA);
+        if (delta == null) {
+            return null;
+        }
+        return delta.getString(FIELD_CONTENT);
+    }
+
+    private void streamByChunkingPlainText(LlmTextRequest request, LlmTextStreamHandler handler) {
+        String plainText = generateText(request);
+        if (!StringUtils.hasText(plainText)) {
+            handler.onComplete();
+            return;
+        }
+        for (String chunk : splitIntoDisplayChunks(plainText)) {
+            if (handler.isCancelled()) {
+                return;
+            }
+            handler.onTextDelta(chunk);
+        }
+        handler.onComplete();
+    }
+
+    private List<String> splitIntoDisplayChunks(String text) {
+        String normalized = text == null ? "" : text.trim();
+        if (normalized.isEmpty()) {
+            return List.of();
+        }
+        List<String> chunks = new java.util.ArrayList<>();
+        int cursor = 0;
+        int step = 18;
+        while (cursor < normalized.length()) {
+            int next = Math.min(normalized.length(), cursor + step);
+            chunks.add(normalized.substring(cursor, next));
+            cursor = next;
+        }
+        return chunks;
     }
 
     private String resolveModel(LlmTextRequest request) {

@@ -15,4 +15,12 @@ public interface LlmClient {
      * @return 上游返回的纯文本内容
      */
     String generateText(LlmTextRequest request);
+
+    /**
+     * 调用上游 LLM 进行流式文本生成。
+     *
+     * @param request 文本生成请求
+     * @param handler 流式回调
+     */
+    void streamText(LlmTextRequest request, LlmTextStreamHandler handler);
 }
