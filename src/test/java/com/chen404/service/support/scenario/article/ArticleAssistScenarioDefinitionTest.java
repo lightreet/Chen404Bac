@@ -1,5 +1,6 @@
 package com.chen404.service.support.scenario.article;
 
+import com.chen404.config.AiRuntimeProperties;
 import com.chen404.service.support.LlmClient;
 import com.chen404.service.support.LlmTextRequest;
 import com.chen404.service.support.scenario.AiScenarioCode;
@@ -31,7 +32,7 @@ class ArticleAssistScenarioDefinitionTest {
                 ```
                 """);
 
-        ArticleAssistScenarioDefinition definition = new ArticleAssistScenarioDefinition(llmClient);
+        ArticleAssistScenarioDefinition definition = new ArticleAssistScenarioDefinition(llmClient, new AiRuntimeProperties());
         ArticleAssistScenarioResult result = definition.execute(
                 AiScenarioRequest.of(
                         AiScenarioCode.ARTICLE_ASSIST,
@@ -66,7 +67,7 @@ class ArticleAssistScenarioDefinitionTest {
                 }
                 """);
 
-        ArticleAssistScenarioDefinition definition = new ArticleAssistScenarioDefinition(llmClient);
+        ArticleAssistScenarioDefinition definition = new ArticleAssistScenarioDefinition(llmClient, new AiRuntimeProperties());
         definition.execute(
                 AiScenarioRequest.of(
                         AiScenarioCode.ARTICLE_ASSIST,

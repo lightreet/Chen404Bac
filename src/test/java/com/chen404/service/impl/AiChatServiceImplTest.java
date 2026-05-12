@@ -1,5 +1,6 @@
 package com.chen404.service.impl;
 
+import com.chen404.config.AiRuntimeProperties;
 import com.chen404.domain.dto.AiChatMessageDTO;
 import com.chen404.domain.dto.AiChatRequest;
 import com.chen404.domain.dto.AiChatResponse;
@@ -53,6 +54,7 @@ class AiChatServiceImplTest {
     private AiChatSessionService aiChatSessionService;
     private AiChatServiceImpl aiChatService;
     private StubRecommendScenarioDefinition recommendScenarioDefinition;
+    private AiRuntimeProperties aiRuntimeProperties;
 
     @BeforeEach
     void setUp() {
@@ -61,11 +63,13 @@ class AiChatServiceImplTest {
         articleKnowledgeService = mock(ArticleKnowledgeService.class);
         promptBuilder = mock(AiMaidPromptBuilder.class);
         aiChatSessionService = mock(AiChatSessionService.class);
-        MaidChatScenarioDefinition scenarioDefinition = new MaidChatScenarioDefinition(llmClient);
+        aiRuntimeProperties = new AiRuntimeProperties();
+        MaidChatScenarioDefinition scenarioDefinition = new MaidChatScenarioDefinition(llmClient, aiRuntimeProperties);
         recommendScenarioDefinition = new StubRecommendScenarioDefinition();
         AiScenarioExecutor aiScenarioExecutor = new AiScenarioExecutor(List.of(scenarioDefinition, recommendScenarioDefinition));
         aiChatService = new AiChatServiceImpl(
                 aiScenarioExecutor,
+                aiRuntimeProperties,
                 scenarioDefinition,
                 articleService,
                 articleKnowledgeService,
@@ -80,7 +84,7 @@ class AiChatServiceImplTest {
     }
 
     @Test
-    void shouldBuildHelperResponseFromKnowledgeHits() {
+    void shouldBuildHelperResponseWithoutRelatedArticlesWhenUserDidNotAskForRecommendation() {
         Article article = new Article();
         article.setId(123L);
         article.setTitle("智能女仆接入方案");
@@ -107,12 +111,28 @@ class AiChatServiceImplTest {
         assertEquals(1, response.getCitations().size());
         assertEquals(123L, response.getCitations().get(0).getArticleId());
         assertEquals("/articles/123", response.getCitations().get(0).getUrl());
-        assertEquals(1, response.getRelatedArticles().size());
-        assertEquals(88L, response.getRelatedArticles().get(0).getArticleId());
+        assertTrue(response.getRelatedArticles().isEmpty());
         assertFalse(response.getSuggestions().isEmpty());
         assertEquals("sess_test", response.getSessionId());
         verify(aiChatSessionService).saveUserMessage("sess_test", "帮我总结一下这篇文章");
         verify(aiChatSessionService).saveAssistantMessage(eq("sess_test"), any(AiChatResponse.class));
+    }
+
+    @Test
+    void shouldAttachRelatedArticlesWhenUserExpressesRecommendIntent() {
+        Article article = new Article();
+        article.setId(123L);
+        article.setTitle("智能女仆接入方案");
+        when(articleService.getArticleById(123L, false, 7L)).thenReturn(article);
+        when(articleKnowledgeService.searchVisibleChunks(eq("推荐两篇相关的文章"), eq(7L), eq(123L), anyInt()))
+                .thenReturn(List.of());
+        when(llmClient.generateText(any(LlmTextRequest.class)))
+                .thenReturn("{\"replyText\":\"我给你挑了两篇站内相关内容。\",\"mood\":\"happy\",\"suggestions\":[\"打开第一篇看看\"]}");
+
+        AiChatResponse response = aiChatService.chat(buildRecommendRequest(), 7L);
+
+        assertEquals(1, response.getRelatedArticles().size());
+        assertEquals(88L, response.getRelatedArticles().get(0).getArticleId());
     }
 
     @Test
@@ -154,6 +174,14 @@ class AiChatServiceImplTest {
         AiChatRequest request = new AiChatRequest();
         request.setPageContext("home");
         request.setMessages(List.of(message("user", "今天有点累，陪我聊聊吧")));
+        return request;
+    }
+
+    private AiChatRequest buildRecommendRequest() {
+        AiChatRequest request = new AiChatRequest();
+        request.setPageContext("article");
+        request.setCurrentArticleId(123L);
+        request.setMessages(List.of(message("user", "推荐两篇相关的文章")));
         return request;
     }
 

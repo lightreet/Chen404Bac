@@ -3,6 +3,7 @@ package com.chen404.service.support.scenario.article;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.chen404.config.AiRuntimeProperties;
 import com.chen404.service.support.LlmClient;
 import com.chen404.service.support.LlmTextRequest;
 import com.chen404.service.support.scenario.AiScenarioCode;
@@ -25,10 +26,6 @@ import java.util.stream.Collectors;
 public class ArticleAssistScenarioDefinition implements AiScenarioDefinition<ArticleAssistScenarioRequest, ArticleAssistScenarioResult> {
 
     private static final String SYSTEM_INSTRUCTION = "You are an assistant for a Chinese technical blog CMS. Return valid JSON only.";
-    private static final int MAX_INPUT_CHARS = 12_000;
-    private static final int MAX_SUMMARY_LENGTH = 180;
-    private static final int PREFERRED_TAG_COUNT = 3;
-    private static final int MAX_TAG_COUNT = 5;
     private static final String OUTPUT_FIELD_SUMMARY = "summary";
     private static final String OUTPUT_FIELD_TAGS = "tags";
     private static final String CODE_FENCE_PREFIX = "```";
@@ -37,9 +34,11 @@ public class ArticleAssistScenarioDefinition implements AiScenarioDefinition<Art
     private static final String EMPTY_TEXT = "";
 
     private final LlmClient llmClient;
+    private final AiRuntimeProperties aiRuntimeProperties;
 
-    public ArticleAssistScenarioDefinition(LlmClient llmClient) {
+    public ArticleAssistScenarioDefinition(LlmClient llmClient, AiRuntimeProperties aiRuntimeProperties) {
         this.llmClient = llmClient;
+        this.aiRuntimeProperties = aiRuntimeProperties;
     }
 
     @Override
@@ -69,11 +68,12 @@ public class ArticleAssistScenarioDefinition implements AiScenarioDefinition<Art
         StringBuilder builder = new StringBuilder();
         builder.append("Please analyze the following blog article draft and return a JSON object with fields summary and tags.\n");
         builder.append("Requirements:\n");
+        AiRuntimeProperties.ArticleAssist articleAssist = aiRuntimeProperties.getArticleAssist();
         builder.append("1. summary must be Chinese, natural, no markdown, no leading label, at most ")
-                .append(MAX_SUMMARY_LENGTH)
+                .append(articleAssist.getMaxSummaryLength())
                 .append(" characters.\n");
         builder.append("2. tags should prefer exactly ")
-                .append(PREFERRED_TAG_COUNT)
+                .append(articleAssist.getPreferredTagCount())
                 .append(" concise Chinese tags. Only return 4 to 5 tags when the article clearly contains multiple equally important themes.\n");
         builder.append("3. tags must be sorted by relevance from highest to lowest.\n");
         builder.append("4. Prefer technology, framework, architecture, database, deployment, debugging, or domain terms from the article.\n");
@@ -124,10 +124,11 @@ public class ArticleAssistScenarioDefinition implements AiScenarioDefinition<Art
             return "";
         }
         String normalized = content.trim();
-        if (normalized.length() <= MAX_INPUT_CHARS) {
+        int maxInputChars = aiRuntimeProperties.getArticleAssist().getMaxInputChars();
+        if (normalized.length() <= maxInputChars) {
             return normalized;
         }
-        return normalized.substring(0, MAX_INPUT_CHARS);
+        return normalized.substring(0, maxInputChars);
     }
 
     private String stripCodeFence(String text) {
@@ -144,7 +145,8 @@ public class ArticleAssistScenarioDefinition implements AiScenarioDefinition<Art
             return "";
         }
         String trimmed = summary.trim().replaceAll("\\s+", " ");
-        return trimmed.length() > MAX_SUMMARY_LENGTH ? trimmed.substring(0, MAX_SUMMARY_LENGTH) : trimmed;
+        int maxSummaryLength = aiRuntimeProperties.getArticleAssist().getMaxSummaryLength();
+        return trimmed.length() > maxSummaryLength ? trimmed.substring(0, maxSummaryLength) : trimmed;
     }
 
     private List<String> normalizeTags(JSONArray tags) {
@@ -163,7 +165,7 @@ public class ArticleAssistScenarioDefinition implements AiScenarioDefinition<Art
             if (StringUtils.hasText(cleanTag)) {
                 normalized.add(cleanTag);
             }
-            if (normalized.size() >= MAX_TAG_COUNT) {
+            if (normalized.size() >= aiRuntimeProperties.getArticleAssist().getMaxTagCount()) {
                 break;
             }
         }

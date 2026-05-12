@@ -1,7 +1,9 @@
 package com.chen404.service.support.scenario.recommend;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.chen404.config.AiRuntimeProperties;
 import com.chen404.domain.entity.Article;
+import com.chen404.domain.entity.ArticleTag;
 import com.chen404.mapper.ArticleMapper;
 import com.chen404.mapper.ArticleTagMapper;
 import com.chen404.service.AccessService;
@@ -13,9 +15,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -28,20 +33,20 @@ import java.util.stream.Collectors;
 @Component
 public class ArticleRecommendScenarioDefinition implements AiScenarioDefinition<ArticleRecommendScenarioRequest, ArticleRecommendScenarioResult> {
 
-    private static final int DEFAULT_LIMIT = 3;
-    private static final int SEARCH_SCAN_LIMIT = 30;
-
     private final ArticleMapper articleMapper;
     private final ArticleTagMapper articleTagMapper;
     private final AccessService accessService;
+    private final AiRuntimeProperties aiRuntimeProperties;
 
     public ArticleRecommendScenarioDefinition(
             ArticleMapper articleMapper,
             ArticleTagMapper articleTagMapper,
-            AccessService accessService) {
+            AccessService accessService,
+            AiRuntimeProperties aiRuntimeProperties) {
         this.articleMapper = articleMapper;
         this.articleTagMapper = articleTagMapper;
         this.accessService = accessService;
+        this.aiRuntimeProperties = aiRuntimeProperties;
     }
 
     @Override
@@ -51,6 +56,14 @@ public class ArticleRecommendScenarioDefinition implements AiScenarioDefinition<
 
     @Override
     public AiScenarioResult<ArticleRecommendScenarioResult> execute(AiScenarioRequest<ArticleRecommendScenarioRequest> request) {
+        if (!aiRuntimeProperties.getRecommend().isEnabled()) {
+            return AiScenarioResult.of(new ArticleRecommendScenarioResult(
+                    List.of(),
+                    "相关文章推荐能力未开启。",
+                    "trace_" + UUID.randomUUID().toString().replace("-", ""),
+                    "rule"
+            ));
+        }
         ArticleRecommendScenarioRequest payload = request.payload();
         List<ArticleRecommendScenarioItem> items = recommend(payload);
         String reason = items.isEmpty()
@@ -65,7 +78,8 @@ public class ArticleRecommendScenarioDefinition implements AiScenarioDefinition<
     }
 
     private List<ArticleRecommendScenarioItem> recommend(ArticleRecommendScenarioRequest request) {
-        int safeLimit = request.limit() <= 0 ? DEFAULT_LIMIT : request.limit();
+        AiRuntimeProperties.Recommend recommendProperties = aiRuntimeProperties.getRecommend();
+        int safeLimit = request.limit() <= 0 ? recommendProperties.getDefaultLimit() : request.limit();
         Article currentArticle = request.currentArticleId() == null ? null : articleMapper.selectById(request.currentArticleId());
         List<Long> currentTagIds = currentArticle == null
                 ? List.of()
@@ -76,7 +90,8 @@ public class ArticleRecommendScenarioDefinition implements AiScenarioDefinition<
                 .orderByDesc(Article::getIsRecommend)
                 .orderByDesc(Article::getPublishTime)
                 .orderByDesc(Article::getCreateTime)
-                .last("LIMIT " + SEARCH_SCAN_LIMIT));
+                .last("LIMIT " + recommendProperties.getScanLimit()));
+        Map<Long, List<Long>> candidateTagMap = loadCandidateTagMap(candidates);
 
         List<ScoredArticle> scored = new ArrayList<>();
         for (Article candidate : candidates) {
@@ -89,7 +104,7 @@ public class ArticleRecommendScenarioDefinition implements AiScenarioDefinition<
             if (!accessService.canViewArticle(request.requesterId(), candidate)) {
                 continue;
             }
-            List<Long> candidateTagIds = articleTagMapper.selectTagIdsByArticleId(candidate.getId());
+            List<Long> candidateTagIds = candidateTagMap.getOrDefault(candidate.getId(), List.of());
             int score = scoreCandidate(candidate, currentArticle, currentTagIds, candidateTagIds, request.seedText());
             if (score <= 0) {
                 continue;
@@ -107,6 +122,29 @@ public class ArticleRecommendScenarioDefinition implements AiScenarioDefinition<
                         "/article/" + item.article().getId()
                 ))
                 .collect(Collectors.toList());
+    }
+
+    private Map<Long, List<Long>> loadCandidateTagMap(List<Article> candidates) {
+        List<Long> articleIds = candidates.stream()
+                .filter(Objects::nonNull)
+                .map(Article::getId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (articleIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        List<ArticleTag> articleTags = articleTagMapper.selectList(new LambdaQueryWrapper<ArticleTag>()
+                .in(ArticleTag::getArticleId, articleIds));
+        Map<Long, List<Long>> tagMap = new LinkedHashMap<>();
+        for (ArticleTag articleTag : articleTags) {
+            if (articleTag == null || articleTag.getArticleId() == null || articleTag.getTagId() == null) {
+                continue;
+            }
+            tagMap.computeIfAbsent(articleTag.getArticleId(), key -> new ArrayList<>()).add(articleTag.getTagId());
+        }
+        return tagMap;
     }
 
     private int scoreCandidate(

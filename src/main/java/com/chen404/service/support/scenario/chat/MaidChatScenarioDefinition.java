@@ -5,6 +5,7 @@ import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.chen404.domain.dto.AiChatMessageDTO;
 import com.chen404.domain.entity.Article;
+import com.chen404.config.AiRuntimeProperties;
 import com.chen404.service.support.LlmClient;
 import com.chen404.service.support.LlmTextRequest;
 import com.chen404.service.support.LlmTextStreamHandler;
@@ -33,10 +34,6 @@ public class MaidChatScenarioDefinition implements AiScenarioDefinition<MaidChat
 
     private static final Logger log = LoggerFactory.getLogger(MaidChatScenarioDefinition.class);
 
-    private static final int MAX_CONTEXT_MESSAGES = 8;
-    private static final int MAX_ARTICLE_CONTENT_CHARS = 3_000;
-    private static final int MAX_ARTICLE_SUMMARY_CHARS = 300;
-    private static final int MAX_SUGGESTION_COUNT = 3;
     private static final String OUTPUT_FIELD_REPLY_TEXT = "replyText";
     private static final String OUTPUT_FIELD_MOOD = "mood";
     private static final String OUTPUT_FIELD_SUGGESTIONS = "suggestions";
@@ -49,9 +46,11 @@ public class MaidChatScenarioDefinition implements AiScenarioDefinition<MaidChat
     private static final String EMPTY_TEXT = "";
 
     private final LlmClient llmClient;
+    private final AiRuntimeProperties aiRuntimeProperties;
 
-    public MaidChatScenarioDefinition(LlmClient llmClient) {
+    public MaidChatScenarioDefinition(LlmClient llmClient, AiRuntimeProperties aiRuntimeProperties) {
         this.llmClient = llmClient;
+        this.aiRuntimeProperties = aiRuntimeProperties;
     }
 
     @Override
@@ -169,7 +168,7 @@ public class MaidChatScenarioDefinition implements AiScenarioDefinition<MaidChat
         if (messages == null || messages.isEmpty()) {
             return;
         }
-        int start = Math.max(0, messages.size() - MAX_CONTEXT_MESSAGES);
+        int start = Math.max(0, messages.size() - aiRuntimeProperties.getChat().getMaxContextMessages());
         for (int i = start; i < messages.size(); i++) {
             AiChatMessageDTO message = messages.get(i);
             if (!StringUtils.hasText(message.getContent())) {
@@ -187,11 +186,13 @@ public class MaidChatScenarioDefinition implements AiScenarioDefinition<MaidChat
         builder.append("### Current article\n");
         builder.append("Title: ").append(normalizeText(article.getTitle())).append('\n');
         if (StringUtils.hasText(article.getSummary())) {
-            builder.append("Summary: ").append(truncate(article.getSummary(), MAX_ARTICLE_SUMMARY_CHARS)).append('\n');
+            builder.append("Summary: ")
+                    .append(truncate(article.getSummary(), aiRuntimeProperties.getChat().getMaxArticleSummaryChars()))
+                    .append('\n');
         }
         if (StringUtils.hasText(article.getContent())) {
             builder.append("Content:\n")
-                    .append(truncate(article.getContent(), MAX_ARTICLE_CONTENT_CHARS))
+                    .append(truncate(article.getContent(), aiRuntimeProperties.getChat().getMaxArticleContentChars()))
                     .append('\n');
         }
     }
@@ -201,7 +202,8 @@ public class MaidChatScenarioDefinition implements AiScenarioDefinition<MaidChat
             return defaultSuggestions(scene, currentArticle);
         }
         List<String> suggestions = new ArrayList<>();
-        for (int i = 0; i < rawSuggestions.size() && suggestions.size() < MAX_SUGGESTION_COUNT; i++) {
+        int maxSuggestionCount = aiRuntimeProperties.getChat().getMaxSuggestionCount();
+        for (int i = 0; i < rawSuggestions.size() && suggestions.size() < maxSuggestionCount; i++) {
             String item = rawSuggestions.getString(i);
             if (!StringUtils.hasText(item)) {
                 continue;

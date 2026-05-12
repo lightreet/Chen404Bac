@@ -1,5 +1,6 @@
 package com.chen404.service.support.scenario.recommend;
 
+import com.chen404.config.AiRuntimeProperties;
 import com.chen404.domain.entity.Article;
 import com.chen404.mapper.ArticleMapper;
 import com.chen404.mapper.ArticleTagMapper;
@@ -44,7 +45,8 @@ class ArticleRecommendScenarioDefinitionTest {
         ArticleRecommendScenarioDefinition definition = new ArticleRecommendScenarioDefinition(
                 articleMapper,
                 articleTagMapper,
-                accessService
+                accessService,
+                new AiRuntimeProperties()
         );
         ArticleRecommendScenarioResult result = definition.execute(AiScenarioRequest.of(
                 AiScenarioCode.ARTICLE_RECOMMEND,
@@ -72,7 +74,8 @@ class ArticleRecommendScenarioDefinitionTest {
         ArticleRecommendScenarioDefinition definition = new ArticleRecommendScenarioDefinition(
                 articleMapper,
                 articleTagMapper,
-                accessService
+                accessService,
+                new AiRuntimeProperties()
         );
         ArticleRecommendScenarioResult result = definition.execute(AiScenarioRequest.of(
                 AiScenarioCode.ARTICLE_RECOMMEND,

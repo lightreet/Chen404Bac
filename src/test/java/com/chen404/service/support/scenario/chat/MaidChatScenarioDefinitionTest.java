@@ -1,5 +1,6 @@
 package com.chen404.service.support.scenario.chat;
 
+import com.chen404.config.AiRuntimeProperties;
 import com.chen404.domain.dto.AiChatMessageDTO;
 import com.chen404.domain.entity.Article;
 import com.chen404.service.support.LlmClient;
@@ -30,7 +31,7 @@ class MaidChatScenarioDefinitionTest {
                 {"replyText":"这篇主要在讲女仆聊天接入思路，我可以继续帮你压成三条重点。","mood":"happy","suggestions":["帮我总结这篇"]}
                 """);
 
-        MaidChatScenarioDefinition definition = new MaidChatScenarioDefinition(llmClient);
+        MaidChatScenarioDefinition definition = new MaidChatScenarioDefinition(llmClient, new AiRuntimeProperties());
         MaidChatScenarioResult result = definition.execute(AiScenarioRequest.of(
                 AiScenarioCode.MAID_CHAT,
                 new MaidChatScenarioRequest(
@@ -61,7 +62,7 @@ class MaidChatScenarioDefinitionTest {
         LlmClient llmClient = mock(LlmClient.class);
         when(llmClient.generateText(any(LlmTextRequest.class))).thenReturn("not-json");
 
-        MaidChatScenarioDefinition definition = new MaidChatScenarioDefinition(llmClient);
+        MaidChatScenarioDefinition definition = new MaidChatScenarioDefinition(llmClient, new AiRuntimeProperties());
         MaidChatScenarioResult result = definition.execute(AiScenarioRequest.of(
                 AiScenarioCode.MAID_CHAT,
                 new MaidChatScenarioRequest(

@@ -1,5 +1,6 @@
 package com.chen404.service.impl;
 
+import com.chen404.config.AiRuntimeProperties;
 import com.chen404.domain.dto.AiArticleAssistRequest;
 import com.chen404.domain.dto.AiArticleAssistResponse;
 import com.chen404.service.support.LlmClient;
@@ -33,8 +34,9 @@ class LlmArticleAssistServiceImplTest {
                 ```
                 """);
 
-        AiScenarioExecutor executor = new AiScenarioExecutor(List.of(new ArticleAssistScenarioDefinition(llmClient)));
-        LlmArticleAssistServiceImpl service = new LlmArticleAssistServiceImpl(executor);
+        AiRuntimeProperties aiRuntimeProperties = new AiRuntimeProperties();
+        AiScenarioExecutor executor = new AiScenarioExecutor(List.of(new ArticleAssistScenarioDefinition(llmClient, aiRuntimeProperties)));
+        LlmArticleAssistServiceImpl service = new LlmArticleAssistServiceImpl(executor, aiRuntimeProperties);
         AiArticleAssistRequest request = new AiArticleAssistRequest();
         request.setTitle("Spring Boot 接入大模型");
         request.setContent("# 标题\n这是一段用于测试的正文内容。");
@@ -64,8 +66,9 @@ class LlmArticleAssistServiceImplTest {
                 }
                 """);
 
-        AiScenarioExecutor executor = new AiScenarioExecutor(List.of(new ArticleAssistScenarioDefinition(llmClient)));
-        LlmArticleAssistServiceImpl service = new LlmArticleAssistServiceImpl(executor);
+        AiRuntimeProperties aiRuntimeProperties = new AiRuntimeProperties();
+        AiScenarioExecutor executor = new AiScenarioExecutor(List.of(new ArticleAssistScenarioDefinition(llmClient, aiRuntimeProperties)));
+        LlmArticleAssistServiceImpl service = new LlmArticleAssistServiceImpl(executor, aiRuntimeProperties);
         AiArticleAssistRequest request = new AiArticleAssistRequest();
         request.setTitle("Spring Boot 接入大模型");
         request.setContent("正文内容");

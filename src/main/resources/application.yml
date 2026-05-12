@@ -47,6 +47,26 @@ app:
     max-edge-article-cover: 1600
     avatar-size: 512
   ai:
+    runtime:
+      chat:
+        enabled: true
+        max-citation-count: 3
+        max-context-messages: 8
+        max-article-content-chars: 3000
+        max-article-summary-chars: 300
+        max-suggestion-count: 3
+        related-article-limit: 2
+        require-recommend-intent-for-related-articles: true
+      article-assist:
+        enabled: true
+        max-input-chars: 12000
+        max-summary-length: 180
+        preferred-tag-count: 3
+        max-tag-count: 5
+      recommend:
+        enabled: true
+        default-limit: 3
+        scan-limit: 30
     maid:
       name: ${APP_AI_MAID_NAME:Lyra}
       persona-version: ${APP_AI_MAID_PERSONA_VERSION:v1.1}

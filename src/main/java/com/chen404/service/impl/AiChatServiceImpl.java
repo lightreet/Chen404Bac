@@ -3,6 +3,7 @@ package com.chen404.service.impl;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.chen404.config.AiRuntimeProperties;
 import com.chen404.domain.dto.AiChatCitationDTO;
 import com.chen404.domain.dto.AiChatMessageDTO;
 import com.chen404.domain.dto.AiChatRelatedArticleDTO;
@@ -59,7 +60,6 @@ public class AiChatServiceImpl implements AiChatService {
     private static final Logger log = LoggerFactory.getLogger(AiChatServiceImpl.class);
     private static final ExecutorService STREAM_EXECUTOR = Executors.newCachedThreadPool();
 
-    private static final int MAX_CITATION_COUNT = 3;
     private static final String DEFAULT_FINISH_REASON = "stop";
     private static final String DEFAULT_MOOD = "happy";
     private static final String SSE_EVENT_SESSION = "session";
@@ -72,6 +72,7 @@ public class AiChatServiceImpl implements AiChatService {
     private static final String SSE_EVENT_ERROR = "error";
 
     private final AiScenarioExecutor aiScenarioExecutor;
+    private final AiRuntimeProperties aiRuntimeProperties;
     private final MaidChatScenarioDefinition maidChatScenarioDefinition;
     private final ArticleService articleService;
     private final ArticleKnowledgeService articleKnowledgeService;
@@ -80,12 +81,14 @@ public class AiChatServiceImpl implements AiChatService {
 
     public AiChatServiceImpl(
             AiScenarioExecutor aiScenarioExecutor,
+            AiRuntimeProperties aiRuntimeProperties,
             MaidChatScenarioDefinition maidChatScenarioDefinition,
             ArticleService articleService,
             ArticleKnowledgeService articleKnowledgeService,
             AiMaidPromptBuilder maidPromptBuilder,
             AiChatSessionService aiChatSessionService) {
         this.aiScenarioExecutor = aiScenarioExecutor;
+        this.aiRuntimeProperties = aiRuntimeProperties;
         this.maidChatScenarioDefinition = maidChatScenarioDefinition;
         this.articleService = articleService;
         this.articleKnowledgeService = articleKnowledgeService;
@@ -95,6 +98,7 @@ public class AiChatServiceImpl implements AiChatService {
 
     @Override
     public AiChatResponse chat(AiChatRequest request, Long requesterId) {
+        ensureChatEnabled();
         validateRequest(request);
         ChatExecutionContext context = prepareExecutionContext(request, requesterId);
         MaidChatScenarioRequest scenarioRequest = buildScenarioRequest(request, context);
@@ -126,6 +130,11 @@ public class AiChatServiceImpl implements AiChatService {
 
         STREAM_EXECUTOR.execute(() -> {
             try {
+                if (!aiRuntimeProperties.getChat().isEnabled()) {
+                    sendEventQuietly(emitter, SSE_EVENT_ERROR, JSONObject.of("message", "当前环境未开启 AI 聊天能力"));
+                    emitter.complete();
+                    return;
+                }
                 emitSessionStart(emitter, context);
                 StringBuilder streamedReply = new StringBuilder();
                 maidChatScenarioDefinition.stream(
@@ -184,8 +193,9 @@ public class AiChatServiceImpl implements AiChatService {
         String traceId = buildTraceId();
         String messageId = buildMessageId();
         Article currentArticle = loadCurrentArticle(request.getCurrentArticleId(), requesterId, traceId);
+        int maxCitationCount = aiRuntimeProperties.getChat().getMaxCitationCount();
         List<ArticleKnowledgeHit> knowledgeHits = scene == AiMaidPromptScene.HELPER
-                ? articleKnowledgeService.searchVisibleChunks(latestUserMessage, requesterId, request.getCurrentArticleId(), MAX_CITATION_COUNT)
+                ? articleKnowledgeService.searchVisibleChunks(latestUserMessage, requesterId, request.getCurrentArticleId(), maxCitationCount)
                 : List.of();
         AiMaidPromptContext promptContext = buildPromptContext(request, currentArticle, !knowledgeHits.isEmpty());
         String systemPrompt = maidPromptBuilder.buildSystemPrompt(scene, promptContext);
@@ -214,6 +224,12 @@ public class AiChatServiceImpl implements AiChatService {
         String latestUserMessage = extractLatestUserMessage(request.getMessages());
         if (!StringUtils.hasText(latestUserMessage)) {
             throw new BadRequestException("至少需要一条用户消息");
+        }
+    }
+
+    private void ensureChatEnabled() {
+        if (!aiRuntimeProperties.getChat().isEnabled()) {
+            throw new IllegalStateException("当前环境未开启 AI 聊天能力");
         }
     }
 
@@ -289,7 +305,8 @@ public class AiChatServiceImpl implements AiChatService {
             return List.of();
         }
         List<AiChatCitationDTO> citations = new ArrayList<>();
-        for (ArticleKnowledgeHit hit : knowledgeHits.stream().limit(MAX_CITATION_COUNT).toList()) {
+        int maxCitationCount = aiRuntimeProperties.getChat().getMaxCitationCount();
+        for (ArticleKnowledgeHit hit : knowledgeHits.stream().limit(maxCitationCount).toList()) {
             AiChatCitationDTO citation = new AiChatCitationDTO();
             citation.setArticleId(hit.articleId());
             citation.setArticleTitle(hit.articleTitle());
@@ -304,17 +321,24 @@ public class AiChatServiceImpl implements AiChatService {
         if (context.scene() != AiMaidPromptScene.HELPER) {
             return List.of();
         }
+        if (!aiRuntimeProperties.getRecommend().isEnabled()) {
+            return List.of();
+        }
+        if (aiRuntimeProperties.getChat().isRequireRecommendIntentForRelatedArticles()
+                && !containsRecommendIntent(context.latestUserMessage())) {
+            return List.of();
+        }
         try {
             AiScenarioResult<ArticleRecommendScenarioResult> scenarioExecution = aiScenarioExecutor.execute(
                     AiScenarioRequest.of(
-                            AiScenarioCode.ARTICLE_RECOMMEND,
-                            new com.chen404.service.support.scenario.recommend.ArticleRecommendScenarioRequest(
-                                    context.currentArticle() == null ? null : context.currentArticle().getId(),
-                                    "article",
-                                    context.requesterId(),
-                                    context.latestUserMessage(),
-                                    2
-                            )
+                        AiScenarioCode.ARTICLE_RECOMMEND,
+                        new com.chen404.service.support.scenario.recommend.ArticleRecommendScenarioRequest(
+                                context.currentArticle() == null ? null : context.currentArticle().getId(),
+                                "article",
+                                context.requesterId(),
+                                context.latestUserMessage(),
+                                aiRuntimeProperties.getChat().getRelatedArticleLimit()
+                        )
                     )
             );
             ArticleRecommendScenarioResult result = scenarioExecution.data();
@@ -447,6 +471,15 @@ public class AiChatServiceImpl implements AiChatService {
                 || text.contains("博客")
                 || text.contains("推荐")
                 || text.contains("内容");
+    }
+
+    private boolean containsRecommendIntent(String text) {
+        return text.contains("推荐")
+                || text.contains("相关")
+                || text.contains("看看别的")
+                || text.contains("还有什么")
+                || text.contains("类似")
+                || text.contains("两篇");
     }
 
     private boolean containsCasualIntent(String text) {
