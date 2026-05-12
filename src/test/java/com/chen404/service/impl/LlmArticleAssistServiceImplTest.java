@@ -4,6 +4,8 @@ import com.chen404.domain.dto.AiArticleAssistRequest;
 import com.chen404.domain.dto.AiArticleAssistResponse;
 import com.chen404.service.support.LlmClient;
 import com.chen404.service.support.LlmTextRequest;
+import com.chen404.service.support.scenario.AiScenarioExecutor;
+import com.chen404.service.support.scenario.article.ArticleAssistScenarioDefinition;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -31,7 +33,8 @@ class LlmArticleAssistServiceImplTest {
                 ```
                 """);
 
-        LlmArticleAssistServiceImpl service = new LlmArticleAssistServiceImpl(llmClient);
+        AiScenarioExecutor executor = new AiScenarioExecutor(List.of(new ArticleAssistScenarioDefinition(llmClient)));
+        LlmArticleAssistServiceImpl service = new LlmArticleAssistServiceImpl(executor);
         AiArticleAssistRequest request = new AiArticleAssistRequest();
         request.setTitle("Spring Boot 接入大模型");
         request.setContent("# 标题\n这是一段用于测试的正文内容。");
@@ -61,7 +64,8 @@ class LlmArticleAssistServiceImplTest {
                 }
                 """);
 
-        LlmArticleAssistServiceImpl service = new LlmArticleAssistServiceImpl(llmClient);
+        AiScenarioExecutor executor = new AiScenarioExecutor(List.of(new ArticleAssistScenarioDefinition(llmClient)));
+        LlmArticleAssistServiceImpl service = new LlmArticleAssistServiceImpl(executor);
         AiArticleAssistRequest request = new AiArticleAssistRequest();
         request.setTitle("Spring Boot 接入大模型");
         request.setContent("正文内容");

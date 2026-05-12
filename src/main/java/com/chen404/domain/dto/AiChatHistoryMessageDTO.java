@@ -32,6 +32,9 @@ public class AiChatHistoryMessageDTO {
     @Schema(description = "引用列表")
     private List<AiChatCitationDTO> citations;
 
+    @Schema(description = "相关推荐列表")
+    private List<AiChatRelatedArticleDTO> relatedArticles;
+
     @Schema(description = "快捷追问建议")
     private List<String> suggestions;
 }

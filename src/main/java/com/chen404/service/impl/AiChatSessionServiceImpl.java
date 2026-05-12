@@ -5,6 +5,7 @@ import com.alibaba.fastjson2.TypeReference;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.chen404.domain.dto.AiChatCitationDTO;
 import com.chen404.domain.dto.AiChatHistoryMessageDTO;
+import com.chen404.domain.dto.AiChatRelatedArticleDTO;
 import com.chen404.domain.dto.AiChatResponse;
 import com.chen404.domain.dto.AiChatSessionDetailResponse;
 import com.chen404.domain.entity.AiChatMessage;
@@ -156,6 +157,7 @@ public class AiChatSessionServiceImpl implements AiChatSessionService {
         dto.setScene(message.getScene());
         dto.setMood(message.getMood());
         dto.setCitations(parseCitations(message.getCitationsJson()));
+        dto.setRelatedArticles(parseRelatedArticles(message.getRelatedArticlesJson()));
         dto.setSuggestions(parseSuggestions(message.getSuggestionsJson()));
         return dto;
     }
@@ -165,6 +167,14 @@ public class AiChatSessionServiceImpl implements AiChatSessionService {
             return List.of();
         }
         return JSON.parseObject(rawJson, new TypeReference<List<AiChatCitationDTO>>() {
+        });
+    }
+
+    private List<AiChatRelatedArticleDTO> parseRelatedArticles(String rawJson) {
+        if (!StringUtils.hasText(rawJson)) {
+            return List.of();
+        }
+        return JSON.parseObject(rawJson, new TypeReference<List<AiChatRelatedArticleDTO>>() {
         });
     }
 

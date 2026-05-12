@@ -16,13 +16,19 @@ import com.chen404.service.AiChatService;
 import com.chen404.service.AiChatSessionService;
 import com.chen404.service.ArticleKnowledgeService;
 import com.chen404.service.ArticleService;
-import com.chen404.service.support.LlmClient;
-import com.chen404.service.support.LlmTextRequest;
 import com.chen404.service.support.LlmTextStreamHandler;
 import com.chen404.service.support.chat.ArticleKnowledgeHit;
 import com.chen404.service.support.prompt.AiMaidPromptBuilder;
 import com.chen404.service.support.prompt.AiMaidPromptContext;
 import com.chen404.service.support.prompt.AiMaidPromptScene;
+import com.chen404.service.support.scenario.AiScenarioCode;
+import com.chen404.service.support.scenario.AiScenarioExecutor;
+import com.chen404.service.support.scenario.AiScenarioRequest;
+import com.chen404.service.support.scenario.AiScenarioResult;
+import com.chen404.service.support.scenario.chat.MaidChatScenarioDefinition;
+import com.chen404.service.support.scenario.chat.MaidChatScenarioRequest;
+import com.chen404.service.support.scenario.chat.MaidChatScenarioResult;
+import com.chen404.service.support.scenario.recommend.ArticleRecommendScenarioResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -53,43 +59,34 @@ public class AiChatServiceImpl implements AiChatService {
     private static final Logger log = LoggerFactory.getLogger(AiChatServiceImpl.class);
     private static final ExecutorService STREAM_EXECUTOR = Executors.newCachedThreadPool();
 
-    private static final int MAX_CONTEXT_MESSAGES = 8;
-    private static final int MAX_ARTICLE_CONTENT_CHARS = 3_000;
-    private static final int MAX_ARTICLE_SUMMARY_CHARS = 300;
     private static final int MAX_CITATION_COUNT = 3;
-    private static final int MAX_SUGGESTION_COUNT = 3;
-    private static final String OUTPUT_FIELD_REPLY_TEXT = "replyText";
-    private static final String OUTPUT_FIELD_MOOD = "mood";
-    private static final String OUTPUT_FIELD_SUGGESTIONS = "suggestions";
-    private static final String DEFAULT_MOOD = "happy";
     private static final String DEFAULT_FINISH_REASON = "stop";
-    private static final String DEFAULT_REPLY = "我在呢。你可以告诉我你想聊聊，还是想让我帮你看看这页内容呀。";
-    private static final String DEFAULT_HELPER_REPLY = "这页如果你想抓重点，我可以先帮你压成几句短的。";
-    private static final String CODE_FENCE_PREFIX = "```";
-    private static final String JSON_FENCE_PATTERN = "^```(?:json)?\\s*";
-    private static final String JSON_FENCE_SUFFIX_PATTERN = "\\s*```$";
-    private static final String EMPTY_TEXT = "";
+    private static final String DEFAULT_MOOD = "happy";
     private static final String SSE_EVENT_SESSION = "session";
     private static final String SSE_EVENT_MESSAGE_START = "message_start";
     private static final String SSE_EVENT_DELTA = "delta";
     private static final String SSE_EVENT_CITATION = "citation";
+    private static final String SSE_EVENT_RELATED_ARTICLES = "related_articles";
     private static final String SSE_EVENT_SUGGESTIONS = "suggestions";
     private static final String SSE_EVENT_DONE = "done";
     private static final String SSE_EVENT_ERROR = "error";
 
-    private final LlmClient llmClient;
+    private final AiScenarioExecutor aiScenarioExecutor;
+    private final MaidChatScenarioDefinition maidChatScenarioDefinition;
     private final ArticleService articleService;
     private final ArticleKnowledgeService articleKnowledgeService;
     private final AiMaidPromptBuilder maidPromptBuilder;
     private final AiChatSessionService aiChatSessionService;
 
     public AiChatServiceImpl(
-            LlmClient llmClient,
+            AiScenarioExecutor aiScenarioExecutor,
+            MaidChatScenarioDefinition maidChatScenarioDefinition,
             ArticleService articleService,
             ArticleKnowledgeService articleKnowledgeService,
             AiMaidPromptBuilder maidPromptBuilder,
             AiChatSessionService aiChatSessionService) {
-        this.llmClient = llmClient;
+        this.aiScenarioExecutor = aiScenarioExecutor;
+        this.maidChatScenarioDefinition = maidChatScenarioDefinition;
         this.articleService = articleService;
         this.articleKnowledgeService = articleKnowledgeService;
         this.maidPromptBuilder = maidPromptBuilder;
@@ -100,11 +97,11 @@ public class AiChatServiceImpl implements AiChatService {
     public AiChatResponse chat(AiChatRequest request, Long requesterId) {
         validateRequest(request);
         ChatExecutionContext context = prepareExecutionContext(request, requesterId);
-        String outputText = llmClient.generateText(LlmTextRequest.of(
-                context.systemPrompt(),
-                buildStructuredUserPrompt(request, context)
-        ));
-        AiChatResponse response = parseStructuredResponse(outputText, context, request.getSessionId());
+        MaidChatScenarioRequest scenarioRequest = buildScenarioRequest(request, context);
+        AiScenarioResult<MaidChatScenarioResult> scenarioExecution = aiScenarioExecutor.execute(
+                AiScenarioRequest.of(AiScenarioCode.MAID_CHAT, scenarioRequest)
+        );
+        AiChatResponse response = buildChatResponse(context, scenarioExecution.data());
         aiChatSessionService.saveAssistantMessage(context.session().getSessionId(), response);
         log.info("[AI_CHAT_OK] traceId={} requesterId={} scene={} replyLength={} citations={}",
                 context.traceId(), requesterId, response.getScene(),
@@ -117,6 +114,7 @@ public class AiChatServiceImpl implements AiChatService {
     public SseEmitter streamChat(AiChatRequest request, Long requesterId) {
         validateRequest(request);
         ChatExecutionContext context = prepareExecutionContext(request, requesterId);
+        MaidChatScenarioRequest scenarioRequest = buildScenarioRequest(request, context);
         SseEmitter emitter = new SseEmitter(0L);
         AtomicBoolean cancelled = new AtomicBoolean(false);
 
@@ -130,8 +128,8 @@ public class AiChatServiceImpl implements AiChatService {
             try {
                 emitSessionStart(emitter, context);
                 StringBuilder streamedReply = new StringBuilder();
-                llmClient.streamText(
-                        LlmTextRequest.of(context.systemPrompt(), buildStreamingUserPrompt(request, context)),
+                maidChatScenarioDefinition.stream(
+                        scenarioRequest,
                         new LlmTextStreamHandler() {
                             @Override
                             public boolean isCancelled() {
@@ -155,17 +153,21 @@ public class AiChatServiceImpl implements AiChatService {
                     return;
                 }
 
-                AiChatResponse response = buildStreamResponse(streamedReply.toString(), context);
+                AiChatResponse response = buildChatResponse(
+                        context,
+                        maidChatScenarioDefinition.buildStreamResult(streamedReply.toString(), scenarioRequest)
+                );
                 aiChatSessionService.saveAssistantMessage(context.session().getSessionId(), response);
+                emitRelatedArticles(emitter, response);
                 emitSuggestions(emitter, response);
                 emitDone(emitter, response);
                 emitter.complete();
             } catch (IllegalStateException ex) {
                 log.warn("[AI_CHAT_STREAM_FAIL] traceId={} message={}", context.traceId(), ex.getMessage(), ex);
-                emitErrorFallback(emitter, context, ex.getMessage(), cancelled);
+                emitErrorFallback(emitter, context, scenarioRequest, ex.getMessage(), cancelled);
             } catch (Exception ex) {
                 log.error("[AI_CHAT_STREAM_ERROR] traceId={} message={}", context.traceId(), ex.getMessage(), ex);
-                emitErrorFallback(emitter, context, "女仆这次没接稳，请稍后再试。", cancelled);
+                emitErrorFallback(emitter, context, scenarioRequest, "女仆这次没接稳，请稍后再试。", cancelled);
             }
         });
         return emitter;
@@ -199,7 +201,7 @@ public class AiChatServiceImpl implements AiChatService {
         log.info("[AI_CHAT_REQ] traceId={} requesterId={} scene={} pageContext={} articleId={} sessionId={}",
                 traceId, requesterId, scene.name().toLowerCase(Locale.ROOT),
                 normalizeText(request.getPageContext()), request.getCurrentArticleId(), session.getSessionId());
-        return new ChatExecutionContext(scene, traceId, messageId, session, currentArticle, knowledgeHits, systemPrompt);
+        return new ChatExecutionContext(scene, traceId, messageId, requesterId, latestUserMessage, session, currentArticle, knowledgeHits, systemPrompt);
     }
 
     private void validateRequest(AiChatRequest request) {
@@ -255,139 +257,28 @@ public class AiChatServiceImpl implements AiChatService {
         );
     }
 
-    private String buildStructuredUserPrompt(AiChatRequest request, ChatExecutionContext context) {
-        StringBuilder builder = new StringBuilder();
-        builder.append("请仅返回 JSON 对象，不要输出 markdown、代码块或额外说明。\n");
-        builder.append("JSON 字段要求：replyText(string), mood(string), suggestions(string[]).\n");
-        builder.append("replyText 必须是简短自然的中文对话；suggestions 最多 3 条。\n\n");
-        appendSharedPromptContext(builder, request, context);
-        builder.append("### Response requirements\n");
-        builder.append("- 回复必须像真实聊天一样短，自然一点。\n");
-        builder.append("- 不要解释返回结构，不要附加字段。\n");
-        if (context.scene() == AiMaidPromptScene.HELPER) {
-            builder.append("- 优先基于当前文章和检索片段给出短回答。\n");
-            builder.append("- 如果证据不足，就直接说明当前站内依据还不够。\n");
-        } else {
-            builder.append("- 先自然接住用户，再给轻快回应。\n");
-            builder.append("- 如果适合，可以轻轻引导回页面内容。\n");
-        }
-        return builder.toString();
+    private MaidChatScenarioRequest buildScenarioRequest(AiChatRequest request, ChatExecutionContext context) {
+        return new MaidChatScenarioRequest(
+                context.scene(),
+                context.systemPrompt(),
+                request.getMessages(),
+                request.getPageContext(),
+                request.getCurrentArticleId(),
+                context.currentArticle(),
+                context.knowledgeHits()
+        );
     }
 
-    private String buildStreamingUserPrompt(AiChatRequest request, ChatExecutionContext context) {
-        StringBuilder builder = new StringBuilder();
-        builder.append("请直接输出一段简短自然的中文回复，不要 JSON，不要 markdown，不要代码块。\n");
-        builder.append("回复长度控制在 1 到 3 句，像日常说话。\n\n");
-        appendSharedPromptContext(builder, request, context);
-        builder.append("### Response requirements\n");
-        builder.append("- 直接给短回复正文。\n");
-        builder.append("- 不要输出引用说明，不要列清单。\n");
-        if (context.scene() == AiMaidPromptScene.HELPER) {
-            builder.append("- 优先围绕当前文章或检索片段回答。\n");
-            builder.append("- 没把握就坦白说依据不足。\n");
-        } else {
-            builder.append("- 保持 Lyra 活泼、可爱，但不要太闹。\n");
-        }
-        return builder.toString();
-    }
-
-    private void appendSharedPromptContext(StringBuilder builder, AiChatRequest request, ChatExecutionContext context) {
-        builder.append("### Chat history\n");
-        appendRecentMessages(builder, request.getMessages());
-        builder.append("\n### Page context\n");
-        builder.append("- pageContext: ").append(normalizeText(request.getPageContext())).append('\n');
-        builder.append("- currentArticleId: ").append(request.getCurrentArticleId() == null ? "none" : request.getCurrentArticleId()).append('\n');
-        if (context.currentArticle() != null) {
-            builder.append('\n');
-            appendArticleContext(builder, context.currentArticle());
-        }
-        if (!context.knowledgeHits().isEmpty()) {
-            builder.append("\n### Retrieved knowledge\n");
-            for (ArticleKnowledgeHit hit : context.knowledgeHits()) {
-                builder.append("- [")
-                        .append(hit.articleTitle())
-                        .append("] ")
-                        .append(hit.chunkSnippet())
-                        .append('\n');
-            }
-        }
-        builder.append('\n');
-    }
-
-    private void appendRecentMessages(StringBuilder builder, List<AiChatMessageDTO> messages) {
-        int start = Math.max(0, messages.size() - MAX_CONTEXT_MESSAGES);
-        for (int i = start; i < messages.size(); i++) {
-            AiChatMessageDTO message = messages.get(i);
-            if (!StringUtils.hasText(message.getContent())) {
-                continue;
-            }
-            builder.append("- ")
-                    .append(normalizeRole(message.getRole()))
-                    .append(": ")
-                    .append(message.getContent().trim())
-                    .append('\n');
-        }
-    }
-
-    private void appendArticleContext(StringBuilder builder, Article article) {
-        builder.append("### Current article\n");
-        builder.append("Title: ").append(normalizeText(article.getTitle())).append('\n');
-        if (StringUtils.hasText(article.getSummary())) {
-            builder.append("Summary: ").append(truncate(article.getSummary(), MAX_ARTICLE_SUMMARY_CHARS)).append('\n');
-        }
-        if (StringUtils.hasText(article.getContent())) {
-            builder.append("Content:\n")
-                    .append(truncate(article.getContent(), MAX_ARTICLE_CONTENT_CHARS))
-                    .append('\n');
-        }
-    }
-
-    private AiChatResponse parseStructuredResponse(String outputText, ChatExecutionContext context, String sessionId) {
-        try {
-            JSONObject payload = JSON.parseObject(stripCodeFence(outputText));
-            AiChatResponse response = new AiChatResponse();
-            response.setSessionId(context.session().getSessionId());
-            response.setMessageId(context.messageId());
-            response.setScene(context.scene().name().toLowerCase(Locale.ROOT));
-            response.setReplyText(resolveReplyText(payload.getString(OUTPUT_FIELD_REPLY_TEXT), context.scene()));
-            response.setMood(resolveMood(payload.getString(OUTPUT_FIELD_MOOD)));
-            response.setSuggestions(normalizeSuggestions(payload.getJSONArray(OUTPUT_FIELD_SUGGESTIONS), context.scene(), context.currentArticle()));
-            response.setCitations(buildCitations(context.knowledgeHits()));
-            response.setRelatedArticles(List.of());
-            response.setTraceId(context.traceId());
-            response.setFinishReason(DEFAULT_FINISH_REASON);
-            return response;
-        } catch (RuntimeException ex) {
-            log.warn("[AI_CHAT_PARSE_FAIL] traceId={} body={}", context.traceId(), outputText, ex);
-            return buildFallbackResponse(context);
-        }
-    }
-
-    private AiChatResponse buildStreamResponse(String streamedReply, ChatExecutionContext context) {
+    private AiChatResponse buildChatResponse(ChatExecutionContext context, MaidChatScenarioResult scenarioResult) {
         AiChatResponse response = new AiChatResponse();
         response.setSessionId(context.session().getSessionId());
         response.setMessageId(context.messageId());
         response.setScene(context.scene().name().toLowerCase(Locale.ROOT));
-        response.setReplyText(resolveReplyText(streamedReply, context.scene()));
-        response.setMood(DEFAULT_MOOD);
-        response.setSuggestions(defaultSuggestions(context.scene(), context.currentArticle()));
+        response.setReplyText(scenarioResult.replyText());
+        response.setMood(scenarioResult.mood());
+        response.setSuggestions(scenarioResult.suggestions());
         response.setCitations(buildCitations(context.knowledgeHits()));
-        response.setRelatedArticles(List.of());
-        response.setTraceId(context.traceId());
-        response.setFinishReason(DEFAULT_FINISH_REASON);
-        return response;
-    }
-
-    private AiChatResponse buildFallbackResponse(ChatExecutionContext context) {
-        AiChatResponse response = new AiChatResponse();
-        response.setSessionId(context.session().getSessionId());
-        response.setMessageId(context.messageId());
-        response.setScene(context.scene().name().toLowerCase(Locale.ROOT));
-        response.setReplyText(context.scene() == AiMaidPromptScene.HELPER ? DEFAULT_HELPER_REPLY : DEFAULT_REPLY);
-        response.setMood(DEFAULT_MOOD);
-        response.setSuggestions(defaultSuggestions(context.scene(), context.currentArticle()));
-        response.setCitations(buildCitations(context.knowledgeHits()));
-        response.setRelatedArticles(List.of());
+        response.setRelatedArticles(buildRelatedArticles(context));
         response.setTraceId(context.traceId());
         response.setFinishReason(DEFAULT_FINISH_REASON);
         return response;
@@ -409,29 +300,40 @@ public class AiChatServiceImpl implements AiChatService {
         return citations;
     }
 
-    private List<String> normalizeSuggestions(JSONArray rawSuggestions, AiMaidPromptScene scene, Article currentArticle) {
-        if (rawSuggestions == null || rawSuggestions.isEmpty()) {
-            return defaultSuggestions(scene, currentArticle);
+    private List<AiChatRelatedArticleDTO> buildRelatedArticles(ChatExecutionContext context) {
+        if (context.scene() != AiMaidPromptScene.HELPER) {
+            return List.of();
         }
-        List<String> suggestions = new ArrayList<>();
-        for (int i = 0; i < rawSuggestions.size() && suggestions.size() < MAX_SUGGESTION_COUNT; i++) {
-            String item = rawSuggestions.getString(i);
-            if (!StringUtils.hasText(item)) {
-                continue;
+        try {
+            AiScenarioResult<ArticleRecommendScenarioResult> scenarioExecution = aiScenarioExecutor.execute(
+                    AiScenarioRequest.of(
+                            AiScenarioCode.ARTICLE_RECOMMEND,
+                            new com.chen404.service.support.scenario.recommend.ArticleRecommendScenarioRequest(
+                                    context.currentArticle() == null ? null : context.currentArticle().getId(),
+                                    "article",
+                                    context.requesterId(),
+                                    context.latestUserMessage(),
+                                    2
+                            )
+                    )
+            );
+            ArticleRecommendScenarioResult result = scenarioExecution.data();
+            if (result == null || result.items() == null || result.items().isEmpty()) {
+                return List.of();
             }
-            suggestions.add(item.trim());
+            List<AiChatRelatedArticleDTO> relatedArticles = new ArrayList<>();
+            for (com.chen404.service.support.scenario.recommend.ArticleRecommendScenarioItem item : result.items()) {
+                AiChatRelatedArticleDTO dto = new AiChatRelatedArticleDTO();
+                dto.setArticleId(item.articleId());
+                dto.setArticleTitle(item.title());
+                dto.setUrl(item.url());
+                relatedArticles.add(dto);
+            }
+            return relatedArticles;
+        } catch (RuntimeException ex) {
+            log.warn("[AI_CHAT_RECOMMEND_SKIP] traceId={} message={}", context.traceId(), ex.getMessage(), ex);
+            return List.of();
         }
-        return suggestions.isEmpty() ? defaultSuggestions(scene, currentArticle) : suggestions;
-    }
-
-    private List<String> defaultSuggestions(AiMaidPromptScene scene, Article currentArticle) {
-        if (scene == AiMaidPromptScene.HELPER && currentArticle != null) {
-            return List.of("帮我总结这篇", "这篇的重点是什么", "推荐两篇相关的");
-        }
-        if (scene == AiMaidPromptScene.HELPER) {
-            return List.of("站内能看什么", "推荐一篇文章", "帮我找找相关内容");
-        }
-        return List.of("随便陪我聊聊", "给我一句打气的话", "今天适合看什么");
     }
 
     private void emitSessionStart(SseEmitter emitter, ChatExecutionContext context) {
@@ -456,6 +358,16 @@ public class AiChatServiceImpl implements AiChatService {
         ));
     }
 
+    private void emitRelatedArticles(SseEmitter emitter, AiChatResponse response) {
+        if (response.getRelatedArticles() == null || response.getRelatedArticles().isEmpty()) {
+            return;
+        }
+        sendEventQuietly(emitter, SSE_EVENT_RELATED_ARTICLES, JSONObject.of(
+                "messageId", response.getMessageId(),
+                "items", JSON.parseArray(JSON.toJSONString(response.getRelatedArticles()))
+        ));
+    }
+
     private void emitDone(SseEmitter emitter, AiChatResponse response) {
         sendEventQuietly(emitter, SSE_EVENT_DONE, JSONObject.of(
                 "messageId", response.getMessageId(),
@@ -464,18 +376,24 @@ public class AiChatServiceImpl implements AiChatService {
         ));
     }
 
-    private void emitErrorFallback(SseEmitter emitter, ChatExecutionContext context, String message, AtomicBoolean cancelled) {
+    private void emitErrorFallback(
+            SseEmitter emitter,
+            ChatExecutionContext context,
+            MaidChatScenarioRequest scenarioRequest,
+            String message,
+            AtomicBoolean cancelled) {
         if (cancelled.get()) {
             emitter.complete();
             return;
         }
-        AiChatResponse fallback = buildFallbackResponse(context);
+        AiChatResponse fallback = buildChatResponse(context, maidChatScenarioDefinition.buildFallbackResult(scenarioRequest));
         sendEventQuietly(emitter, SSE_EVENT_MESSAGE_START, JSONObject.of(
                 "messageId", fallback.getMessageId(),
                 "scene", fallback.getScene(),
                 "mood", fallback.getMood()
         ));
         sendEventQuietly(emitter, SSE_EVENT_DELTA, buildDeltaPayload(fallback.getMessageId(), fallback.getReplyText()));
+        emitRelatedArticles(emitter, fallback);
         emitSuggestions(emitter, fallback);
         emitDone(emitter, fallback);
         aiChatSessionService.saveAssistantMessage(context.session().getSessionId(), fallback);
@@ -549,38 +467,6 @@ public class AiChatServiceImpl implements AiChatService {
         return role.trim().toLowerCase(Locale.ROOT);
     }
 
-    private String stripCodeFence(String text) {
-        String trimmed = text == null ? EMPTY_TEXT : text.trim();
-        if (trimmed.startsWith(CODE_FENCE_PREFIX)) {
-            trimmed = trimmed.replaceFirst(JSON_FENCE_PATTERN, EMPTY_TEXT);
-            trimmed = trimmed.replaceFirst(JSON_FENCE_SUFFIX_PATTERN, EMPTY_TEXT);
-        }
-        return trimmed;
-    }
-
-    private String resolveReplyText(String replyText, AiMaidPromptScene scene) {
-        if (!StringUtils.hasText(replyText)) {
-            return scene == AiMaidPromptScene.HELPER ? DEFAULT_HELPER_REPLY : DEFAULT_REPLY;
-        }
-        String trimmed = replyText.trim();
-        return trimmed.length() > 180 ? trimmed.substring(0, 180) : trimmed;
-    }
-
-    private String resolveMood(String mood) {
-        if (!StringUtils.hasText(mood)) {
-            return DEFAULT_MOOD;
-        }
-        return mood.trim();
-    }
-
-    private String truncate(String text, int maxLength) {
-        if (!StringUtils.hasText(text)) {
-            return "";
-        }
-        String normalized = text.trim().replaceAll("\\s+", " ");
-        return normalized.length() > maxLength ? normalized.substring(0, maxLength) : normalized;
-    }
-
     private String normalizeText(String text) {
         return StringUtils.hasText(text) ? text.trim() : "unknown";
     }
@@ -597,6 +483,8 @@ public class AiChatServiceImpl implements AiChatService {
             AiMaidPromptScene scene,
             String traceId,
             String messageId,
+            Long requesterId,
+            String latestUserMessage,
             AiChatSession session,
             Article currentArticle,
             List<ArticleKnowledgeHit> knowledgeHits,

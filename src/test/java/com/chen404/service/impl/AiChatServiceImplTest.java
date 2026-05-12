@@ -14,6 +14,15 @@ import com.chen404.service.support.chat.ArticleKnowledgeHit;
 import com.chen404.service.support.prompt.AiMaidPromptBuilder;
 import com.chen404.service.support.prompt.AiMaidPromptContext;
 import com.chen404.service.support.prompt.AiMaidPromptScene;
+import com.chen404.service.support.scenario.AiScenarioCode;
+import com.chen404.service.support.scenario.AiScenarioDefinition;
+import com.chen404.service.support.scenario.AiScenarioRequest;
+import com.chen404.service.support.scenario.AiScenarioResult;
+import com.chen404.service.support.scenario.AiScenarioExecutor;
+import com.chen404.service.support.scenario.chat.MaidChatScenarioDefinition;
+import com.chen404.service.support.scenario.recommend.ArticleRecommendScenarioItem;
+import com.chen404.service.support.scenario.recommend.ArticleRecommendScenarioRequest;
+import com.chen404.service.support.scenario.recommend.ArticleRecommendScenarioResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -43,6 +52,7 @@ class AiChatServiceImplTest {
     private AiMaidPromptBuilder promptBuilder;
     private AiChatSessionService aiChatSessionService;
     private AiChatServiceImpl aiChatService;
+    private StubRecommendScenarioDefinition recommendScenarioDefinition;
 
     @BeforeEach
     void setUp() {
@@ -51,8 +61,12 @@ class AiChatServiceImplTest {
         articleKnowledgeService = mock(ArticleKnowledgeService.class);
         promptBuilder = mock(AiMaidPromptBuilder.class);
         aiChatSessionService = mock(AiChatSessionService.class);
+        MaidChatScenarioDefinition scenarioDefinition = new MaidChatScenarioDefinition(llmClient);
+        recommendScenarioDefinition = new StubRecommendScenarioDefinition();
+        AiScenarioExecutor aiScenarioExecutor = new AiScenarioExecutor(List.of(scenarioDefinition, recommendScenarioDefinition));
         aiChatService = new AiChatServiceImpl(
-                llmClient,
+                aiScenarioExecutor,
+                scenarioDefinition,
                 articleService,
                 articleKnowledgeService,
                 promptBuilder,
@@ -93,6 +107,8 @@ class AiChatServiceImplTest {
         assertEquals(1, response.getCitations().size());
         assertEquals(123L, response.getCitations().get(0).getArticleId());
         assertEquals("/articles/123", response.getCitations().get(0).getUrl());
+        assertEquals(1, response.getRelatedArticles().size());
+        assertEquals(88L, response.getRelatedArticles().get(0).getArticleId());
         assertFalse(response.getSuggestions().isEmpty());
         assertEquals("sess_test", response.getSessionId());
         verify(aiChatSessionService).saveUserMessage("sess_test", "帮我总结一下这篇文章");
@@ -152,5 +168,23 @@ class AiChatServiceImplTest {
         AiChatSession session = new AiChatSession();
         session.setSessionId("sess_test");
         return session;
+    }
+
+    private static final class StubRecommendScenarioDefinition implements AiScenarioDefinition<ArticleRecommendScenarioRequest, ArticleRecommendScenarioResult> {
+
+        @Override
+        public AiScenarioCode code() {
+            return AiScenarioCode.ARTICLE_RECOMMEND;
+        }
+
+        @Override
+        public AiScenarioResult<ArticleRecommendScenarioResult> execute(AiScenarioRequest<ArticleRecommendScenarioRequest> request) {
+            return AiScenarioResult.of(new ArticleRecommendScenarioResult(
+                    List.of(new ArticleRecommendScenarioItem(88L, "相关文章", "共享标签", "/article/88")),
+                    "规则召回已返回站内相关文章。",
+                    "trace_recommend",
+                    "rule"
+            ));
+        }
     }
 }
