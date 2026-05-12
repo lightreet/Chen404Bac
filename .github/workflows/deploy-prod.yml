@@ -39,13 +39,25 @@ jobs:
       - name: Upload jar
         shell: bash
         run: |
-          scp -i ~/.ssh/id_ed25519 -P "${{ secrets.SERVER_PORT }}" \
+          scp -v \
+            -i ~/.ssh/id_ed25519 \
+            -o BatchMode=yes \
+            -o ConnectTimeout=15 \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=3 \
+            -P "${{ secrets.SERVER_PORT }}" \
             target/chen404bac-1.0.0.jar \
-            "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/tmp/chen404bac.jar"
+            "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/home/deploy/chen404bac.jar"
 
       - name: Deploy backend
         shell: bash
         run: |
-          ssh -i ~/.ssh/id_ed25519 -p "${{ secrets.SERVER_PORT }}" \
+          ssh \
+            -i ~/.ssh/id_ed25519 \
+            -o BatchMode=yes \
+            -o ConnectTimeout=15 \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=3 \
+            -p "${{ secrets.SERVER_PORT }}" \
             "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
-            "/srv/chen404/scripts/deploy-backend.sh /tmp/chen404bac.jar"
+            "/srv/chen404/scripts/deploy-backend.sh /home/deploy/chen404bac.jar"
