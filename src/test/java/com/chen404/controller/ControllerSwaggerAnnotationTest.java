@@ -26,6 +26,7 @@ class ControllerSwaggerAnnotationTest {
             HomeController.class,
             SiteController.class,
             TagController.class,
+            TravelMemoryController.class,
             TrustRequestController.class,
             UploadController.class
     );

@@ -1,0 +1,41 @@
+CREATE TABLE IF NOT EXISTS `travel_memory_location` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `title` varchar(120) NOT NULL COMMENT '地点标题',
+  `province` varchar(64) DEFAULT NULL COMMENT '省份',
+  `city` varchar(64) DEFAULT NULL COMMENT '城市',
+  `latitude` decimal(10,6) DEFAULT NULL COMMENT '展示纬度',
+  `longitude` decimal(10,6) DEFAULT NULL COMMENT '展示经度',
+  `summary_note` varchar(1000) DEFAULT NULL COMMENT '地点简介',
+  `cover_image` varchar(500) DEFAULT NULL COMMENT '封面图',
+  `visited_at` datetime DEFAULT NULL COMMENT '到访时间',
+  `status` tinyint NOT NULL DEFAULT 1 COMMENT '状态：0-隐藏 1-展示',
+  `sort_order` int NOT NULL DEFAULT 0 COMMENT '排序值',
+  `created_by` bigint DEFAULT NULL COMMENT '创建人',
+  `updated_by` bigint DEFAULT NULL COMMENT '更新人',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `deleted` tinyint NOT NULL DEFAULT 0 COMMENT '逻辑删除标记',
+  PRIMARY KEY (`id`),
+  KEY `idx_travel_memory_location_status_sort` (`status`, `sort_order`, `id`),
+  KEY `idx_travel_memory_location_visited_at` (`visited_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='旅行纪念地点主表';
+
+CREATE TABLE IF NOT EXISTS `travel_memory_entry` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `location_id` bigint NOT NULL COMMENT '地点 ID',
+  `image_url` varchar(500) NOT NULL COMMENT '图片地址',
+  `remark` varchar(255) DEFAULT NULL COMMENT '图片备注',
+  `thanks_note` varchar(2000) DEFAULT NULL COMMENT '图片感想',
+  `shot_at` datetime DEFAULT NULL COMMENT '拍摄时间',
+  `display_order` int NOT NULL DEFAULT 0 COMMENT '展示顺序',
+  `is_cover` tinyint NOT NULL DEFAULT 0 COMMENT '是否封面：0-否 1-是',
+  `source_latitude` decimal(10,6) DEFAULT NULL COMMENT '图片原始纬度',
+  `source_longitude` decimal(10,6) DEFAULT NULL COMMENT '图片原始经度',
+  `geo_source` varchar(16) NOT NULL DEFAULT 'NONE' COMMENT '坐标来源：NONE/EXIF/MANUAL',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `deleted` tinyint NOT NULL DEFAULT 0 COMMENT '逻辑删除标记',
+  PRIMARY KEY (`id`),
+  KEY `idx_travel_memory_entry_location` (`location_id`, `display_order`, `id`),
+  KEY `idx_travel_memory_entry_cover` (`location_id`, `is_cover`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='旅行纪念照片子表';

@@ -11,6 +11,7 @@ import com.chen404.exception.ForbiddenException;
 import com.chen404.exception.UnauthorizedException;
 import com.chen404.security.AuthenticatedUser;
 import com.chen404.service.SysFileService;
+import com.chen404.service.TravelMemoryImageMetadataService;
 import com.chen404.util.CurrentUserUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -84,6 +85,9 @@ public class UploadController {
 
     @Autowired
     private SiteRuntimeProperties siteRuntimeProperties;
+
+    @Autowired
+    private TravelMemoryImageMetadataService travelMemoryImageMetadataService;
 
     @Operation(summary = "上传文章图片", description = "编辑器内单张图片上传")
     @PostMapping(value = "/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -253,6 +257,39 @@ public class UploadController {
             return Result.success("上传成功", buildUploadData(sysFile));
         } catch (Exception e) {
             log.error("上传受信申请附件失败", e);
+            return Result.error(500, "上传失败，请稍后重试");
+        }
+    }
+
+    @RequireAdmin
+    @Operation(summary = "上传旅行纪念图片", description = "仅管理员可用，上传后尝试解析 EXIF 经纬度与拍摄时间")
+    @PostMapping(value = "/travel-memory-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Result<UploadFileVO> uploadTravelMemoryImage(
+            @ModelAttribute SingleFileUploadDTO form,
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
+        MultipartFile file = form.getFile();
+        Result<UploadFileVO> validateResult = validateImage(file, resolveImageMaxSize(), resolveAllowedImageTypes());
+        if (validateResult != null) {
+            return validateResult;
+        }
+
+        try {
+            TravelMemoryImageMetadataService.TravelMemoryImageMetadata metadata =
+                    travelMemoryImageMetadataService.extract(file);
+            SysFile sysFile = sysFileService.uploadTempFile(file, userId, SysFile.RefType.TRAVEL_MEMORY_IMAGE);
+            UploadFileVO data = buildUploadData(sysFile);
+            data.setLatitude(metadata.latitude());
+            data.setLongitude(metadata.longitude());
+            data.setShotAt(metadata.shotAt());
+            log.info("[TRAVEL_MEMORY_IMAGE_UPLOAD] userId={} url={} hasLatLng={} hasShotAt={}",
+                    userId, sysFile.getFileUrl(), metadata.latitude() != null && metadata.longitude() != null,
+                    metadata.shotAt() != null);
+            return Result.success("上传成功", data);
+        } catch (Exception e) {
+            log.error("[TRAVEL_MEMORY_IMAGE_UPLOAD_FAIL] userId={} fileName={} message={}",
+                    userId, file == null ? null : file.getOriginalFilename(), e.getMessage(), e);
             return Result.error(500, "上传失败，请稍后重试");
         }
     }

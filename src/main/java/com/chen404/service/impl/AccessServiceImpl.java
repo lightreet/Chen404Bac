@@ -42,6 +42,24 @@ public class AccessServiceImpl implements AccessService {
         return Objects.equals(user.getTrustLevel(), UserTrustLevelEnum.FRIEND.getLevel());
     }
 
+    @Override
+    public boolean canViewTravelMemory(Long userId) {
+        User user = getUserOrNull(userId);
+        if (user == null) {
+            return false;
+        }
+        return isAdmin(user) || isFriend(user);
+    }
+
+    @Override
+    public boolean canManageTravelMemory(Long userId) {
+        User user = getUserOrNull(userId);
+        if (user == null) {
+            return false;
+        }
+        return isAdmin(user);
+    }
+
     private boolean isArticleOwner(Long userId, Article article) {
         if (userId == null || article == null) {
             return false;
