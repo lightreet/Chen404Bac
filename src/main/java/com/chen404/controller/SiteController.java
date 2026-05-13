@@ -123,6 +123,7 @@ public class SiteController {
         config.setCommentAudit(source.getCommentAudit());
         config.setCommentGuest(source.getCommentGuest());
         config.setHeroImages(source.getHeroImages());
+        config.setHeroImagePositions(source.getHeroImagePositions());
         return config;
     }
 

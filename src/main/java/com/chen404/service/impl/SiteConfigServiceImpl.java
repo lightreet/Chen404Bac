@@ -19,6 +19,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -49,6 +51,10 @@ public class SiteConfigServiceImpl implements SiteConfigService {
     private static final String KEY_COMMENT_AUDIT = "comment.audit";
     private static final String KEY_COMMENT_GUEST = "comment.guest";
     private static final String KEY_HERO_IMAGES = "site.hero_images";
+    private static final String KEY_HERO_IMAGE_POSITIONS = "site.hero_image_positions";
+    private static final Pattern HERO_POSITION_PATTERN = Pattern.compile(
+            "^\\s*(\\d{1,3}(?:\\.\\d+)?)%\\s+(\\d{1,3}(?:\\.\\d+)?)%\\s*$"
+    );
 
     private final ObjectMapper objectMapper;
     private final SiteConfigMapper siteConfigMapper;
@@ -112,6 +118,7 @@ public class SiteConfigServiceImpl implements SiteConfigService {
                 case KEY_COMMENT_AUDIT -> dto.setCommentAudit(parseBoolean(value));
                 case KEY_COMMENT_GUEST -> dto.setCommentGuest(parseBoolean(value));
                 case KEY_HERO_IMAGES -> dto.setHeroImages(parseHeroImages(value));
+                case KEY_HERO_IMAGE_POSITIONS -> dto.setHeroImagePositions(parseHeroImagePositions(value));
                 default -> {
                 }
             }
@@ -143,6 +150,7 @@ public class SiteConfigServiceImpl implements SiteConfigService {
         upsertValue(existing, KEY_COMMENT_AUDIT, String.valueOf(Boolean.TRUE.equals(config.getCommentAudit())), "Comment audit enabled", 3);
         upsertValue(existing, KEY_COMMENT_GUEST, String.valueOf(Boolean.TRUE.equals(config.getCommentGuest())), "Guest comment enabled", 3);
         upsertValue(existing, KEY_HERO_IMAGES, toHeroImagesJson(config.getHeroImages()), "Hero images", 4);
+        upsertValue(existing, KEY_HERO_IMAGE_POSITIONS, toHeroImagePositionsJson(config.getHeroImagePositions()), "Hero image positions", 4);
     }
 
     private void upsertValue(Map<String, SiteConfig> existing, String key, String value, String description, int type) {
@@ -213,10 +221,19 @@ public class SiteConfigServiceImpl implements SiteConfigService {
         config.setCommentAudit(true);
         config.setCommentGuest(true);
         config.setHeroImages(new LinkedHashMap<>());
+        config.setHeroImagePositions(new LinkedHashMap<>());
         return config;
     }
 
     private Map<String, String> parseHeroImages(String value) {
+        return parseStringMap(value, "Failed to parse hero images config");
+    }
+
+    private Map<String, String> parseHeroImagePositions(String value) {
+        return parseStringMap(value, "Failed to parse hero image positions config");
+    }
+
+    private Map<String, String> parseStringMap(String value, String logMessage) {
         if (!StringUtils.hasText(value)) {
             return new LinkedHashMap<>();
         }
@@ -226,16 +243,24 @@ public class SiteConfigServiceImpl implements SiteConfigService {
                     objectMapper.getTypeFactory().constructMapType(LinkedHashMap.class, String.class, String.class)
             );
         } catch (IOException e) {
-            log.warn("Failed to parse hero images config", e);
+            log.warn(logMessage, e);
             return new LinkedHashMap<>();
         }
     }
 
     private String toHeroImagesJson(Map<String, String> heroImages) {
+        return toStringMapJson(heroImages, "Failed to serialize hero images config");
+    }
+
+    private String toHeroImagePositionsJson(Map<String, String> heroImagePositions) {
+        return toStringMapJson(heroImagePositions, "Failed to serialize hero image positions config");
+    }
+
+    private String toStringMapJson(Map<String, String> value, String errorMessage) {
         try {
-            return objectMapper.writeValueAsString(heroImages == null ? Map.of() : heroImages);
+            return objectMapper.writeValueAsString(value == null ? Map.of() : value);
         } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Failed to serialize hero images config", e);
+            throw new IllegalStateException(errorMessage, e);
         }
     }
 
@@ -301,6 +326,25 @@ public class SiteConfigServiceImpl implements SiteConfigService {
             }
             target.setHeroImages(merged);
         }
+        if (patch.getHeroImagePositions() != null) {
+            Map<String, String> merged = new LinkedHashMap<>();
+            if (target.getHeroImagePositions() != null) {
+                merged.putAll(target.getHeroImagePositions());
+            }
+            for (Map.Entry<String, String> entry : patch.getHeroImagePositions().entrySet()) {
+                if (!StringUtils.hasText(entry.getKey())) {
+                    continue;
+                }
+                String key = entry.getKey().trim();
+                String value = entry.getValue();
+                if (!StringUtils.hasText(value)) {
+                    merged.remove(key);
+                    continue;
+                }
+                merged.put(key, value.trim());
+            }
+            target.setHeroImagePositions(merged);
+        }
     }
 
     private static void normalize(SiteConfigDTO config) {
@@ -342,6 +386,31 @@ public class SiteConfigServiceImpl implements SiteConfigService {
             }
         }
         config.setHeroImages(normalizedHeroImages);
+
+        Map<String, String> normalizedHeroImagePositions = new LinkedHashMap<>();
+        if (config.getHeroImagePositions() != null) {
+            for (Map.Entry<String, String> entry : config.getHeroImagePositions().entrySet()) {
+                if (!StringUtils.hasText(entry.getKey()) || !StringUtils.hasText(entry.getValue())) {
+                    continue;
+                }
+                String key = entry.getKey().trim();
+                String position = normalizeHeroImagePosition(entry.getValue());
+                if (!StringUtils.hasText(position)) {
+                    continue;
+                }
+                normalizedHeroImagePositions.put(key, position);
+            }
+        }
+        if (!normalizedHeroImagePositions.containsKey("tag")) {
+            String tagFallback = normalizedHeroImagePositions.getOrDefault(
+                    "category",
+                    normalizedHeroImagePositions.get("home")
+            );
+            if (StringUtils.hasText(tagFallback)) {
+                normalizedHeroImagePositions.put("tag", tagFallback);
+            }
+        }
+        config.setHeroImagePositions(normalizedHeroImagePositions);
     }
 
     private static boolean isSafeHeroImageUrl(String value) {
@@ -365,6 +434,31 @@ public class SiteConfigServiceImpl implements SiteConfigService {
                 || value.contains("\\")
                 || value.contains("\r")
                 || value.contains("\n");
+    }
+
+    private static String normalizeHeroImagePosition(String value) {
+        if (!StringUtils.hasText(value) || containsUnsafeCssChars(value)) {
+            return "";
+        }
+        Matcher matcher = HERO_POSITION_PATTERN.matcher(value);
+        if (!matcher.matches()) {
+            return "";
+        }
+        double x = clampPercent(Double.parseDouble(matcher.group(1)));
+        double y = clampPercent(Double.parseDouble(matcher.group(2)));
+        return formatPercent(x) + " " + formatPercent(y);
+    }
+
+    private static double clampPercent(double value) {
+        return Math.max(0D, Math.min(100D, value));
+    }
+
+    private static String formatPercent(double value) {
+        double rounded = Math.round(value * 10D) / 10D;
+        if (rounded == Math.rint(rounded)) {
+            return (long) rounded + "%";
+        }
+        return rounded + "%";
     }
 
     private static String trimToDefault(String value, String defaultValue) {

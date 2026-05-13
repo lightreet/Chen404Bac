@@ -25,4 +25,5 @@ public class SiteConfigDTO {
     private Boolean commentAudit;
     private Boolean commentGuest;
     private Map<String, String> heroImages = new LinkedHashMap<>();
+    private Map<String, String> heroImagePositions = new LinkedHashMap<>();
 }
