@@ -148,7 +148,7 @@ Chen404Bac/
 
 ## 文档
 
-- [架构设计](doc/architecture/architecture.md)
+- [架构设计](doc/architecture/项目架构设计)
 - [数据库脚本](doc/sql/3-26/chen404.sql)
 - [权限设计](doc/architecture/permission-design.md)
 - [最小权限种子脚本](doc/sql/3-27/seed-permission-min.sql)
