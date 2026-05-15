@@ -7,6 +7,7 @@ import com.chen404.domain.entity.TravelMemoryEntry;
 import com.chen404.domain.entity.TravelMemoryLocation;
 import com.chen404.domain.enums.TravelMemoryGeoSourceEnum;
 import com.chen404.domain.enums.TravelMemoryStatusEnum;
+import com.chen404.exception.BadRequestException;
 import com.chen404.exception.ForbiddenException;
 import com.chen404.mapper.TravelMemoryEntryMapper;
 import com.chen404.mapper.TravelMemoryLocationMapper;
@@ -163,8 +164,7 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
         if (visibleOnly) {
             wrapper.eq(TravelMemoryLocation::getStatus, STATUS_VISIBLE);
         }
-        wrapper.orderByAsc(TravelMemoryLocation::getSortOrder)
-                .orderByDesc(TravelMemoryLocation::getVisitedAt)
+        wrapper.orderByDesc(TravelMemoryLocation::getVisitedAt)
                 .orderByDesc(TravelMemoryLocation::getId);
         return travelMemoryLocationMapper.selectList(wrapper);
     }
@@ -280,6 +280,7 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
                 return;
             }
         }
+        throw new BadRequestException("请先为旅行地点选择地图坐标");
     }
 
     private String resolveCoverImage(List<TravelMemoryEntry> entries) {
@@ -296,6 +297,7 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
 
     private void saveEntries(Long locationId, List<TravelMemoryEntry> entries) {
         for (TravelMemoryEntry entry : entries) {
+            entry.setId(null);
             entry.setLocationId(locationId);
             travelMemoryEntryMapper.insert(entry);
         }

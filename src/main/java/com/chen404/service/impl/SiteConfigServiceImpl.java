@@ -23,6 +23,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+/**
+ * 站点配置服务实现，负责配置的默认值补齐、持久化与前台 Hero 资源归档。
+ */
 @Slf4j
 @Service
 public class SiteConfigServiceImpl implements SiteConfigService {
@@ -52,6 +55,7 @@ public class SiteConfigServiceImpl implements SiteConfigService {
     private static final String KEY_COMMENT_GUEST = "comment.guest";
     private static final String KEY_HERO_IMAGES = "site.hero_images";
     private static final String KEY_HERO_IMAGE_POSITIONS = "site.hero_image_positions";
+    private static final String KEY_HERO_TEXTS = "site.hero_texts";
     private static final Pattern HERO_POSITION_PATTERN = Pattern.compile(
             "^\\s*(\\d{1,3}(?:\\.\\d+)?)%\\s+(\\d{1,3}(?:\\.\\d+)?)%\\s*$"
     );
@@ -119,6 +123,7 @@ public class SiteConfigServiceImpl implements SiteConfigService {
                 case KEY_COMMENT_GUEST -> dto.setCommentGuest(parseBoolean(value));
                 case KEY_HERO_IMAGES -> dto.setHeroImages(parseHeroImages(value));
                 case KEY_HERO_IMAGE_POSITIONS -> dto.setHeroImagePositions(parseHeroImagePositions(value));
+                case KEY_HERO_TEXTS -> dto.setHeroTexts(parseHeroTexts(value));
                 default -> {
                 }
             }
@@ -151,6 +156,7 @@ public class SiteConfigServiceImpl implements SiteConfigService {
         upsertValue(existing, KEY_COMMENT_GUEST, String.valueOf(Boolean.TRUE.equals(config.getCommentGuest())), "Guest comment enabled", 3);
         upsertValue(existing, KEY_HERO_IMAGES, toHeroImagesJson(config.getHeroImages()), "Hero images", 4);
         upsertValue(existing, KEY_HERO_IMAGE_POSITIONS, toHeroImagePositionsJson(config.getHeroImagePositions()), "Hero image positions", 4);
+        upsertValue(existing, KEY_HERO_TEXTS, toHeroTextsJson(config.getHeroTexts()), "Hero texts", 4);
     }
 
     private void upsertValue(Map<String, SiteConfig> existing, String key, String value, String description, int type) {
@@ -222,6 +228,7 @@ public class SiteConfigServiceImpl implements SiteConfigService {
         config.setCommentGuest(true);
         config.setHeroImages(new LinkedHashMap<>());
         config.setHeroImagePositions(new LinkedHashMap<>());
+        config.setHeroTexts(new LinkedHashMap<>());
         return config;
     }
 
@@ -231,6 +238,10 @@ public class SiteConfigServiceImpl implements SiteConfigService {
 
     private Map<String, String> parseHeroImagePositions(String value) {
         return parseStringMap(value, "Failed to parse hero image positions config");
+    }
+
+    private Map<String, String> parseHeroTexts(String value) {
+        return parseStringMap(value, "Failed to parse hero texts config");
     }
 
     private Map<String, String> parseStringMap(String value, String logMessage) {
@@ -254,6 +265,10 @@ public class SiteConfigServiceImpl implements SiteConfigService {
 
     private String toHeroImagePositionsJson(Map<String, String> heroImagePositions) {
         return toStringMapJson(heroImagePositions, "Failed to serialize hero image positions config");
+    }
+
+    private String toHeroTextsJson(Map<String, String> heroTexts) {
+        return toStringMapJson(heroTexts, "Failed to serialize hero texts config");
     }
 
     private String toStringMapJson(Map<String, String> value, String errorMessage) {
@@ -308,42 +323,13 @@ public class SiteConfigServiceImpl implements SiteConfigService {
             target.setCommentGuest(patch.getCommentGuest());
         }
         if (patch.getHeroImages() != null) {
-            Map<String, String> merged = new LinkedHashMap<>();
-            if (target.getHeroImages() != null) {
-                merged.putAll(target.getHeroImages());
-            }
-            for (Map.Entry<String, String> entry : patch.getHeroImages().entrySet()) {
-                if (!StringUtils.hasText(entry.getKey())) {
-                    continue;
-                }
-                String key = entry.getKey().trim();
-                String value = entry.getValue();
-                if (!StringUtils.hasText(value)) {
-                    merged.remove(key);
-                    continue;
-                }
-                merged.put(key, value.trim());
-            }
-            target.setHeroImages(merged);
+            target.setHeroImages(mergeStringMap(target.getHeroImages(), patch.getHeroImages()));
         }
         if (patch.getHeroImagePositions() != null) {
-            Map<String, String> merged = new LinkedHashMap<>();
-            if (target.getHeroImagePositions() != null) {
-                merged.putAll(target.getHeroImagePositions());
-            }
-            for (Map.Entry<String, String> entry : patch.getHeroImagePositions().entrySet()) {
-                if (!StringUtils.hasText(entry.getKey())) {
-                    continue;
-                }
-                String key = entry.getKey().trim();
-                String value = entry.getValue();
-                if (!StringUtils.hasText(value)) {
-                    merged.remove(key);
-                    continue;
-                }
-                merged.put(key, value.trim());
-            }
-            target.setHeroImagePositions(merged);
+            target.setHeroImagePositions(mergeStringMap(target.getHeroImagePositions(), patch.getHeroImagePositions()));
+        }
+        if (patch.getHeroTexts() != null) {
+            target.setHeroTexts(mergeStringMap(target.getHeroTexts(), patch.getHeroTexts()));
         }
     }
 
@@ -411,6 +397,41 @@ public class SiteConfigServiceImpl implements SiteConfigService {
             }
         }
         config.setHeroImagePositions(normalizedHeroImagePositions);
+        config.setHeroTexts(normalizeHeroTexts(config.getHeroTexts()));
+    }
+
+    private static Map<String, String> mergeStringMap(Map<String, String> current, Map<String, String> patch) {
+        Map<String, String> merged = new LinkedHashMap<>();
+        if (current != null) {
+            merged.putAll(current);
+        }
+        for (Map.Entry<String, String> entry : patch.entrySet()) {
+            if (!StringUtils.hasText(entry.getKey())) {
+                continue;
+            }
+            String key = entry.getKey().trim();
+            String value = entry.getValue();
+            if (!StringUtils.hasText(value)) {
+                merged.remove(key);
+                continue;
+            }
+            merged.put(key, value.trim());
+        }
+        return merged;
+    }
+
+    private static Map<String, String> normalizeHeroTexts(Map<String, String> heroTexts) {
+        Map<String, String> normalizedHeroTexts = new LinkedHashMap<>();
+        if (heroTexts == null) {
+            return normalizedHeroTexts;
+        }
+        for (Map.Entry<String, String> entry : heroTexts.entrySet()) {
+            if (!StringUtils.hasText(entry.getKey()) || !StringUtils.hasText(entry.getValue())) {
+                continue;
+            }
+            normalizedHeroTexts.put(entry.getKey().trim(), entry.getValue().trim());
+        }
+        return normalizedHeroTexts;
     }
 
     private static boolean isSafeHeroImageUrl(String value) {

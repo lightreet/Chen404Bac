@@ -6,7 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * 站点配置：当前包含基础站点信息与各页面 Hero 封面图。
+ * 站点配置：当前包含基础站点信息、各页面 Hero 封面图，以及页面主视觉文案。
  */
 @Data
 public class SiteConfigDTO {
@@ -26,4 +26,5 @@ public class SiteConfigDTO {
     private Boolean commentGuest;
     private Map<String, String> heroImages = new LinkedHashMap<>();
     private Map<String, String> heroImagePositions = new LinkedHashMap<>();
+    private Map<String, String> heroTexts = new LinkedHashMap<>();
 }

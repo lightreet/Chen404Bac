@@ -47,7 +47,6 @@ public interface TravelMemoryConverter {
     TravelMemoryLocation toEntity(UpdateTravelMemoryCommand command);
 
     @BeanMapping(ignoreByDefault = true)
-    @Mapping(target = "id", source = "id")
     @Mapping(target = "imageUrl", source = "imageUrl")
     @Mapping(target = "remark", source = "remark")
     @Mapping(target = "thanksNote", source = "thanksNote")

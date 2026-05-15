@@ -39,4 +39,26 @@ class SiteConfigServiceImplTest {
         assertEquals("32% 61%", result.getHeroImagePositions().get("home"));
         assertFalse(result.getHeroImagePositions().containsKey("archive"));
     }
+
+    @Test
+    void updateConfigShouldTrimAndRetainHeroTexts() {
+        SiteConfigMapper siteConfigMapper = mock(SiteConfigMapper.class);
+        SysFileService sysFileService = mock(SysFileService.class);
+        when(siteConfigMapper.selectAllConfigs()).thenReturn(List.of());
+        doNothing().when(sysFileService).convertToPermanent(org.mockito.ArgumentMatchers.anyList(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong());
+
+        SiteConfigServiceImpl service = new SiteConfigServiceImpl(new ObjectMapper(), siteConfigMapper, sysFileService);
+        SiteConfigDTO patch = new SiteConfigDTO();
+        patch.setHeroTexts(new LinkedHashMap<>(Map.of(
+                "memory-map.title", "  旅行纪念地图  ",
+                "memory-map.subtitle", "  把走过的每一段旅程都收藏起来。  ",
+                "memory-map.eyebrow", ""
+        )));
+
+        SiteConfigDTO result = service.updateConfig(patch);
+
+        assertEquals("旅行纪念地图", result.getHeroTexts().get("memory-map.title"));
+        assertEquals("把走过的每一段旅程都收藏起来。", result.getHeroTexts().get("memory-map.subtitle"));
+        assertFalse(result.getHeroTexts().containsKey("memory-map.eyebrow"));
+    }
 }
