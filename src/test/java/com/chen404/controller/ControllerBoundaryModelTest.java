@@ -18,9 +18,13 @@ import com.chen404.domain.dto.RecentCommentVO;
 import com.chen404.domain.dto.SendCodeResultDTO;
 import com.chen404.domain.dto.SiteStatsVO;
 import com.chen404.domain.dto.TagVO;
+import com.chen404.domain.dto.TravelMemoryLocationDetailVO;
+import com.chen404.domain.dto.TravelMemoryLocationListItemVO;
 import com.chen404.domain.dto.UpdateArticleCommand;
 import com.chen404.domain.dto.UpdateCategoryCommand;
+import com.chen404.domain.dto.UpdateTravelMemoryCommand;
 import com.chen404.domain.dto.UserProfileVO;
+import com.chen404.domain.dto.CreateTravelMemoryCommand;
 import com.chen404.domain.entity.Article;
 import com.chen404.domain.entity.Category;
 import com.chen404.security.AuthenticatedUser;
@@ -77,6 +81,42 @@ class ControllerBoundaryModelTest {
 
         Method listMethod = CategoryController.class.getMethod("getCategories", boolean.class);
         assertReturnTypeContains(listMethod, CategoryVO.class.getName());
+    }
+
+    @Test
+    void travelMemoryControllerShouldUseCommandsAndVosAtBoundary() throws Exception {
+        Method listMethod = TravelMemoryController.class.getMethod("listVisibleMemories", AuthenticatedUser.class);
+        assertReturnTypeContains(listMethod, TravelMemoryLocationListItemVO.class.getName());
+
+        Method detailMethod = TravelMemoryController.class.getMethod("getVisibleMemoryDetail", Long.class, AuthenticatedUser.class);
+        assertReturnTypeContains(detailMethod, Result.class.getName() + "<com.chen404.domain.dto.TravelMemoryLocationDetailVO>");
+
+        Method adminListMethod = TravelMemoryController.class.getMethod("listAdminMemories");
+        assertReturnTypeContains(adminListMethod, TravelMemoryLocationDetailVO.class.getName());
+
+        Method adminDetailMethod = TravelMemoryController.class.getMethod(
+                "getAdminMemoryDetail",
+                Long.class,
+                AuthenticatedUser.class
+        );
+        assertReturnTypeContains(adminDetailMethod, Result.class.getName() + "<com.chen404.domain.dto.TravelMemoryLocationDetailVO>");
+
+        Method createMethod = TravelMemoryController.class.getMethod(
+                "createTravelMemory",
+                CreateTravelMemoryCommand.class,
+                AuthenticatedUser.class
+        );
+        assertRequestBodyType(createMethod, CreateTravelMemoryCommand.class);
+        assertReturnTypeContains(createMethod, Result.class.getName() + "<com.chen404.domain.dto.TravelMemoryLocationDetailVO>");
+
+        Method updateMethod = TravelMemoryController.class.getMethod(
+                "updateTravelMemory",
+                Long.class,
+                UpdateTravelMemoryCommand.class,
+                AuthenticatedUser.class
+        );
+        assertRequestBodyType(updateMethod, UpdateTravelMemoryCommand.class);
+        assertReturnTypeContains(updateMethod, Result.class.getName() + "<com.chen404.domain.dto.TravelMemoryLocationDetailVO>");
     }
 
     @Test
@@ -177,10 +217,18 @@ class ControllerBoundaryModelTest {
         Method importMethod = EmojiController.class.getMethod("importZip", org.springframework.web.multipart.MultipartFile.class);
         assertReturnTypeContains(importMethod, EmojiImportResultDTO.class.getName());
 
-        Method uploadImageMethod = UploadController.class.getMethod("uploadImage", org.springframework.web.multipart.MultipartFile.class, AuthenticatedUser.class);
+        Method uploadImageMethod = UploadController.class.getMethod(
+                "uploadImage",
+                com.chen404.domain.dto.SingleFileUploadDTO.class,
+                AuthenticatedUser.class
+        );
         assertReturnTypeContains(uploadImageMethod, "com.chen404.domain.dto.UploadFileVO");
 
-        Method uploadImagesMethod = UploadController.class.getMethod("uploadImages", org.springframework.web.multipart.MultipartFile[].class, AuthenticatedUser.class);
+        Method uploadImagesMethod = UploadController.class.getMethod(
+                "uploadImages",
+                com.chen404.domain.dto.MultiFileUploadDTO.class,
+                AuthenticatedUser.class
+        );
         assertReturnTypeContains(uploadImagesMethod, "com.chen404.domain.dto.UploadFileVO");
 
         Method neighborsMethod = ArticleController.class.getMethod("getArticleNeighbors", Long.class, AuthenticatedUser.class);

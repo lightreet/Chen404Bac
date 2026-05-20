@@ -23,7 +23,11 @@ class FlywayMigrationLayoutTest {
             "V2026032801__interaction_like_tables.sql",
             "V2026040201__article_cover_file_id.sql",
             "V2026042501__create_user_trust_request.sql",
-            "V2026042502__drop_trust_request_attachment_urls.sql"
+            "V2026042502__drop_trust_request_attachment_urls.sql",
+            "V2026050602__site_config_runtime_defaults.sql",
+            "V2026050603__remove_runtime_site_config_keys.sql",
+            "V2026051001__ai_chat_and_article_chunk.sql",
+            "V2026051301__create_travel_memory_tables.sql"
     );
 
     @Test
