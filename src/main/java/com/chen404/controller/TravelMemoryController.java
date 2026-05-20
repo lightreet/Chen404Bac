@@ -77,6 +77,18 @@ public class TravelMemoryController {
     }
 
     @RequireAdmin
+    @Operation(summary = "获取后台旅行纪念地点详情", description = "仅管理员可访问")
+    @GetMapping("/admin/travel-memories/{id}")
+    public Result<TravelMemoryLocationDetailVO> getAdminMemoryDetail(
+            @Parameter(description = "地点 ID", required = true, example = "1001")
+            @PathVariable Long id,
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        Long adminId = CurrentUserUtil.requireUserId(currentUser);
+        TravelMemoryLocation location = travelMemoryService.getAdminLocationDetail(id, adminId);
+        return Result.success(travelMemoryConverter.toDetailVO(location));
+    }
+
+    @RequireAdmin
     @Operation(summary = "创建旅行纪念地点", description = "仅管理员可访问")
     @PostMapping("/admin/travel-memories")
     public Result<TravelMemoryLocationDetailVO> createTravelMemory(

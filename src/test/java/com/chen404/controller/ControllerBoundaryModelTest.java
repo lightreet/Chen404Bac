@@ -94,6 +94,13 @@ class ControllerBoundaryModelTest {
         Method adminListMethod = TravelMemoryController.class.getMethod("listAdminMemories");
         assertReturnTypeContains(adminListMethod, TravelMemoryLocationDetailVO.class.getName());
 
+        Method adminDetailMethod = TravelMemoryController.class.getMethod(
+                "getAdminMemoryDetail",
+                Long.class,
+                AuthenticatedUser.class
+        );
+        assertReturnTypeContains(adminDetailMethod, Result.class.getName() + "<com.chen404.domain.dto.TravelMemoryLocationDetailVO>");
+
         Method createMethod = TravelMemoryController.class.getMethod(
                 "createTravelMemory",
                 CreateTravelMemoryCommand.class,

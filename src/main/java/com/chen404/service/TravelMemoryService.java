@@ -26,6 +26,11 @@ public interface TravelMemoryService {
     List<TravelMemoryLocation> listAdminLocations();
 
     /**
+     * 查询管理员后台用的旅行纪念地点详情。
+     */
+    TravelMemoryLocation getAdminLocationDetail(Long id, Long adminId);
+
+    /**
      * 创建旅行纪念地点及其照片条目。
      */
     TravelMemoryLocation createLocation(TravelMemoryLocation location, List<TravelMemoryEntry> entries, Long adminId);

@@ -9,6 +9,7 @@ import com.chen404.domain.enums.TravelMemoryGeoSourceEnum;
 import com.chen404.domain.enums.TravelMemoryStatusEnum;
 import com.chen404.exception.BadRequestException;
 import com.chen404.exception.ForbiddenException;
+import com.chen404.exception.ResourceNotFoundException;
 import com.chen404.mapper.TravelMemoryEntryMapper;
 import com.chen404.mapper.TravelMemoryLocationMapper;
 import com.chen404.service.AccessService;
@@ -17,6 +18,8 @@ import com.chen404.service.TravelMemoryService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
@@ -30,7 +33,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * 旅行纪念地图服务实现，负责地点聚合、照片维护、权限校验与文件转正清理。
+ * 旅行纪念地图服务实现，负责地点聚合、照片维护、权限校验与文件清理。
  */
 @Slf4j
 @Service
@@ -84,6 +87,12 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
     }
 
     @Override
+    public TravelMemoryLocation getAdminLocationDetail(Long id, Long adminId) {
+        ensureCanManage(adminId);
+        return getAdminLocationOrThrow(id, adminId);
+    }
+
+    @Override
     @Transactional
     public TravelMemoryLocation createLocation(TravelMemoryLocation location, List<TravelMemoryEntry> entries, Long adminId) {
         ensureCanManage(adminId);
@@ -94,17 +103,14 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
         convertEntryImagesToPermanent(normalizedLocation.getEntries(), normalizedLocation.getId());
         log.info("[TRAVEL_MEMORY_CREATE] adminId={} locationId={} entryCount={}",
                 adminId, normalizedLocation.getId(), normalizedLocation.getEntries().size());
-        return getAdminLocationOrThrow(normalizedLocation.getId());
+        return getAdminLocationOrThrow(normalizedLocation.getId(), adminId);
     }
 
     @Override
     @Transactional
     public TravelMemoryLocation updateLocation(Long id, TravelMemoryLocation location, List<TravelMemoryEntry> entries, Long adminId) {
         ensureCanManage(adminId);
-        TravelMemoryLocation existing = travelMemoryLocationMapper.selectById(id);
-        if (existing == null) {
-            throw new RuntimeException("旅行纪念地点不存在");
-        }
+        TravelMemoryLocation existing = getAdminLocationOrThrow(id, adminId);
 
         List<TravelMemoryEntry> oldEntries = listEntriesByLocationIds(List.of(id)).getOrDefault(id, List.of());
         TravelMemoryLocation normalizedLocation = normalizeLocation(location, entries, adminId, existing);
@@ -114,29 +120,24 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
                 .map(String::trim)
                 .collect(Collectors.toSet());
 
-        cleanupRemovedEntryImages(oldEntries, newUrls, adminId);
-
         normalizedLocation.setId(id);
         travelMemoryLocationMapper.updateById(normalizedLocation);
 
         replaceEntries(id, normalizedLocation.getEntries());
         convertEntryImagesToPermanent(normalizedLocation.getEntries(), id);
+        scheduleRemovedEntryImagesCleanup(oldEntries, newUrls, adminId);
         log.info("[TRAVEL_MEMORY_UPDATE] adminId={} locationId={} entryCount={}",
                 adminId, id, normalizedLocation.getEntries().size());
-        return getAdminLocationOrThrow(id);
+        return getAdminLocationOrThrow(id, adminId);
     }
 
     @Override
     @Transactional
     public void deleteLocation(Long id, Long adminId) {
         ensureCanManage(adminId);
-        TravelMemoryLocation existing = travelMemoryLocationMapper.selectById(id);
-        if (existing == null) {
-            throw new RuntimeException("旅行纪念地点不存在");
-        }
+        getAdminLocationOrThrow(id, adminId);
 
         List<TravelMemoryEntry> entries = listEntriesByLocationIds(List.of(id)).getOrDefault(id, List.of());
-        cleanupRemovedEntryImages(entries, Set.of(), adminId);
 
         LambdaUpdateWrapper<TravelMemoryEntry> entryDelete = new LambdaUpdateWrapper<>();
         entryDelete.eq(TravelMemoryEntry::getLocationId, id)
@@ -144,6 +145,7 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
         travelMemoryEntryMapper.update(null, entryDelete);
 
         travelMemoryLocationMapper.deleteById(id);
+        scheduleRemovedEntryImagesCleanup(entries, Set.of(), adminId);
         log.info("[TRAVEL_MEMORY_DELETE] adminId={} locationId={}", adminId, id);
     }
 
@@ -164,7 +166,8 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
         if (visibleOnly) {
             wrapper.eq(TravelMemoryLocation::getStatus, STATUS_VISIBLE);
         }
-        wrapper.orderByDesc(TravelMemoryLocation::getVisitedAt)
+        wrapper.orderByAsc(TravelMemoryLocation::getSortOrder)
+                .orderByDesc(TravelMemoryLocation::getVisitedAt)
                 .orderByDesc(TravelMemoryLocation::getId);
         return travelMemoryLocationMapper.selectList(wrapper);
     }
@@ -212,10 +215,13 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
             List<TravelMemoryEntry> entries,
             Long adminId,
             TravelMemoryLocation existing) {
+        Long locationId = existing != null ? existing.getId() : null;
         if (input == null) {
-            throw new RuntimeException("旅行纪念地点不能为空");
+            log.warn("[TRAVEL_MEMORY_BAD_REQUEST] adminId={} locationId={} reason=input_null",
+                    adminId, locationId);
+            throw new BadRequestException("旅行纪念地点不能为空");
         }
-        List<TravelMemoryEntry> normalizedEntries = normalizeEntries(entries);
+        List<TravelMemoryEntry> normalizedEntries = normalizeEntries(entries, adminId, locationId);
 
         input.setStatus(TravelMemoryStatusEnum.normalizeValue(input.getStatus()));
         input.setSortOrder(input.getSortOrder() == null ? DEFAULT_SORT_ORDER : input.getSortOrder());
@@ -234,9 +240,11 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
         return input;
     }
 
-    private List<TravelMemoryEntry> normalizeEntries(List<TravelMemoryEntry> entries) {
+    private List<TravelMemoryEntry> normalizeEntries(List<TravelMemoryEntry> entries, Long adminId, Long locationId) {
         if (entries == null || entries.isEmpty()) {
-            throw new RuntimeException("至少需要保留一张照片");
+            log.warn("[TRAVEL_MEMORY_BAD_REQUEST] adminId={} locationId={} reason=entries_empty",
+                    adminId, locationId);
+            throw new BadRequestException("至少需要保留一张照片");
         }
 
         List<TravelMemoryEntry> normalized = new ArrayList<>();
@@ -259,7 +267,9 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
         }
 
         if (normalized.isEmpty()) {
-            throw new RuntimeException("至少需要保留一张照片");
+            log.warn("[TRAVEL_MEMORY_BAD_REQUEST] adminId={} locationId={} reason=entries_normalized_empty",
+                    adminId, locationId);
+            throw new BadRequestException("至少需要保留一张照片");
         }
         if (!coverAssigned) {
             normalized.get(0).setIsCover(COVER_YES);
@@ -320,28 +330,57 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
         sysFileService.convertToPermanent(urls, SysFile.RefType.TRAVEL_MEMORY_IMAGE, locationId);
     }
 
-    private void cleanupRemovedEntryImages(List<TravelMemoryEntry> oldEntries, Set<String> newUrls, Long adminId) {
-        for (TravelMemoryEntry oldEntry : oldEntries) {
-            if (!StringUtils.hasText(oldEntry.getImageUrl())) {
-                continue;
+    private void scheduleRemovedEntryImagesCleanup(List<TravelMemoryEntry> oldEntries, Set<String> newUrls, Long adminId) {
+        List<String> urlsToDelete = oldEntries.stream()
+                .map(TravelMemoryEntry::getImageUrl)
+                .filter(StringUtils::hasText)
+                .map(String::trim)
+                .filter(url -> !newUrls.contains(url))
+                .distinct()
+                .toList();
+        if (urlsToDelete.isEmpty()) {
+            return;
+        }
+
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            cleanupRemovedEntryImages(urlsToDelete, adminId);
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                cleanupRemovedEntryImages(urlsToDelete, adminId);
             }
-            String oldUrl = oldEntry.getImageUrl().trim();
-            if (newUrls.contains(oldUrl)) {
-                continue;
-            }
+        });
+    }
+
+    private void cleanupRemovedEntryImages(List<String> urlsToDelete, Long adminId) {
+        for (String oldUrl : urlsToDelete) {
             try {
                 sysFileService.deleteByUrl(oldUrl, adminId);
             } catch (Exception ex) {
                 log.warn("[TRAVEL_MEMORY_IMAGE_DELETE_FAIL] adminId={} url={} message={}",
-                        adminId, oldUrl, ex.getMessage());
+                        adminId, oldUrl, ex.getMessage(), ex);
             }
         }
     }
 
-    private TravelMemoryLocation getAdminLocationOrThrow(Long id) {
-        return listAdminLocations().stream()
-                .filter(item -> Objects.equals(item.getId(), id))
-                .findFirst()
-                .orElseThrow(() -> new RuntimeException("旅行纪念地点不存在"));
+    private TravelMemoryLocation loadLocationDetail(Long id) {
+        TravelMemoryLocation location = travelMemoryLocationMapper.selectById(id);
+        if (location == null) {
+            return null;
+        }
+        attachEntries(List.of(location));
+        return location;
+    }
+
+    private TravelMemoryLocation getAdminLocationOrThrow(Long id, Long adminId) {
+        TravelMemoryLocation location = loadLocationDetail(id);
+        if (location == null) {
+            log.warn("[TRAVEL_MEMORY_NOT_FOUND] adminId={} locationId={}", adminId, id);
+            throw new ResourceNotFoundException("旅行纪念地点不存在");
+        }
+        return location;
     }
 }

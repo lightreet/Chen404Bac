@@ -13,14 +13,14 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.util.stream.Collectors;
 
 /**
- * 全局异常处理器
+ * 全局异常处理器。
  */
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
     /**
-     * 未登录 / Token 无效
+     * 未登录或 Token 无效。
      */
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<Result<String>> handleUnauthorized(UnauthorizedException e) {
@@ -29,7 +29,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 无权限（如非管理员）
+     * 无权限访问。
      */
     @ExceptionHandler(ForbiddenException.class)
     public ResponseEntity<Result<String>> handleForbidden(ForbiddenException e) {
@@ -38,7 +38,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 请求过于频繁
+     * 请求过于频繁。
      */
     @ExceptionHandler(TooManyRequestsException.class)
     public ResponseEntity<Result<String>> handleTooManyRequests(TooManyRequestsException e) {
@@ -47,15 +47,26 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 请求不合法（如损坏的图片）
+     * 请求参数或内容不合法。
      */
     @ExceptionHandler(BadRequestException.class)
     public ResponseEntity<Result<String>> handleBadRequest(BadRequestException e) {
+        log.warn("[BAD_REQUEST] message={}", e.getMessage());
         return ResponseEntity.badRequest().body(Result.error(400, e.getMessage()));
     }
 
     /**
-     * 处理参数校验异常
+     * 资源不存在。
+     */
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<Result<String>> handleResourceNotFound(ResourceNotFoundException e) {
+        log.warn("[RESOURCE_NOT_FOUND] message={}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Result.error(404, e.getMessage()));
+    }
+
+    /**
+     * 处理参数校验异常。
      */
     @ExceptionHandler(BindException.class)
     public ResponseEntity<Result<String>> handleBindException(BindException e) {
@@ -66,7 +77,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 处理 JSON 请求体格式错误（如无法反序列化）
+     * 处理 JSON 请求体格式错误。
      */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Result<String>> handleHttpMessageNotReadableException(HttpMessageNotReadableException e) {
@@ -75,17 +86,17 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 处理运行时异常
+     * 处理运行时异常。
      */
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Result<String>> handleRuntimeException(RuntimeException e) {
         log.error("运行时异常", e);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Result.error(500, e.getMessage()));
+                .body(Result.error(500, "系统繁忙，请稍后重试"));
     }
 
     /**
-     * 处理其他异常
+     * 处理其他异常。
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Result<String>> handleException(Exception e) {
