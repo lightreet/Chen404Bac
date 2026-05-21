@@ -10,6 +10,7 @@ import com.chen404.exception.ResourceNotFoundException;
 import com.chen404.mapper.TravelMemoryEntryMapper;
 import com.chen404.mapper.TravelMemoryLocationMapper;
 import com.chen404.service.AccessService;
+import com.chen404.service.FileReferenceService;
 import com.chen404.service.SysFileService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -40,7 +41,8 @@ class TravelMemoryServiceImplTest {
         TravelMemoryEntryMapper entryMapper = mock(TravelMemoryEntryMapper.class);
         AccessService accessService = mock(AccessService.class);
         SysFileService sysFileService = mock(SysFileService.class);
-        TravelMemoryServiceImpl service = new TravelMemoryServiceImpl(locationMapper, entryMapper, accessService, sysFileService);
+        FileReferenceService fileReferenceService = mock(FileReferenceService.class);
+        TravelMemoryServiceImpl service = new TravelMemoryServiceImpl(locationMapper, entryMapper, accessService, sysFileService, fileReferenceService);
 
         when(accessService.canViewTravelMemory(1L)).thenReturn(true);
         when(locationMapper.selectList(any())).thenReturn(List.of());
@@ -64,7 +66,8 @@ class TravelMemoryServiceImplTest {
         TravelMemoryEntryMapper entryMapper = mock(TravelMemoryEntryMapper.class);
         AccessService accessService = mock(AccessService.class);
         SysFileService sysFileService = mock(SysFileService.class);
-        TravelMemoryServiceImpl service = new TravelMemoryServiceImpl(locationMapper, entryMapper, accessService, sysFileService);
+        FileReferenceService fileReferenceService = mock(FileReferenceService.class);
+        TravelMemoryServiceImpl service = new TravelMemoryServiceImpl(locationMapper, entryMapper, accessService, sysFileService, fileReferenceService);
 
         when(accessService.canManageTravelMemory(1L)).thenReturn(true);
 
@@ -121,7 +124,8 @@ class TravelMemoryServiceImplTest {
         TravelMemoryEntryMapper entryMapper = mock(TravelMemoryEntryMapper.class);
         AccessService accessService = mock(AccessService.class);
         SysFileService sysFileService = mock(SysFileService.class);
-        TravelMemoryServiceImpl service = new TravelMemoryServiceImpl(locationMapper, entryMapper, accessService, sysFileService);
+        FileReferenceService fileReferenceService = mock(FileReferenceService.class);
+        TravelMemoryServiceImpl service = new TravelMemoryServiceImpl(locationMapper, entryMapper, accessService, sysFileService, fileReferenceService);
 
         when(accessService.canManageTravelMemory(1L)).thenReturn(true);
         when(locationMapper.selectById(99L)).thenReturn(null);
@@ -139,7 +143,8 @@ class TravelMemoryServiceImplTest {
         TravelMemoryEntryMapper entryMapper = mock(TravelMemoryEntryMapper.class);
         AccessService accessService = mock(AccessService.class);
         SysFileService sysFileService = mock(SysFileService.class);
-        TravelMemoryServiceImpl service = new TravelMemoryServiceImpl(locationMapper, entryMapper, accessService, sysFileService);
+        FileReferenceService fileReferenceService = mock(FileReferenceService.class);
+        TravelMemoryServiceImpl service = new TravelMemoryServiceImpl(locationMapper, entryMapper, accessService, sysFileService, fileReferenceService);
 
         when(accessService.canManageTravelMemory(1L)).thenReturn(true);
 

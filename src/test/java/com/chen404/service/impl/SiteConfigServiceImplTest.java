@@ -2,6 +2,7 @@ package com.chen404.service.impl;
 
 import com.chen404.domain.dto.SiteConfigDTO;
 import com.chen404.mapper.SiteConfigMapper;
+import com.chen404.service.FileReferenceService;
 import com.chen404.service.SysFileService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -22,10 +23,11 @@ class SiteConfigServiceImplTest {
     void updateConfigShouldRetainHeroImagePositions() {
         SiteConfigMapper siteConfigMapper = mock(SiteConfigMapper.class);
         SysFileService sysFileService = mock(SysFileService.class);
+        FileReferenceService fileReferenceService = mock(FileReferenceService.class);
         when(siteConfigMapper.selectAllConfigs()).thenReturn(List.of());
         doNothing().when(sysFileService).convertToPermanent(org.mockito.ArgumentMatchers.anyList(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong());
 
-        SiteConfigServiceImpl service = new SiteConfigServiceImpl(new ObjectMapper(), siteConfigMapper, sysFileService);
+        SiteConfigServiceImpl service = new SiteConfigServiceImpl(new ObjectMapper(), siteConfigMapper, sysFileService, fileReferenceService);
         SiteConfigDTO patch = new SiteConfigDTO();
         patch.setHeroImages(new LinkedHashMap<>(Map.of("home", "/hero-home.png")));
         patch.setHeroImagePositions(new LinkedHashMap<>(Map.of(
@@ -44,10 +46,11 @@ class SiteConfigServiceImplTest {
     void updateConfigShouldTrimAndRetainHeroTexts() {
         SiteConfigMapper siteConfigMapper = mock(SiteConfigMapper.class);
         SysFileService sysFileService = mock(SysFileService.class);
+        FileReferenceService fileReferenceService = mock(FileReferenceService.class);
         when(siteConfigMapper.selectAllConfigs()).thenReturn(List.of());
         doNothing().when(sysFileService).convertToPermanent(org.mockito.ArgumentMatchers.anyList(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong());
 
-        SiteConfigServiceImpl service = new SiteConfigServiceImpl(new ObjectMapper(), siteConfigMapper, sysFileService);
+        SiteConfigServiceImpl service = new SiteConfigServiceImpl(new ObjectMapper(), siteConfigMapper, sysFileService, fileReferenceService);
         SiteConfigDTO patch = new SiteConfigDTO();
         patch.setHeroTexts(new LinkedHashMap<>(Map.of(
                 "memory-map.title", "  旅行纪念地图  ",
