@@ -32,6 +32,7 @@ import com.chen404.mapper.UserArticleLikeMapper;
 import com.chen404.mapper.UserMapper;
 import com.chen404.service.AccessService;
 import com.chen404.service.ArticleFileRefService;
+import com.chen404.service.FileReferenceService;
 import com.chen404.service.ArticleKnowledgeService;
 import com.chen404.service.ArticleService;
 import com.chen404.service.SysFileService;
@@ -105,6 +106,9 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
     @Autowired
     private ArticleKnowledgeService articleKnowledgeService;
+
+    @Autowired
+    private FileReferenceService fileReferenceService;
 
     @Override
     public Page<Article> getArticlePage(Integer page, Integer size, Integer status, Long categoryId, Long tagId, Long authorId, String keyword, Long requesterId) {
@@ -302,6 +306,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
         articleFileRefService.syncForArticle(article.getId(), article.getContent(), article.getCoverImage());
         persistCoverFileId(article.getId(), article.getCoverImage());
+        fileReferenceService.syncArticleReferences(article.getId(), article.getContent(), article.getCoverImage());
         articleKnowledgeService.syncArticleChunks(article.getId());
 
         return article;
@@ -381,6 +386,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
         articleFileRefService.syncForArticle(id, article.getContent(), article.getCoverImage());
         persistCoverFileId(id, article.getCoverImage());
+        fileReferenceService.syncArticleReferences(id, article.getContent(), article.getCoverImage());
         articleKnowledgeService.syncArticleChunks(id);
 
         return getArticleById(id, false, operatorId);
@@ -402,6 +408,16 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         }
 
         articleFileRefService.removeByArticleId(id);
+        fileReferenceService.removeByOwner(
+                com.chen404.domain.entity.FileReference.ModuleCode.ARTICLE,
+                com.chen404.domain.entity.FileReference.BizType.ARTICLE_CONTENT,
+                id
+        );
+        fileReferenceService.removeByOwner(
+                com.chen404.domain.entity.FileReference.ModuleCode.ARTICLE,
+                com.chen404.domain.entity.FileReference.BizType.ARTICLE_COVER,
+                id
+        );
 
         // 逻辑删除
         articleMapper.deleteById(id);

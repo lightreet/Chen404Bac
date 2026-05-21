@@ -1,0 +1,258 @@
+package com.chen404.service.impl;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.chen404.domain.PageResult;
+import com.chen404.domain.dto.AdminFileDetailVO;
+import com.chen404.domain.dto.AdminFileReferenceVO;
+import com.chen404.domain.dto.AdminFileVO;
+import com.chen404.domain.entity.FileReference;
+import com.chen404.domain.entity.SysFile;
+import com.chen404.domain.entity.User;
+import com.chen404.exception.ResourceNotFoundException;
+import com.chen404.service.AdminFileService;
+import com.chen404.service.FileReferenceService;
+import com.chen404.service.SysFileService;
+import com.chen404.service.UserService;
+import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+@Service
+public class AdminFileServiceImpl implements AdminFileService {
+
+    private final SysFileService sysFileService;
+    private final FileReferenceService fileReferenceService;
+    private final UserService userService;
+
+    public AdminFileServiceImpl(
+            SysFileService sysFileService,
+            FileReferenceService fileReferenceService,
+            UserService userService) {
+        this.sysFileService = sysFileService;
+        this.fileReferenceService = fileReferenceService;
+        this.userService = userService;
+    }
+
+    @Override
+    public PageResult<AdminFileVO> getAdminFiles(
+            Integer page,
+            Integer size,
+            String keyword,
+            String status,
+            String refType,
+            Boolean referenced) {
+        long current = page == null || page < 1 ? 1L : page;
+        long pageSize = size == null || size < 1 ? 10L : size;
+
+        LambdaQueryWrapper<SysFile> wrapper = new LambdaQueryWrapper<SysFile>()
+                .orderByDesc(SysFile::getCreateTime)
+                .orderByDesc(SysFile::getId);
+        if (StringUtils.hasText(keyword)) {
+            String normalizedKeyword = keyword.trim();
+            wrapper.and(q -> q.like(SysFile::getFileOriginalName, normalizedKeyword)
+                    .or()
+                    .like(SysFile::getFileName, normalizedKeyword)
+                    .or()
+                    .like(SysFile::getFileUrl, normalizedKeyword));
+        }
+        if (StringUtils.hasText(status)) {
+            wrapper.eq(SysFile::getStatus, status.trim());
+        }
+        if (StringUtils.hasText(refType)) {
+            wrapper.eq(SysFile::getRefType, refType.trim());
+        }
+        if (referenced != null) {
+            Set<Long> referencedFileIds = fileReferenceService.list(new LambdaQueryWrapper<FileReference>()
+                            .select(FileReference::getFileId))
+                    .stream()
+                    .map(FileReference::getFileId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+            if (referenced) {
+                if (referencedFileIds.isEmpty()) {
+                    return new PageResult<>(List.of(), 0L, current, pageSize);
+                }
+                wrapper.in(SysFile::getId, referencedFileIds);
+            } else if (!referencedFileIds.isEmpty()) {
+                wrapper.notIn(SysFile::getId, referencedFileIds);
+            }
+        }
+
+        Page<SysFile> filePage = sysFileService.page(new Page<>(current, pageSize), wrapper);
+        List<SysFile> files = filePage.getRecords();
+        if (files.isEmpty()) {
+            return PageResult.of(new Page<AdminFileVO>(current, pageSize, 0));
+        }
+
+        Map<Long, List<FileReference>> referenceMap = loadReferenceMap(files.stream()
+                .map(SysFile::getId)
+                .filter(Objects::nonNull)
+                .toList());
+        Map<Long, User> userMap = loadUserMap(files.stream()
+                .map(SysFile::getUserId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet()));
+
+        List<AdminFileVO> list = files.stream()
+                .map(file -> toAdminFileVO(file, referenceMap.getOrDefault(file.getId(), List.of()), userMap.get(file.getUserId())))
+                .toList();
+
+        return new PageResult<>(list, filePage.getTotal(), current, pageSize);
+    }
+
+    @Override
+    public AdminFileDetailVO getAdminFileDetail(Long fileId) {
+        SysFile file = sysFileService.getById(fileId);
+        if (file == null) {
+            throw new ResourceNotFoundException("文件不存在");
+        }
+        List<FileReference> references = fileReferenceService.list(new LambdaQueryWrapper<FileReference>()
+                .eq(FileReference::getFileId, fileId)
+                .orderByAsc(FileReference::getModuleCode)
+                .orderByAsc(FileReference::getBizType)
+                .orderByAsc(FileReference::getBizId));
+        User user = file.getUserId() == null ? null : userService.getById(file.getUserId());
+
+        AdminFileDetailVO detail = new AdminFileDetailVO();
+        AdminFileVO base = toAdminFileVO(file, references, user);
+        copyBase(detail, base);
+        detail.setReferences(references.stream().map(this::toReferenceVO).toList());
+        return detail;
+    }
+
+    private Map<Long, List<FileReference>> loadReferenceMap(Collection<Long> fileIds) {
+        if (fileIds == null || fileIds.isEmpty()) {
+            return Map.of();
+        }
+        List<FileReference> rows = fileReferenceService.list(new LambdaQueryWrapper<FileReference>()
+                .in(FileReference::getFileId, fileIds));
+        if (rows.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, List<FileReference>> map = new LinkedHashMap<>();
+        for (FileReference row : rows) {
+            if (row == null || row.getFileId() == null) {
+                continue;
+            }
+            map.computeIfAbsent(row.getFileId(), key -> new ArrayList<>()).add(row);
+        }
+        return map;
+    }
+
+    private Map<Long, User> loadUserMap(Set<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return Map.of();
+        }
+        return userService.listByIds(userIds).stream()
+                .filter(user -> user != null && user.getId() != null)
+                .collect(Collectors.toMap(User::getId, user -> user));
+    }
+
+    private AdminFileVO toAdminFileVO(SysFile file, List<FileReference> references, User user) {
+        AdminFileVO vo = new AdminFileVO();
+        vo.setId(file.getId());
+        vo.setFileName(file.getFileName());
+        vo.setFileOriginalName(file.getFileOriginalName());
+        vo.setFileUrl(file.getFileUrl());
+        vo.setObjectName(file.getObjectName());
+        vo.setFileSize(file.getFileSize());
+        vo.setContentType(file.getContentType());
+        vo.setUserId(file.getUserId());
+        vo.setUsername(user == null ? null : user.getUsername());
+        vo.setStatus(file.getStatus());
+        vo.setRefType(file.getRefType());
+        vo.setRefId(file.getRefId());
+        vo.setCreateTime(file.getCreateTime());
+        vo.setUpdateTime(file.getUpdateTime());
+        vo.setReferenceCount(references == null ? 0 : references.size());
+        vo.setReferenceStatus(resolveReferenceStatus(file, references));
+        vo.setReferenceModules(extractReferenceModules(references));
+        return vo;
+    }
+
+    private void copyBase(AdminFileDetailVO target, AdminFileVO source) {
+        target.setId(source.getId());
+        target.setFileName(source.getFileName());
+        target.setFileOriginalName(source.getFileOriginalName());
+        target.setFileUrl(source.getFileUrl());
+        target.setObjectName(source.getObjectName());
+        target.setFileSize(source.getFileSize());
+        target.setContentType(source.getContentType());
+        target.setUserId(source.getUserId());
+        target.setUsername(source.getUsername());
+        target.setStatus(source.getStatus());
+        target.setRefType(source.getRefType());
+        target.setRefId(source.getRefId());
+        target.setReferenceStatus(source.getReferenceStatus());
+        target.setReferenceCount(source.getReferenceCount());
+        target.setReferenceModules(source.getReferenceModules());
+        target.setCreateTime(source.getCreateTime());
+        target.setUpdateTime(source.getUpdateTime());
+    }
+
+    private String resolveReferenceStatus(SysFile file, List<FileReference> references) {
+        if (file == null) {
+            return "UNREFERENCED";
+        }
+        if (SysFile.Status.TEMP.equals(file.getStatus())) {
+            return "PENDING";
+        }
+        if (SysFile.Status.DELETED.equals(file.getStatus())) {
+            return "DELETED";
+        }
+        if (references != null && !references.isEmpty()) {
+            return "REFERENCED";
+        }
+        if (SysFile.Status.PERMANENT.equals(file.getStatus())) {
+            return "UNREFERENCED";
+        }
+        return "UNKNOWN";
+    }
+
+    private List<String> extractReferenceModules(List<FileReference> references) {
+        if (references == null || references.isEmpty()) {
+            return List.of();
+        }
+        return new ArrayList<>(references.stream()
+                .map(FileReference::getModuleCode)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toCollection(LinkedHashSet::new)));
+    }
+
+    private AdminFileReferenceVO toReferenceVO(FileReference row) {
+        AdminFileReferenceVO vo = new AdminFileReferenceVO();
+        vo.setFileId(row.getFileId());
+        vo.setModuleCode(row.getModuleCode());
+        vo.setBizType(row.getBizType());
+        vo.setBizId(row.getBizId());
+        vo.setFieldKey(row.getFieldKey());
+        vo.setSourceType(row.getSourceType());
+        vo.setBizLabel(buildBizLabel(row));
+        return vo;
+    }
+
+    private String buildBizLabel(FileReference row) {
+        if (row == null) {
+            return "";
+        }
+        return switch (row.getModuleCode()) {
+            case FileReference.ModuleCode.ARTICLE -> "文章#" + row.getBizId();
+            case FileReference.ModuleCode.USER -> "用户#" + row.getBizId();
+            case FileReference.ModuleCode.SITE_CONFIG -> "站点配置";
+            case FileReference.ModuleCode.TRAVEL_MEMORY -> "旅行记忆地点#" + row.getBizId();
+            case FileReference.ModuleCode.TRAVEL_MEMORY_ENTRY -> "旅行记忆图片#" + row.getBizId();
+            case FileReference.ModuleCode.TRUST_REQUEST -> "受信申请#" + row.getBizId();
+            default -> row.getModuleCode() + "#" + row.getBizId();
+        };
+    }
+}

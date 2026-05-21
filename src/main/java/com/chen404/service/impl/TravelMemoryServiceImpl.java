@@ -13,6 +13,7 @@ import com.chen404.exception.ResourceNotFoundException;
 import com.chen404.mapper.TravelMemoryEntryMapper;
 import com.chen404.mapper.TravelMemoryLocationMapper;
 import com.chen404.service.AccessService;
+import com.chen404.service.FileReferenceService;
 import com.chen404.service.SysFileService;
 import com.chen404.service.TravelMemoryService;
 import lombok.extern.slf4j.Slf4j;
@@ -48,16 +49,19 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
     private final TravelMemoryEntryMapper travelMemoryEntryMapper;
     private final AccessService accessService;
     private final SysFileService sysFileService;
+    private final FileReferenceService fileReferenceService;
 
     public TravelMemoryServiceImpl(
             TravelMemoryLocationMapper travelMemoryLocationMapper,
             TravelMemoryEntryMapper travelMemoryEntryMapper,
             AccessService accessService,
-            SysFileService sysFileService) {
+            SysFileService sysFileService,
+            FileReferenceService fileReferenceService) {
         this.travelMemoryLocationMapper = travelMemoryLocationMapper;
         this.travelMemoryEntryMapper = travelMemoryEntryMapper;
         this.accessService = accessService;
         this.sysFileService = sysFileService;
+        this.fileReferenceService = fileReferenceService;
     }
 
     @Override
@@ -101,6 +105,11 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
 
         saveEntries(normalizedLocation.getId(), normalizedLocation.getEntries());
         convertEntryImagesToPermanent(normalizedLocation.getEntries(), normalizedLocation.getId());
+        fileReferenceService.syncTravelMemoryReferences(
+                normalizedLocation.getId(),
+                normalizedLocation.getCoverImage(),
+                normalizedLocation.getEntries()
+        );
         log.info("[TRAVEL_MEMORY_CREATE] adminId={} locationId={} entryCount={}",
                 adminId, normalizedLocation.getId(), normalizedLocation.getEntries().size());
         return getAdminLocationOrThrow(normalizedLocation.getId(), adminId);
@@ -123,8 +132,14 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
         normalizedLocation.setId(id);
         travelMemoryLocationMapper.updateById(normalizedLocation);
 
+        fileReferenceService.removeByOwners(
+                com.chen404.domain.entity.FileReference.ModuleCode.TRAVEL_MEMORY_ENTRY,
+                com.chen404.domain.entity.FileReference.BizType.TRAVEL_MEMORY_ENTRY_IMAGE,
+                oldEntries.stream().map(TravelMemoryEntry::getId).filter(Objects::nonNull).toList()
+        );
         replaceEntries(id, normalizedLocation.getEntries());
         convertEntryImagesToPermanent(normalizedLocation.getEntries(), id);
+        fileReferenceService.syncTravelMemoryReferences(id, normalizedLocation.getCoverImage(), normalizedLocation.getEntries());
         scheduleRemovedEntryImagesCleanup(oldEntries, newUrls, adminId);
         log.info("[TRAVEL_MEMORY_UPDATE] adminId={} locationId={} entryCount={}",
                 adminId, id, normalizedLocation.getEntries().size());
@@ -144,6 +159,16 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
                 .set(TravelMemoryEntry::getDeleted, 1);
         travelMemoryEntryMapper.update(null, entryDelete);
 
+        fileReferenceService.removeByOwner(
+                com.chen404.domain.entity.FileReference.ModuleCode.TRAVEL_MEMORY,
+                com.chen404.domain.entity.FileReference.BizType.TRAVEL_MEMORY_COVER,
+                id
+        );
+        fileReferenceService.removeByOwners(
+                com.chen404.domain.entity.FileReference.ModuleCode.TRAVEL_MEMORY_ENTRY,
+                com.chen404.domain.entity.FileReference.BizType.TRAVEL_MEMORY_ENTRY_IMAGE,
+                entries.stream().map(TravelMemoryEntry::getId).filter(Objects::nonNull).toList()
+        );
         travelMemoryLocationMapper.deleteById(id);
         scheduleRemovedEntryImagesCleanup(entries, Set.of(), adminId);
         log.info("[TRAVEL_MEMORY_DELETE] adminId={} locationId={}", adminId, id);

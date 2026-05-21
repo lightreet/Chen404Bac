@@ -16,6 +16,7 @@ import com.chen404.mapper.RoleMapper;
 import com.chen404.mapper.UserMapper;
 import com.chen404.mapper.UserRoleMapper;
 import com.chen404.service.EmailService;
+import com.chen404.service.FileReferenceService;
 import com.chen404.service.SysFileService;
 import com.chen404.service.UserService;
 import com.chen404.service.support.UserAccessProfileSupport;
@@ -75,6 +76,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Autowired
     private UserConverter userConverter;
+
+    @Autowired
+    private FileReferenceService fileReferenceService;
 
     @Value("${jwt.expiration}")
     private Long expiration;
@@ -305,6 +309,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         }
 
         userMapper.updateById(user);
+        fileReferenceService.syncUserAvatarReference(userId, user.getAvatar());
         return getCurrentUser(userId);
     }
 

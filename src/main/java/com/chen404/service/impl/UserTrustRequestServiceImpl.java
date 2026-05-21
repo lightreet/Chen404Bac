@@ -15,6 +15,7 @@ import com.chen404.domain.entity.User;
 import com.chen404.domain.entity.UserTrustRequest;
 import com.chen404.mapper.UserTrustRequestMapper;
 import com.chen404.service.EmailService;
+import com.chen404.service.FileReferenceService;
 import com.chen404.service.SysFileService;
 import com.chen404.service.UserService;
 import com.chen404.service.UserTrustRequestService;
@@ -66,6 +67,7 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
     private final UserService userService;
     private final SysFileService sysFileService;
     private final EmailService emailService;
+    private final FileReferenceService fileReferenceService;
 
     @Value("${spring.mail.username:}")
     private String mailUsername;
@@ -81,13 +83,15 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
             MailTemplateSupport mailTemplateSupport,
             UserService userService,
             SysFileService sysFileService,
-            EmailService emailService
+            EmailService emailService,
+            FileReferenceService fileReferenceService
     ) {
         this.trustRequestConverter = trustRequestConverter;
         this.mailTemplateSupport = mailTemplateSupport;
         this.userService = userService;
         this.sysFileService = sysFileService;
         this.emailService = emailService;
+        this.fileReferenceService = fileReferenceService;
     }
 
     @Override
@@ -134,6 +138,7 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
         if (!attachmentUrls.isEmpty()) {
             sysFileService.convertToPermanent(attachmentUrls, SysFile.RefType.TRUST_REQUEST_ATTACHMENT, request.getId());
         }
+        fileReferenceService.syncTrustRequestAttachmentReferences(request.getId(), attachmentUrls);
 
         List<SysFile> attachments = loadAttachmentsByRequestId(request.getId());
         try {

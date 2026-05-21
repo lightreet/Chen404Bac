@@ -4,6 +4,7 @@ import com.chen404.domain.dto.SiteConfigDTO;
 import com.chen404.domain.entity.SiteConfig;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.mapper.SiteConfigMapper;
+import com.chen404.service.FileReferenceService;
 import com.chen404.service.SiteConfigService;
 import com.chen404.service.SysFileService;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -63,14 +64,17 @@ public class SiteConfigServiceImpl implements SiteConfigService {
     private final ObjectMapper objectMapper;
     private final SiteConfigMapper siteConfigMapper;
     private final SysFileService sysFileService;
+    private final FileReferenceService fileReferenceService;
 
     public SiteConfigServiceImpl(
             ObjectMapper objectMapper,
             SiteConfigMapper siteConfigMapper,
-            SysFileService sysFileService) {
+            SysFileService sysFileService,
+            FileReferenceService fileReferenceService) {
         this.objectMapper = objectMapper.copy().enable(SerializationFeature.INDENT_OUTPUT);
         this.siteConfigMapper = siteConfigMapper;
         this.sysFileService = sysFileService;
+        this.fileReferenceService = fileReferenceService;
     }
 
     @Override
@@ -87,6 +91,12 @@ public class SiteConfigServiceImpl implements SiteConfigService {
         writeToDatabase(current);
         persistSiteAssets(current);
         persistHeroImages(current);
+        fileReferenceService.syncSiteConfigReferences(
+                SITE_CONFIG_REF_ID,
+                current.getSiteLogo(),
+                current.getSiteFavicon(),
+                current.getHeroImages()
+        );
         return current;
     }
 
@@ -97,6 +107,12 @@ public class SiteConfigServiceImpl implements SiteConfigService {
             writeToDatabase(config);
             persistSiteAssets(config);
             persistHeroImages(config);
+            fileReferenceService.syncSiteConfigReferences(
+                    SITE_CONFIG_REF_ID,
+                    config.getSiteLogo(),
+                    config.getSiteFavicon(),
+                    config.getHeroImages()
+            );
             return config;
         }
 
