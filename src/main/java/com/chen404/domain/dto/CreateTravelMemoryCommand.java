@@ -41,8 +41,11 @@ public class CreateTravelMemoryCommand {
     @Size(max = 1000, message = "地点简介长度不能超过 1000 个字符")
     private String summaryNote;
 
-    @Schema(description = "到访时间")
+    @Schema(description = "到访开始时间")
     private LocalDateTime visitedAt;
+
+    @Schema(description = "到访结束时间")
+    private LocalDateTime visitedEndAt;
 
     @Schema(description = "展示状态：0-隐藏 1-展示", example = "1")
     private Integer status;

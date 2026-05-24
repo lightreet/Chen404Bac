@@ -41,6 +41,8 @@ public class TravelMemoryLocation implements Serializable {
 
     private LocalDateTime visitedAt;
 
+    private LocalDateTime visitedEndAt;
+
     private Integer status;
 
     private Integer sortOrder;

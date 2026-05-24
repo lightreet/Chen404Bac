@@ -38,8 +38,11 @@ public class TravelMemoryLocationDetailVO {
     @Schema(description = "封面图地址", example = "https://cdn.example.com/travel/chengdu-cover.jpg")
     private String coverImage;
 
-    @Schema(description = "到访时间")
+    @Schema(description = "到访开始时间")
     private LocalDateTime visitedAt;
+
+    @Schema(description = "到访结束时间")
+    private LocalDateTime visitedEndAt;
 
     @Schema(description = "展示状态：0-隐藏 1-展示", example = "1")
     private Integer status;

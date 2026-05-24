@@ -28,7 +28,8 @@ class FlywayMigrationLayoutTest {
             "V2026050603__remove_runtime_site_config_keys.sql",
             "V2026051001__ai_chat_and_article_chunk.sql",
             "V2026051301__create_travel_memory_tables.sql",
-            "V2026052101__create_file_reference_table.sql"
+            "V2026052101__create_file_reference_table.sql",
+            "V2026052401__add_travel_memory_visited_end_at.sql"
     );
 
     @Test
