@@ -124,7 +124,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
         // 标签筛选
         if (tagId != null) {
-            wrapper.inSql(Article::getId, "SELECT article_id FROM article_tag WHERE tag_id = " + tagId);
+            wrapper.apply("id IN (SELECT article_id FROM article_tag WHERE tag_id = {0})", tagId);
         }
 
         if (authorId != null) {

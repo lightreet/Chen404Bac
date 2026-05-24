@@ -2,6 +2,7 @@ package com.chen404.controller;
 
 import com.chen404.annotation.RequireAdmin;
 import com.chen404.config.SiteRuntimeProperties;
+import com.chen404.config.UploadTaskConfig;
 import com.chen404.domain.Result;
 import com.chen404.domain.dto.MultiFileUploadDTO;
 import com.chen404.domain.dto.SingleFileUploadDTO;
@@ -17,7 +18,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -36,11 +37,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 
-@Slf4j
 /**
  * 统一处理文章、头像、站点资源与受信申请附件上传。
  */
+@Slf4j
 @Tag(name = "文件上传", description = "图片上传、封面上传、头像上传等接口")
 @RestController
 @RequestMapping("/upload")
@@ -80,14 +82,21 @@ public class UploadController {
     private static final long MAX_TRUST_ATTACHMENT_SIZE = 15 * 1024 * 1024;
     private static final int MAX_BATCH_IMAGE_COUNT = 10;
 
-    @Autowired
-    private SysFileService sysFileService;
+    private final SysFileService sysFileService;
+    private final SiteRuntimeProperties siteRuntimeProperties;
+    private final TravelMemoryImageMetadataService travelMemoryImageMetadataService;
+    private final Executor uploadTaskExecutor;
 
-    @Autowired
-    private SiteRuntimeProperties siteRuntimeProperties;
-
-    @Autowired
-    private TravelMemoryImageMetadataService travelMemoryImageMetadataService;
+    public UploadController(
+            SysFileService sysFileService,
+            SiteRuntimeProperties siteRuntimeProperties,
+            TravelMemoryImageMetadataService travelMemoryImageMetadataService,
+            @Qualifier(UploadTaskConfig.UPLOAD_TASK_EXECUTOR) Executor uploadTaskExecutor) {
+        this.sysFileService = sysFileService;
+        this.siteRuntimeProperties = siteRuntimeProperties;
+        this.travelMemoryImageMetadataService = travelMemoryImageMetadataService;
+        this.uploadTaskExecutor = uploadTaskExecutor;
+    }
 
     @Operation(summary = "上传文章图片", description = "编辑器内单张图片上传")
     @PostMapping(value = "/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -131,7 +140,9 @@ public class UploadController {
         Set<String> allowedTypes = resolveAllowedImageTypes();
 
         List<CompletableFuture<UploadFileVO>> futures = Arrays.stream(files)
-                .map(file -> CompletableFuture.supplyAsync(() -> uploadSingleImage(file, userId, maxSize, allowedTypes)))
+                .map(file -> CompletableFuture.supplyAsync(
+                        () -> uploadSingleImage(file, userId, maxSize, allowedTypes),
+                        uploadTaskExecutor))
                 .toList();
 
         List<UploadFileVO> results = new ArrayList<>();

@@ -1,5 +1,6 @@
 package com.chen404.filter;
 
+import com.chen404.util.WebRequestUtil;
 import jakarta.servlet.*;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -48,7 +49,7 @@ public class TraceIdFilter implements Filter {
             MDC.put(TRACE_ID_KEY, traceId);
 
             // 获取客户端IP
-            String clientIp = getClientIp(httpRequest);
+            String clientIp = WebRequestUtil.getClientIp(httpRequest);
             MDC.put(CLIENT_IP_KEY, clientIp);
 
             // 继续过滤器链
@@ -76,30 +77,4 @@ public class TraceIdFilter implements Filter {
         return timeHex + uuid;
     }
 
-    /**
-     * 获取客户端IP
-     */
-    private String getClientIp(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("Proxy-Client-IP");
-        }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("WL-Proxy-Client-IP");
-        }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("HTTP_CLIENT_IP");
-        }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("HTTP_X_FORWARDED_FOR");
-        }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getRemoteAddr();
-        }
-        // 多个IP只取第一个
-        if (ip != null && ip.contains(",")) {
-            ip = ip.split(",")[0].trim();
-        }
-        return ip;
-    }
 }

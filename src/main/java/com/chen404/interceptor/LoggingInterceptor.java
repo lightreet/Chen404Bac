@@ -1,5 +1,6 @@
 package com.chen404.interceptor;
 
+import com.chen404.util.WebRequestUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -50,7 +51,7 @@ public class LoggingInterceptor implements HandlerInterceptor {
             String method = request.getMethod();
             String uri = request.getRequestURI();
             String query = request.getQueryString() != null ? "?" + request.getQueryString() : "";
-            String clientIp = getClientIp(request);
+            String clientIp = WebRequestUtil.getClientIp(request);
             String traceId = MDC.get("traceId");
             log.info("[API-REQ] traceId={} method={} uri={} clientIp={}", traceId, method, uri + query, clientIp);
             if (log.isDebugEnabled()) {
@@ -161,32 +162,6 @@ public class LoggingInterceptor implements HandlerInterceptor {
             return "Bearer " + value.substring(7, 15) + "...";
         }
         return value;
-    }
-
-    /**
-     * 获取客户端IP
-     */
-    private String getClientIp(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("Proxy-Client-IP");
-        }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("WL-Proxy-Client-IP");
-        }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("HTTP_CLIENT_IP");
-        }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("HTTP_X_FORWARDED_FOR");
-        }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getRemoteAddr();
-        }
-        if (ip != null && ip.contains(",")) {
-            ip = ip.split(",")[0].trim();
-        }
-        return ip;
     }
 
     /**

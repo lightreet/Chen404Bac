@@ -17,6 +17,7 @@ import com.chen404.security.AuthenticatedUser;
 import com.chen404.service.ArticleService;
 import com.chen404.service.CommentService;
 import com.chen404.util.CurrentUserUtil;
+import com.chen404.util.WebRequestUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -104,7 +105,7 @@ public class CommentController {
             @AuthenticationPrincipal AuthenticatedUser currentUser,
             HttpServletRequest request) {
         Long userId = CurrentUserUtil.getUserId(currentUser);
-        String ip = getClientIp(request);
+        String ip = WebRequestUtil.getClientIp(request);
         String userAgent = request.getHeader("User-Agent");
         Comment comment = commentService.createComment(dto, userId, ip, userAgent);
         return Result.success(commentConverter.toVO(comment));
@@ -131,7 +132,11 @@ public class CommentController {
             @PathVariable Long id,
             @AuthenticationPrincipal AuthenticatedUser currentUser,
             HttpServletRequest request) {
-        CommentLikeResult result = commentService.likeComment(id, CurrentUserUtil.getUserId(currentUser), getClientIp(request));
+        CommentLikeResult result = commentService.likeComment(
+                id,
+                CurrentUserUtil.getUserId(currentUser),
+                WebRequestUtil.getClientIp(request)
+        );
         return Result.success(result);
     }
 
@@ -143,27 +148,6 @@ public class CommentController {
             @RequestBody ReviewCommentDTO dto) {
         Comment comment = commentService.reviewComment(id, dto.getStatus());
         return Result.success(commentConverter.toVO(comment));
-    }
-
-    private String getClientIp(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip != null && !ip.isBlank() && !"unknown".equalsIgnoreCase(ip)) {
-            int commaIndex = ip.indexOf(',');
-            ip = commaIndex >= 0 ? ip.substring(0, commaIndex).trim() : ip.trim();
-        } else {
-            ip = request.getHeader("X-Real-IP");
-            if (ip != null && !ip.isBlank() && !"unknown".equalsIgnoreCase(ip)) {
-                ip = ip.trim();
-            } else {
-                ip = request.getRemoteAddr();
-            }
-        }
-
-        // 兼容本机 IPv6 回环
-        if ("0:0:0:0:0:0:0:1".equals(ip) || "::1".equals(ip)) {
-            return "127.0.0.1";
-        }
-        return ip;
     }
 
     private List<RecentCommentVO> toRecentCommentVOList(List<Comment> comments) {

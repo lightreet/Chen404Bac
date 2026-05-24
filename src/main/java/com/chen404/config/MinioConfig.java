@@ -5,6 +5,7 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.util.StringUtils;
 
 /**
  * MinIO 配置类
@@ -22,12 +23,12 @@ public class MinioConfig {
     /**
      * 访问密钥
      */
-    private String accessKey = "root";
+    private String accessKey;
 
     /**
      * 密钥
      */
-    private String secretKey = "admin@123";
+    private String secretKey;
 
     /**
      * 存储桶名称
@@ -42,6 +43,7 @@ public class MinioConfig {
 
     @Bean
     public MinioClient minioClient() {
+        validateRequiredConfig();
         return MinioClient.builder()
                 .endpoint(endpoint)
                 .credentials(accessKey, secretKey)
@@ -52,7 +54,22 @@ public class MinioConfig {
      * 获取文件访问URL
      */
     public String getFileUrl(String objectName) {
-        String baseUrl = externalUrl.isEmpty() ? endpoint : externalUrl;
+        String baseUrl = StringUtils.hasText(externalUrl) ? externalUrl : endpoint;
         return baseUrl + "/" + bucketName + "/" + objectName;
+    }
+
+    private void validateRequiredConfig() {
+        if (!StringUtils.hasText(endpoint)) {
+            throw new IllegalStateException("MinIO endpoint 未配置");
+        }
+        if (!StringUtils.hasText(accessKey)) {
+            throw new IllegalStateException("MinIO accessKey 未配置");
+        }
+        if (!StringUtils.hasText(secretKey)) {
+            throw new IllegalStateException("MinIO secretKey 未配置");
+        }
+        if (!StringUtils.hasText(bucketName)) {
+            throw new IllegalStateException("MinIO bucketName 未配置");
+        }
     }
 }

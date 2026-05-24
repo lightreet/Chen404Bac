@@ -24,6 +24,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -248,6 +249,7 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
         }
         List<TravelMemoryEntry> normalizedEntries = normalizeEntries(entries, adminId, locationId);
 
+        validateTravelDateRange(input, adminId, locationId);
         input.setStatus(TravelMemoryStatusEnum.normalizeValue(input.getStatus()));
         input.setSortOrder(input.getSortOrder() == null ? DEFAULT_SORT_ORDER : input.getSortOrder());
         input.setCoverImage(resolveCoverImage(normalizedEntries));
@@ -263,6 +265,18 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
         input.setEntries(normalizedEntries);
         input.setEntryCount(normalizedEntries.size());
         return input;
+    }
+
+    private void validateTravelDateRange(TravelMemoryLocation input, Long adminId, Long locationId) {
+        LocalDateTime visitedAt = input.getVisitedAt();
+        LocalDateTime visitedEndAt = input.getVisitedEndAt();
+        if (visitedAt == null || visitedEndAt == null || !visitedEndAt.isBefore(visitedAt)) {
+            return;
+        }
+
+        log.warn("[TRAVEL_MEMORY_BAD_REQUEST] adminId={} locationId={} reason=invalid_date_range",
+                adminId, locationId);
+        throw new BadRequestException("旅行结束日期不能早于开始日期");
     }
 
     private List<TravelMemoryEntry> normalizeEntries(List<TravelMemoryEntry> entries, Long adminId, Long locationId) {
