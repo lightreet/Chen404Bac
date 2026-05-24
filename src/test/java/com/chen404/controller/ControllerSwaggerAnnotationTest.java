@@ -23,6 +23,8 @@ class ControllerSwaggerAnnotationTest {
 
     private static final List<Class<?>> CONTROLLERS_REQUIRING_SWAGGER = List.of(
             AuthController.class,
+            AdminCategoryController.class,
+            CategoryController.class,
             HomeController.class,
             SiteController.class,
             TagController.class,

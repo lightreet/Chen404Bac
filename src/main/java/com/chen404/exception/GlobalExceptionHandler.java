@@ -1,10 +1,12 @@
 package com.chen404.exception;
 
+import com.chen404.domain.ApiErrorCode;
 import com.chen404.domain.Result;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -20,49 +22,14 @@ import java.util.stream.Collectors;
 public class GlobalExceptionHandler {
 
     /**
-     * 未登录或 Token 无效。
+     * 处理业务 API 异常。
      */
-    @ExceptionHandler(UnauthorizedException.class)
-    public ResponseEntity<Result<String>> handleUnauthorized(UnauthorizedException e) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(Result.error(401, e.getMessage()));
-    }
-
-    /**
-     * 无权限访问。
-     */
-    @ExceptionHandler(ForbiddenException.class)
-    public ResponseEntity<Result<String>> handleForbidden(ForbiddenException e) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(Result.error(403, e.getMessage()));
-    }
-
-    /**
-     * 请求过于频繁。
-     */
-    @ExceptionHandler(TooManyRequestsException.class)
-    public ResponseEntity<Result<String>> handleTooManyRequests(TooManyRequestsException e) {
-        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-                .body(Result.error(429, e.getMessage()));
-    }
-
-    /**
-     * 请求参数或内容不合法。
-     */
-    @ExceptionHandler(BadRequestException.class)
-    public ResponseEntity<Result<String>> handleBadRequest(BadRequestException e) {
-        log.warn("[BAD_REQUEST] message={}", e.getMessage());
-        return ResponseEntity.badRequest().body(Result.error(400, e.getMessage()));
-    }
-
-    /**
-     * 资源不存在。
-     */
-    @ExceptionHandler(ResourceNotFoundException.class)
-    public ResponseEntity<Result<String>> handleResourceNotFound(ResourceNotFoundException e) {
-        log.warn("[RESOURCE_NOT_FOUND] message={}", e.getMessage());
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(Result.error(404, e.getMessage()));
+    @ExceptionHandler(ApiException.class)
+    public ResponseEntity<Result<String>> handleApiException(ApiException e) {
+        log.warn("[API_ERROR] status={} code={} message={}",
+                e.getHttpStatus().value(), e.getCode(), e.getMessage());
+        return ResponseEntity.status(e.getHttpStatus())
+                .body(Result.error(e.getCode(), e.getMessage()));
     }
 
     /**
@@ -73,7 +40,18 @@ public class GlobalExceptionHandler {
         String message = e.getFieldErrors().stream()
                 .map(FieldError::getDefaultMessage)
                 .collect(Collectors.joining(", "));
-        return ResponseEntity.badRequest().body(Result.error(400, message));
+        return validationError(message);
+    }
+
+    /**
+     * 处理 JSON 请求体的字段校验异常。
+     */
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Result<String>> handleMethodArgumentNotValidException(MethodArgumentNotValidException e) {
+        String message = e.getFieldErrors().stream()
+                .map(FieldError::getDefaultMessage)
+                .collect(Collectors.joining(", "));
+        return validationError(message);
     }
 
     /**
@@ -82,7 +60,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Result<String>> handleHttpMessageNotReadableException(HttpMessageNotReadableException e) {
         log.warn("请求体解析失败", e);
-        return ResponseEntity.badRequest().body(Result.error(400, "请求参数格式错误"));
+        return ResponseEntity.badRequest()
+                .body(Result.error(ApiErrorCode.BAD_REQUEST, "请求参数格式错误"));
     }
 
     /**
@@ -92,7 +71,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Result<String>> handleRuntimeException(RuntimeException e) {
         log.error("运行时异常", e);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Result.error(500, "系统繁忙，请稍后重试"));
+                .body(Result.error(ApiErrorCode.INTERNAL_SERVER_ERROR, "系统繁忙，请稍后重试"));
     }
 
     /**
@@ -102,6 +81,11 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Result<String>> handleException(Exception e) {
         log.error("系统异常", e);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Result.error(500, "系统繁忙，请稍后重试"));
+                .body(Result.error(ApiErrorCode.INTERNAL_SERVER_ERROR, "系统繁忙，请稍后重试"));
+    }
+
+    private ResponseEntity<Result<String>> validationError(String message) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(Result.error(ApiErrorCode.VALIDATION_FAILED, message));
     }
 }

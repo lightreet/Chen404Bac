@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.chen404.domain.entity.Category;
+import com.chen404.exception.ResourceNotFoundException;
 import com.chen404.mapper.CategoryMapper;
 import com.chen404.service.CategoryService;
 import org.springframework.stereotype.Service;
@@ -49,7 +50,7 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
     public Category updateCategory(Long id, Category category) {
         Category existing = getById(id);
         if (existing == null) {
-            throw new RuntimeException("分类不存在");
+            throw new ResourceNotFoundException("分类不存在");
         }
         if (StringUtils.hasText(category.getName())) {
             existing.setName(category.getName());
@@ -76,7 +77,7 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
     @Override
     public void deleteCategory(Long id) {
         if (!removeById(id)) {
-            throw new RuntimeException("分类不存在或已删除");
+            throw new ResourceNotFoundException("分类不存在或已删除");
         }
     }
 }

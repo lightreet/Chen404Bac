@@ -45,30 +45,30 @@ public class Result<T> implements Serializable {
      * 成功响应
      */
     public static <T> Result<T> success() {
-        return new Result<>(200, "success", null);
+        return new Result<>(ApiErrorCode.SUCCESS, "success", null);
     }
 
     public static <T> Result<T> success(String message) {
-        return new Result<>(200, message, null);
+        return new Result<>(ApiErrorCode.SUCCESS, message, null);
     }
 
     public static <T> Result<T> success(T data) {
-        return new Result<>(200, "success", data);
+        return new Result<>(ApiErrorCode.SUCCESS, "success", data);
     }
 
     public static <T> Result<T> success(String message, T data) {
-        return new Result<>(200, message, data);
+        return new Result<>(ApiErrorCode.SUCCESS, message, data);
     }
 
     /**
      * 错误响应
      */
     public static <T> Result<T> error() {
-        return new Result<>(500, "error", null);
+        return new Result<>(ApiErrorCode.INTERNAL_SERVER_ERROR, "error", null);
     }
 
     public static <T> Result<T> error(String message) {
-        return new Result<>(500, message, null);
+        return new Result<>(ApiErrorCode.INTERNAL_SERVER_ERROR, message, null);
     }
 
     public static <T> Result<T> error(Integer code, String message) {

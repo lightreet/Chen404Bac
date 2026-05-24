@@ -81,6 +81,9 @@ class ControllerBoundaryModelTest {
 
         Method listMethod = CategoryController.class.getMethod("getCategories", boolean.class);
         assertReturnTypeContains(listMethod, CategoryVO.class.getName());
+
+        Method adminListMethod = AdminCategoryController.class.getMethod("pageCategories", Integer.class, Integer.class);
+        assertReturnTypeContains(adminListMethod, CategoryVO.class.getName());
     }
 
     @Test
