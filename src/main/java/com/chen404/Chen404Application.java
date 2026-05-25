@@ -9,7 +9,6 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.web.servlet.ServletComponentScan;
 import org.springframework.core.env.Environment;
 import org.springframework.scheduling.annotation.EnableAsync;
-import org.springframework.scheduling.annotation.EnableScheduling;
 
 @Slf4j
 @SpringBootApplication
@@ -17,7 +16,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @MapperScan("com.chen404.mapper")
 @ServletComponentScan("com.chen404.filter")
 @EnableAsync
-@EnableScheduling
 public class Chen404Application {
 
     public static void main(String[] args) {

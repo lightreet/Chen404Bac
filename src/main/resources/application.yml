@@ -110,3 +110,16 @@ llm:
   temperature: ${LLM_TEMPERATURE:0.2}
   max-tokens: ${LLM_MAX_TOKENS:512}
   timeout-seconds: ${LLM_TIMEOUT_SECONDS:30}
+
+xxl:
+  job:
+    enabled: ${XXL_JOB_ENABLED:false}
+    admin-addresses: ${XXL_JOB_ADMIN_ADDRESSES:}
+    access-token: ${XXL_JOB_ACCESS_TOKEN:}
+    executor:
+      app-name: ${XXL_JOB_EXECUTOR_APP_NAME:chen404-bac}
+      address: ${XXL_JOB_EXECUTOR_ADDRESS:}
+      ip: ${XXL_JOB_EXECUTOR_IP:}
+      port: ${XXL_JOB_EXECUTOR_PORT:9999}
+      log-path: ${XXL_JOB_EXECUTOR_LOG_PATH:./logs/xxl-job}
+      log-retention-days: ${XXL_JOB_EXECUTOR_LOG_RETENTION_DAYS:30}

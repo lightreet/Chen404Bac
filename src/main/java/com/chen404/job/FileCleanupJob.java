@@ -1,9 +1,9 @@
 package com.chen404.job;
 
 import com.chen404.service.SysFileService;
+import com.xxl.job.core.handler.annotation.XxlJob;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
@@ -18,9 +18,9 @@ public class FileCleanupJob {
     private SysFileService sysFileService;
 
     /**
-     * 每小时执行一次，清理过期的临时文件
+     * 由 XXL-JOB 调度执行，清理过期的临时文件。
      */
-    @Scheduled(cron = "0 0 * * * ?")
+    @XxlJob("fileCleanupJobHandler")
     public void cleanExpiredTempFiles() {
         log.info("开始执行过期临时文件清理任务...");
         int count = sysFileService.cleanExpiredTempFiles();
