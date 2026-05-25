@@ -11,8 +11,23 @@ public record LlmTextRequest(
         String systemInstruction,
         String userPrompt,
         Double temperature,
-        Integer maxTokens
+        Integer maxTokens,
+        String baseUrl,
+        String apiKey,
+        String apiStyle,
+        String chatCompletionsPath,
+        String responsesPath,
+        Integer timeoutSeconds
 ) {
+
+    public LlmTextRequest(
+            String model,
+            String systemInstruction,
+            String userPrompt,
+            Double temperature,
+            Integer maxTokens) {
+        this(model, systemInstruction, userPrompt, temperature, maxTokens, null, null, null, null, null, null);
+    }
 
     /**
      * 创建使用默认模型与默认生成参数的文本请求。
@@ -22,6 +37,6 @@ public record LlmTextRequest(
      * @return 通用文本生成请求
      */
     public static LlmTextRequest of(String systemInstruction, String userPrompt) {
-        return new LlmTextRequest(null, systemInstruction, userPrompt, null, null);
+        return new LlmTextRequest(null, systemInstruction, userPrompt, null, null, null, null, null, null, null, null);
     }
 }

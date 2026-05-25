@@ -79,7 +79,7 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
         HttpRequest httpRequest = buildRequest(request);
 
         try {
-            String apiStyle = normalizeApiStyle(llmProperties.getApiStyle());
+            String apiStyle = normalizeApiStyle(resolveApiStyle(request));
             log.info("[LLM_TEXT_REQ] model={} style={}", resolveModel(request), apiStyle);
             HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
@@ -112,7 +112,7 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
             throw new IllegalArgumentException("LLM 流式回调不能为空");
         }
 
-        String apiStyle = normalizeApiStyle(llmProperties.getApiStyle());
+        String apiStyle = normalizeApiStyle(resolveApiStyle(request));
         if (!STYLE_CHAT_COMPLETIONS.equals(apiStyle)) {
             streamByChunkingPlainText(request, handler);
             return;
@@ -152,10 +152,10 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
         if (!StringUtils.hasText(request.userPrompt())) {
             throw new IllegalArgumentException("LLM 用户提示词不能为空");
         }
-        if (!llmProperties.isEnabled()) {
+        if (!llmProperties.isEnabled() && !StringUtils.hasText(request.apiKey())) {
             throw new IllegalStateException("当前环境未开启 LLM 能力");
         }
-        if (!StringUtils.hasText(llmProperties.getApiKey())) {
+        if (!StringUtils.hasText(resolveApiKey(request))) {
             throw new IllegalStateException("LLM_API_KEY 未配置");
         }
         if (!StringUtils.hasText(resolveModel(request))) {
@@ -164,15 +164,15 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
     }
 
     private HttpRequest buildRequest(LlmTextRequest request) {
-        String apiStyle = normalizeApiStyle(llmProperties.getApiStyle());
+        String apiStyle = normalizeApiStyle(resolveApiStyle(request));
         boolean useResponses = STYLE_RESPONSES.equals(apiStyle);
-        String endpoint = useResponses ? llmProperties.getResponsesPath() : llmProperties.getChatCompletionsPath();
+        String endpoint = useResponses ? resolveResponsesPath(request) : resolveChatCompletionsPath(request);
         JSONObject body = useResponses ? buildResponsesBody(request) : buildChatCompletionsBody(request);
 
         return HttpRequest.newBuilder()
-                .uri(URI.create(normalizeBaseUrl(llmProperties.getBaseUrl()) + normalizePath(endpoint)))
-                .timeout(Duration.ofSeconds(resolveTimeoutSeconds()))
-                .header(AUTHORIZATION_HEADER, AUTHORIZATION_PREFIX + llmProperties.getApiKey().trim())
+                .uri(URI.create(normalizeBaseUrl(resolveBaseUrl(request)) + normalizePath(endpoint)))
+                .timeout(Duration.ofSeconds(resolveTimeoutSeconds(request)))
+                .header(AUTHORIZATION_HEADER, AUTHORIZATION_PREFIX + resolveApiKey(request).trim())
                 .header(CONTENT_TYPE_HEADER, JSON_CONTENT_TYPE)
                 .POST(HttpRequest.BodyPublishers.ofString(body.toJSONString()))
                 .build();
@@ -183,9 +183,9 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
         body.put(FIELD_STREAM, true);
 
         return HttpRequest.newBuilder()
-                .uri(URI.create(normalizeBaseUrl(llmProperties.getBaseUrl()) + normalizePath(llmProperties.getChatCompletionsPath())))
-                .timeout(Duration.ofSeconds(resolveTimeoutSeconds()))
-                .header(AUTHORIZATION_HEADER, AUTHORIZATION_PREFIX + llmProperties.getApiKey().trim())
+                .uri(URI.create(normalizeBaseUrl(resolveBaseUrl(request)) + normalizePath(resolveChatCompletionsPath(request))))
+                .timeout(Duration.ofSeconds(resolveTimeoutSeconds(request)))
+                .header(AUTHORIZATION_HEADER, AUTHORIZATION_PREFIX + resolveApiKey(request).trim())
                 .header(CONTENT_TYPE_HEADER, JSON_CONTENT_TYPE)
                 .POST(HttpRequest.BodyPublishers.ofString(body.toJSONString()))
                 .build();
@@ -354,6 +354,48 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
 
     private int resolveTimeoutSeconds() {
         return Math.max(llmProperties.getTimeoutSeconds(), MIN_TIMEOUT_SECONDS);
+    }
+
+    private int resolveTimeoutSeconds(LlmTextRequest request) {
+        if (request != null && request.timeoutSeconds() != null) {
+            return Math.max(request.timeoutSeconds(), MIN_TIMEOUT_SECONDS);
+        }
+        return resolveTimeoutSeconds();
+    }
+
+    private String resolveBaseUrl(LlmTextRequest request) {
+        if (request != null && StringUtils.hasText(request.baseUrl())) {
+            return request.baseUrl().trim();
+        }
+        return llmProperties.getBaseUrl();
+    }
+
+    private String resolveApiKey(LlmTextRequest request) {
+        if (request != null && StringUtils.hasText(request.apiKey())) {
+            return request.apiKey().trim();
+        }
+        return llmProperties.getApiKey();
+    }
+
+    private String resolveApiStyle(LlmTextRequest request) {
+        if (request != null && StringUtils.hasText(request.apiStyle())) {
+            return request.apiStyle().trim();
+        }
+        return llmProperties.getApiStyle();
+    }
+
+    private String resolveChatCompletionsPath(LlmTextRequest request) {
+        if (request != null && StringUtils.hasText(request.chatCompletionsPath())) {
+            return request.chatCompletionsPath().trim();
+        }
+        return llmProperties.getChatCompletionsPath();
+    }
+
+    private String resolveResponsesPath(LlmTextRequest request) {
+        if (request != null && StringUtils.hasText(request.responsesPath())) {
+            return request.responsesPath().trim();
+        }
+        return llmProperties.getResponsesPath();
     }
 
     private String formatTextForLog(String text) {

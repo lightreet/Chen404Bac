@@ -1,12 +1,14 @@
 package com.chen404.service.impl;
 
 import com.chen404.config.AiRuntimeProperties;
+import com.chen404.domain.dto.AiAdminConfigDTO;
 import com.chen404.domain.dto.AiChatMessageDTO;
 import com.chen404.domain.dto.AiChatRequest;
 import com.chen404.domain.dto.AiChatResponse;
 import com.chen404.domain.entity.AiChatSession;
 import com.chen404.domain.entity.Article;
 import com.chen404.service.AiChatSessionService;
+import com.chen404.service.AiConfigService;
 import com.chen404.service.ArticleKnowledgeService;
 import com.chen404.service.ArticleService;
 import com.chen404.service.support.LlmClient;
@@ -33,6 +35,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -55,6 +58,7 @@ class AiChatServiceImplTest {
     private AiChatServiceImpl aiChatService;
     private StubRecommendScenarioDefinition recommendScenarioDefinition;
     private AiRuntimeProperties aiRuntimeProperties;
+    private AiConfigService aiConfigService;
 
     @BeforeEach
     void setUp() {
@@ -63,6 +67,7 @@ class AiChatServiceImplTest {
         articleKnowledgeService = mock(ArticleKnowledgeService.class);
         promptBuilder = mock(AiMaidPromptBuilder.class);
         aiChatSessionService = mock(AiChatSessionService.class);
+        aiConfigService = mock(AiConfigService.class);
         aiRuntimeProperties = new AiRuntimeProperties();
         MaidChatScenarioDefinition scenarioDefinition = new MaidChatScenarioDefinition(llmClient, aiRuntimeProperties);
         recommendScenarioDefinition = new StubRecommendScenarioDefinition();
@@ -74,9 +79,11 @@ class AiChatServiceImplTest {
                 articleService,
                 articleKnowledgeService,
                 promptBuilder,
-                aiChatSessionService
+                aiChatSessionService,
+                aiConfigService
         );
 
+        when(aiConfigService.getEffectiveConfig()).thenReturn(defaultAiConfig());
         when(promptBuilder.buildSystemPrompt(any(AiMaidPromptScene.class), any(AiMaidPromptContext.class)))
                 .thenReturn("system prompt");
         when(aiChatSessionService.ensureSession(nullable(String.class), any(), nullable(String.class), anyString(), any(), anyString()))
@@ -106,6 +113,8 @@ class AiChatServiceImplTest {
         AiChatResponse response = aiChatService.chat(buildArticleHelperRequest(), 7L);
 
         assertEquals("helper", response.getScene());
+        assertEquals(response.getReplyText(), response.getPanelAnswer());
+        assertNotNull(response.getBubbleText());
         assertTrue(response.getReplyText().contains("接入思路"));
         assertEquals("happy", response.getMood());
         assertEquals(1, response.getCitations().size());
@@ -162,6 +171,34 @@ class AiChatServiceImplTest {
         assertTrue(requestCaptor.getValue().userPrompt().contains("### Chat history"));
     }
 
+    @Test
+    void shouldRejectChatWhenLlmIsDisabledByAdminConfig() {
+        AiAdminConfigDTO config = defaultAiConfig();
+        config.getLlm().setEnabled(false);
+        when(aiConfigService.getEffectiveConfig()).thenReturn(config);
+
+        assertThrows(IllegalStateException.class, () -> aiChatService.chat(buildCompanionRequest(), null));
+
+        verify(llmClient, never()).generateText(any(LlmTextRequest.class));
+        verify(aiChatSessionService, never()).saveUserMessage(anyString(), anyString());
+    }
+
+    @Test
+    void shouldBuildPromptWithAdminMaidOverrides() {
+        AiAdminConfigDTO config = defaultAiConfig();
+        config.getMaid().setName("Nova");
+        config.getMaid().setPersonaVersion("v9");
+        config.getMaid().setSystemPrompt("admin system prompt");
+        config.getMaid().setCompanionPrompt("admin companion prompt");
+        when(aiConfigService.getEffectiveConfig()).thenReturn(config);
+        when(llmClient.generateText(any(LlmTextRequest.class)))
+                .thenReturn("{\"replyText\":\"ok\",\"mood\":\"happy\",\"suggestions\":[]}");
+
+        aiChatService.chat(buildCompanionRequest(), null);
+
+        verify(promptBuilder).buildSystemPrompt(any(AiMaidPromptScene.class), any(AiMaidPromptContext.class), eq(config));
+    }
+
     private AiChatRequest buildArticleHelperRequest() {
         AiChatRequest request = new AiChatRequest();
         request.setPageContext("article");
@@ -196,6 +233,30 @@ class AiChatServiceImplTest {
         AiChatSession session = new AiChatSession();
         session.setSessionId("sess_test");
         return session;
+    }
+
+    private AiAdminConfigDTO defaultAiConfig() {
+        AiAdminConfigDTO config = new AiAdminConfigDTO();
+        config.getLlm().setEnabled(true);
+        config.getLlm().setBaseUrl("https://api.openai.com/v1");
+        config.getLlm().setModel("gpt-5.4-mini");
+        config.getLlm().setApiStyle("chat-completions");
+        config.getLlm().setTemperature(0.2);
+        config.getLlm().setMaxTokens(512);
+        config.getLlm().setTimeoutSeconds(30);
+        config.getChat().setEnabled(true);
+        config.getChat().setRetrievalEnabled(true);
+        config.getChat().setMaxCitationCount(3);
+        config.getChat().setMaxContextMessages(8);
+        config.getChat().setMaxArticleContentChars(3000);
+        config.getChat().setMaxArticleSummaryChars(360);
+        config.getChat().setMaxSuggestionCount(3);
+        config.getChat().setRelatedArticleLimit(2);
+        config.getChat().setRequireRecommendIntentForRelatedArticles(true);
+        config.getChat().setBubbleMaxChars(36);
+        config.getChat().setBubbleLongReplyText("我整理好了，打开聊天框看详细内容吧。");
+        config.getTools().setWebSearchEnabled(false);
+        return config;
     }
 
     private static final class StubRecommendScenarioDefinition implements AiScenarioDefinition<ArticleRecommendScenarioRequest, ArticleRecommendScenarioResult> {

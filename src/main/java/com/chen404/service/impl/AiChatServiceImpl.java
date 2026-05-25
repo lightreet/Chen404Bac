@@ -3,6 +3,7 @@ package com.chen404.service.impl;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.chen404.domain.dto.AiAdminConfigDTO;
 import com.chen404.config.AiRuntimeProperties;
 import com.chen404.domain.dto.AiChatCitationDTO;
 import com.chen404.domain.dto.AiChatMessageDTO;
@@ -15,6 +16,7 @@ import com.chen404.domain.entity.Article;
 import com.chen404.exception.BadRequestException;
 import com.chen404.service.AiChatService;
 import com.chen404.service.AiChatSessionService;
+import com.chen404.service.AiConfigService;
 import com.chen404.service.ArticleKnowledgeService;
 import com.chen404.service.ArticleService;
 import com.chen404.service.support.LlmTextStreamHandler;
@@ -78,6 +80,7 @@ public class AiChatServiceImpl implements AiChatService {
     private final ArticleKnowledgeService articleKnowledgeService;
     private final AiMaidPromptBuilder maidPromptBuilder;
     private final AiChatSessionService aiChatSessionService;
+    private final AiConfigService aiConfigService;
 
     public AiChatServiceImpl(
             AiScenarioExecutor aiScenarioExecutor,
@@ -86,7 +89,8 @@ public class AiChatServiceImpl implements AiChatService {
             ArticleService articleService,
             ArticleKnowledgeService articleKnowledgeService,
             AiMaidPromptBuilder maidPromptBuilder,
-            AiChatSessionService aiChatSessionService) {
+            AiChatSessionService aiChatSessionService,
+            AiConfigService aiConfigService) {
         this.aiScenarioExecutor = aiScenarioExecutor;
         this.aiRuntimeProperties = aiRuntimeProperties;
         this.maidChatScenarioDefinition = maidChatScenarioDefinition;
@@ -94,13 +98,16 @@ public class AiChatServiceImpl implements AiChatService {
         this.articleKnowledgeService = articleKnowledgeService;
         this.maidPromptBuilder = maidPromptBuilder;
         this.aiChatSessionService = aiChatSessionService;
+        this.aiConfigService = aiConfigService;
     }
 
     @Override
     public AiChatResponse chat(AiChatRequest request, Long requesterId) {
-        ensureChatEnabled();
+        AiAdminConfigDTO effectiveConfig = aiConfigService.getEffectiveConfig();
+        ensureChatEnabled(effectiveConfig);
+        ensureLlmEnabled(effectiveConfig);
         validateRequest(request);
-        ChatExecutionContext context = prepareExecutionContext(request, requesterId);
+        ChatExecutionContext context = prepareExecutionContext(request, requesterId, effectiveConfig);
         MaidChatScenarioRequest scenarioRequest = buildScenarioRequest(request, context);
         AiScenarioResult<MaidChatScenarioResult> scenarioExecution = aiScenarioExecutor.execute(
                 AiScenarioRequest.of(AiScenarioCode.MAID_CHAT, scenarioRequest)
@@ -117,7 +124,8 @@ public class AiChatServiceImpl implements AiChatService {
     @Override
     public SseEmitter streamChat(AiChatRequest request, Long requesterId) {
         validateRequest(request);
-        ChatExecutionContext context = prepareExecutionContext(request, requesterId);
+        AiAdminConfigDTO effectiveConfig = aiConfigService.getEffectiveConfig();
+        ChatExecutionContext context = prepareExecutionContext(request, requesterId, effectiveConfig);
         MaidChatScenarioRequest scenarioRequest = buildScenarioRequest(request, context);
         SseEmitter emitter = new SseEmitter(0L);
         AtomicBoolean cancelled = new AtomicBoolean(false);
@@ -130,8 +138,13 @@ public class AiChatServiceImpl implements AiChatService {
 
         STREAM_EXECUTOR.execute(() -> {
             try {
-                if (!aiRuntimeProperties.getChat().isEnabled()) {
+                if (!isChatEnabled(context.aiConfig())) {
                     sendEventQuietly(emitter, SSE_EVENT_ERROR, JSONObject.of("message", "当前环境未开启 AI 聊天能力"));
+                    emitter.complete();
+                    return;
+                }
+                if (!isLlmEnabled(context.aiConfig())) {
+                    sendEventQuietly(emitter, SSE_EVENT_ERROR, JSONObject.of("message", "LLM is disabled by admin config"));
                     emitter.complete();
                     return;
                 }
@@ -187,18 +200,18 @@ public class AiChatServiceImpl implements AiChatService {
         return aiChatSessionService.loadSessionDetail(sessionId, requesterId, visitorId);
     }
 
-    private ChatExecutionContext prepareExecutionContext(AiChatRequest request, Long requesterId) {
+    private ChatExecutionContext prepareExecutionContext(AiChatRequest request, Long requesterId, AiAdminConfigDTO effectiveConfig) {
         String latestUserMessage = extractLatestUserMessage(request.getMessages());
         AiMaidPromptScene scene = resolveScene(request, latestUserMessage);
         String traceId = buildTraceId();
         String messageId = buildMessageId();
         Article currentArticle = loadCurrentArticle(request.getCurrentArticleId(), requesterId, traceId);
-        int maxCitationCount = aiRuntimeProperties.getChat().getMaxCitationCount();
-        List<ArticleKnowledgeHit> knowledgeHits = scene == AiMaidPromptScene.HELPER
+        int maxCitationCount = resolveMaxCitationCount(effectiveConfig);
+        List<ArticleKnowledgeHit> knowledgeHits = scene == AiMaidPromptScene.HELPER && isRetrievalEnabled(effectiveConfig)
                 ? articleKnowledgeService.searchVisibleChunks(latestUserMessage, requesterId, request.getCurrentArticleId(), maxCitationCount)
                 : List.of();
         AiMaidPromptContext promptContext = buildPromptContext(request, currentArticle, !knowledgeHits.isEmpty());
-        String systemPrompt = maidPromptBuilder.buildSystemPrompt(scene, promptContext);
+        String systemPrompt = maidPromptBuilder.buildSystemPrompt(scene, promptContext, effectiveConfig);
         AiChatSession session = aiChatSessionService.ensureSession(
                 request.getSessionId(),
                 requesterId,
@@ -211,7 +224,7 @@ public class AiChatServiceImpl implements AiChatService {
         log.info("[AI_CHAT_REQ] traceId={} requesterId={} scene={} pageContext={} articleId={} sessionId={}",
                 traceId, requesterId, scene.name().toLowerCase(Locale.ROOT),
                 normalizeText(request.getPageContext()), request.getCurrentArticleId(), session.getSessionId());
-        return new ChatExecutionContext(scene, traceId, messageId, requesterId, latestUserMessage, session, currentArticle, knowledgeHits, systemPrompt);
+        return new ChatExecutionContext(scene, traceId, messageId, requesterId, latestUserMessage, session, currentArticle, knowledgeHits, systemPrompt, effectiveConfig);
     }
 
     private void validateRequest(AiChatRequest request) {
@@ -227,10 +240,49 @@ public class AiChatServiceImpl implements AiChatService {
         }
     }
 
-    private void ensureChatEnabled() {
-        if (!aiRuntimeProperties.getChat().isEnabled()) {
+    private void ensureChatEnabled(AiAdminConfigDTO config) {
+        if (!isChatEnabled(config)) {
             throw new IllegalStateException("当前环境未开启 AI 聊天能力");
         }
+    }
+
+    private boolean isLlmEnabled(AiAdminConfigDTO config) {
+        return config == null || config.getLlm() == null || !Boolean.FALSE.equals(config.getLlm().getEnabled());
+    }
+
+    private void ensureLlmEnabled(AiAdminConfigDTO config) {
+        if (!isLlmEnabled(config)) {
+            throw new IllegalStateException("LLM is disabled by admin config");
+        }
+    }
+
+    private boolean isChatEnabled(AiAdminConfigDTO config) {
+        return config == null || config.getChat() == null || !Boolean.FALSE.equals(config.getChat().getEnabled());
+    }
+
+    private boolean isRetrievalEnabled(AiAdminConfigDTO config) {
+        return config == null || config.getChat() == null || !Boolean.FALSE.equals(config.getChat().getRetrievalEnabled());
+    }
+
+    private int resolveMaxCitationCount(AiAdminConfigDTO config) {
+        if (config != null && config.getChat() != null && config.getChat().getMaxCitationCount() != null) {
+            return config.getChat().getMaxCitationCount();
+        }
+        return aiRuntimeProperties.getChat().getMaxCitationCount();
+    }
+
+    private int resolveRelatedArticleLimit(AiAdminConfigDTO config) {
+        if (config != null && config.getChat() != null && config.getChat().getRelatedArticleLimit() != null) {
+            return config.getChat().getRelatedArticleLimit();
+        }
+        return aiRuntimeProperties.getChat().getRelatedArticleLimit();
+    }
+
+    private boolean isRequireRecommendIntent(AiAdminConfigDTO config) {
+        if (config != null && config.getChat() != null && config.getChat().getRequireRecommendIntentForRelatedArticles() != null) {
+            return config.getChat().getRequireRecommendIntentForRelatedArticles();
+        }
+        return aiRuntimeProperties.getChat().isRequireRecommendIntentForRelatedArticles();
     }
 
     private AiMaidPromptScene resolveScene(AiChatRequest request, String latestUserMessage) {
@@ -281,7 +333,8 @@ public class AiChatServiceImpl implements AiChatService {
                 request.getPageContext(),
                 request.getCurrentArticleId(),
                 context.currentArticle(),
-                context.knowledgeHits()
+                context.knowledgeHits(),
+                context.aiConfig()
         );
     }
 
@@ -290,22 +343,24 @@ public class AiChatServiceImpl implements AiChatService {
         response.setSessionId(context.session().getSessionId());
         response.setMessageId(context.messageId());
         response.setScene(context.scene().name().toLowerCase(Locale.ROOT));
-        response.setReplyText(scenarioResult.replyText());
+        response.setReplyText(scenarioResult.panelAnswer());
+        response.setPanelAnswer(scenarioResult.panelAnswer());
+        response.setBubbleText(scenarioResult.bubbleText());
         response.setMood(scenarioResult.mood());
         response.setSuggestions(scenarioResult.suggestions());
-        response.setCitations(buildCitations(context.knowledgeHits()));
+        response.setCitations(buildCitations(context.knowledgeHits(), context.aiConfig()));
         response.setRelatedArticles(buildRelatedArticles(context));
         response.setTraceId(context.traceId());
         response.setFinishReason(DEFAULT_FINISH_REASON);
         return response;
     }
 
-    private List<AiChatCitationDTO> buildCitations(List<ArticleKnowledgeHit> knowledgeHits) {
+    private List<AiChatCitationDTO> buildCitations(List<ArticleKnowledgeHit> knowledgeHits, AiAdminConfigDTO aiConfig) {
         if (knowledgeHits == null || knowledgeHits.isEmpty()) {
             return List.of();
         }
         List<AiChatCitationDTO> citations = new ArrayList<>();
-        int maxCitationCount = aiRuntimeProperties.getChat().getMaxCitationCount();
+        int maxCitationCount = resolveMaxCitationCount(aiConfig);
         for (ArticleKnowledgeHit hit : knowledgeHits.stream().limit(maxCitationCount).toList()) {
             AiChatCitationDTO citation = new AiChatCitationDTO();
             citation.setArticleId(hit.articleId());
@@ -324,7 +379,7 @@ public class AiChatServiceImpl implements AiChatService {
         if (!aiRuntimeProperties.getRecommend().isEnabled()) {
             return List.of();
         }
-        if (aiRuntimeProperties.getChat().isRequireRecommendIntentForRelatedArticles()
+        if (isRequireRecommendIntent(context.aiConfig())
                 && !containsRecommendIntent(context.latestUserMessage())) {
             return List.of();
         }
@@ -337,7 +392,7 @@ public class AiChatServiceImpl implements AiChatService {
                                 "article",
                                 context.requesterId(),
                                 context.latestUserMessage(),
-                                aiRuntimeProperties.getChat().getRelatedArticleLimit()
+                                resolveRelatedArticleLimit(context.aiConfig())
                         )
                     )
             );
@@ -370,7 +425,7 @@ public class AiChatServiceImpl implements AiChatService {
                 "scene", context.scene().name().toLowerCase(Locale.ROOT),
                 "mood", DEFAULT_MOOD
         ));
-        for (AiChatCitationDTO citation : buildCitations(context.knowledgeHits())) {
+        for (AiChatCitationDTO citation : buildCitations(context.knowledgeHits(), context.aiConfig())) {
             sendEvent(emitter, SSE_EVENT_CITATION, JSON.parseObject(JSON.toJSONString(citation)));
         }
     }
@@ -396,7 +451,9 @@ public class AiChatServiceImpl implements AiChatService {
         sendEventQuietly(emitter, SSE_EVENT_DONE, JSONObject.of(
                 "messageId", response.getMessageId(),
                 "finishReason", response.getFinishReason(),
-                "traceId", response.getTraceId()
+                "traceId", response.getTraceId(),
+                "panelAnswer", response.getPanelAnswer(),
+                "bubbleText", response.getBubbleText()
         ));
     }
 
@@ -521,7 +578,8 @@ public class AiChatServiceImpl implements AiChatService {
             AiChatSession session,
             Article currentArticle,
             List<ArticleKnowledgeHit> knowledgeHits,
-            String systemPrompt
+            String systemPrompt,
+            AiAdminConfigDTO aiConfig
     ) {
     }
 }
