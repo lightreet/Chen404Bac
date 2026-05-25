@@ -3,6 +3,7 @@ package com.chen404.service.support.scenario.chat;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.chen404.domain.dto.AiAdminConfigDTO;
 import com.chen404.domain.dto.AiChatMessageDTO;
 import com.chen404.domain.entity.Article;
 import com.chen404.config.AiRuntimeProperties;
@@ -35,6 +36,8 @@ public class MaidChatScenarioDefinition implements AiScenarioDefinition<MaidChat
     private static final Logger log = LoggerFactory.getLogger(MaidChatScenarioDefinition.class);
 
     private static final String OUTPUT_FIELD_REPLY_TEXT = "replyText";
+    private static final String OUTPUT_FIELD_PANEL_ANSWER = "panelAnswer";
+    private static final String OUTPUT_FIELD_BUBBLE_TEXT = "bubbleText";
     private static final String OUTPUT_FIELD_MOOD = "mood";
     private static final String OUTPUT_FIELD_SUGGESTIONS = "suggestions";
     private static final String DEFAULT_MOOD = "happy";
@@ -61,43 +64,44 @@ public class MaidChatScenarioDefinition implements AiScenarioDefinition<MaidChat
     @Override
     public AiScenarioResult<MaidChatScenarioResult> execute(AiScenarioRequest<MaidChatScenarioRequest> request) {
         MaidChatScenarioRequest payload = request.payload();
-        String outputText = llmClient.generateText(LlmTextRequest.of(
-                payload.systemPrompt(),
-                buildStructuredUserPrompt(payload)
-        ));
+        String outputText = llmClient.generateText(buildLlmRequest(payload, buildStructuredUserPrompt(payload)));
         return AiScenarioResult.of(parseStructuredResponse(outputText, payload));
     }
 
     public void stream(MaidChatScenarioRequest request, LlmTextStreamHandler handler) {
         llmClient.streamText(
-                LlmTextRequest.of(request.systemPrompt(), buildStreamingUserPrompt(request)),
+                buildLlmRequest(request, buildStreamingUserPrompt(request)),
                 handler
         );
     }
 
     public MaidChatScenarioResult buildStreamResult(String streamedReply, MaidChatScenarioRequest request) {
         return new MaidChatScenarioResult(
-                resolveReplyText(streamedReply, request.scene()),
+                resolvePanelAnswer(streamedReply, request.scene()),
+                resolveBubbleText(streamedReply, request),
                 DEFAULT_MOOD,
-                defaultSuggestions(request.scene(), request.currentArticle())
+                defaultSuggestions(request.scene(), request.currentArticle(), request.aiConfig())
         );
     }
 
     public MaidChatScenarioResult buildFallbackResult(MaidChatScenarioRequest request) {
         return new MaidChatScenarioResult(
                 request.scene() == AiMaidPromptScene.HELPER ? DEFAULT_HELPER_REPLY : DEFAULT_REPLY,
+                request.scene() == AiMaidPromptScene.HELPER ? DEFAULT_HELPER_REPLY : DEFAULT_REPLY,
                 DEFAULT_MOOD,
-                defaultSuggestions(request.scene(), request.currentArticle())
+                defaultSuggestions(request.scene(), request.currentArticle(), request.aiConfig())
         );
     }
 
     private MaidChatScenarioResult parseStructuredResponse(String outputText, MaidChatScenarioRequest request) {
         try {
             JSONObject payload = JSON.parseObject(stripCodeFence(outputText));
+            String panelAnswer = resolvePanelAnswer(resolvePanelAnswerField(payload), request.scene());
             return new MaidChatScenarioResult(
-                    resolveReplyText(payload.getString(OUTPUT_FIELD_REPLY_TEXT), request.scene()),
+                    panelAnswer,
+                    resolveBubbleText(payload.getString(OUTPUT_FIELD_BUBBLE_TEXT), panelAnswer, request),
                     resolveMood(payload.getString(OUTPUT_FIELD_MOOD)),
-                    normalizeSuggestions(payload.getJSONArray(OUTPUT_FIELD_SUGGESTIONS), request.scene(), request.currentArticle())
+                    normalizeSuggestions(payload.getJSONArray(OUTPUT_FIELD_SUGGESTIONS), request.scene(), request.currentArticle(), request.aiConfig())
             );
         } catch (RuntimeException ex) {
             log.warn("[AI_CHAT_PARSE_FAIL] scene={} body={}", request.scene(), outputText, ex);
@@ -108,14 +112,16 @@ public class MaidChatScenarioDefinition implements AiScenarioDefinition<MaidChat
     private String buildStructuredUserPrompt(MaidChatScenarioRequest request) {
         StringBuilder builder = new StringBuilder();
         builder.append("请仅返回 JSON 对象，不要输出 markdown、代码块或额外说明。\n");
-        builder.append("JSON 字段要求：replyText(string), mood(string), suggestions(string[]).\n");
-        builder.append("replyText 必须是简短自然的中文对话；suggestions 最多 3 条。\n\n");
+        builder.append("JSON 字段要求：panelAnswer(string), bubbleText(string), mood(string), suggestions(string[]).\n");
+        builder.append("panelAnswer 用于聊天面板，可以承载完整回答；bubbleText 用于人物旁小气泡，必须是简短自然的中文短句。\n");
+        builder.append("为了兼容旧字段，如果无法返回 panelAnswer，也可以返回 replyText。\n\n");
         appendSharedPromptContext(builder, request);
         builder.append("### Response requirements\n");
-        builder.append("- 回复必须像真实聊天一样短，自然一点。\n");
-        builder.append("- 不要解释返回结构，不要附加字段。\n");
+        builder.append("- panelAnswer 要自然、清楚，回答用户真正的问题；需要总结或解释时不要为了小气泡而压缩到一句话。\n");
+        builder.append("- bubbleText 只负责情绪反馈或引导，不承载完整答案；长回答时使用「").append(resolveLongBubbleText(request)).append("」。\n");
+        builder.append("- 不要解释返回结构，不要附加未要求字段。\n");
         if (request.scene() == AiMaidPromptScene.HELPER) {
-            builder.append("- 优先基于当前文章和检索片段给出短回答。\n");
+            builder.append("- 优先基于当前文章和检索片段回答。\n");
             builder.append("- 如果证据不足，就直接说明当前站内依据还不够。\n");
         } else {
             builder.append("- 先自然接住用户，再给轻快回应。\n");
@@ -126,12 +132,11 @@ public class MaidChatScenarioDefinition implements AiScenarioDefinition<MaidChat
 
     private String buildStreamingUserPrompt(MaidChatScenarioRequest request) {
         StringBuilder builder = new StringBuilder();
-        builder.append("请直接输出一段简短自然的中文回复，不要 JSON，不要 markdown，不要代码块。\n");
-        builder.append("回复长度控制在 1 到 3 句，像日常说话。\n\n");
+        builder.append("请直接输出自然中文回复，不要 JSON，不要 markdown，不要代码块。\n");
+        builder.append("这段内容会显示在聊天面板里，可以完整回答用户问题；小气泡会由系统另行压缩。\n\n");
         appendSharedPromptContext(builder, request);
         builder.append("### Response requirements\n");
-        builder.append("- 直接给短回复正文。\n");
-        builder.append("- 不要输出引用说明，不要列清单。\n");
+        builder.append("- 直接给回复正文。\n");
         if (request.scene() == AiMaidPromptScene.HELPER) {
             builder.append("- 优先围绕当前文章或检索片段回答。\n");
             builder.append("- 没把握就坦白说依据不足。\n");
@@ -143,13 +148,13 @@ public class MaidChatScenarioDefinition implements AiScenarioDefinition<MaidChat
 
     private void appendSharedPromptContext(StringBuilder builder, MaidChatScenarioRequest request) {
         builder.append("### Chat history\n");
-        appendRecentMessages(builder, request.messages());
+        appendRecentMessages(builder, request.messages(), request.aiConfig());
         builder.append("\n### Page context\n");
         builder.append("- pageContext: ").append(normalizeText(request.pageContext())).append('\n');
         builder.append("- currentArticleId: ").append(request.currentArticleId() == null ? "none" : request.currentArticleId()).append('\n');
         if (request.currentArticle() != null) {
             builder.append('\n');
-            appendArticleContext(builder, request.currentArticle());
+            appendArticleContext(builder, request.currentArticle(), request.aiConfig());
         }
         if (request.knowledgeHits() != null && !request.knowledgeHits().isEmpty()) {
             builder.append("\n### Retrieved knowledge\n");
@@ -164,11 +169,11 @@ public class MaidChatScenarioDefinition implements AiScenarioDefinition<MaidChat
         builder.append('\n');
     }
 
-    private void appendRecentMessages(StringBuilder builder, List<AiChatMessageDTO> messages) {
+    private void appendRecentMessages(StringBuilder builder, List<AiChatMessageDTO> messages, AiAdminConfigDTO aiConfig) {
         if (messages == null || messages.isEmpty()) {
             return;
         }
-        int start = Math.max(0, messages.size() - aiRuntimeProperties.getChat().getMaxContextMessages());
+        int start = Math.max(0, messages.size() - resolveMaxContextMessages(aiConfig));
         for (int i = start; i < messages.size(); i++) {
             AiChatMessageDTO message = messages.get(i);
             if (!StringUtils.hasText(message.getContent())) {
@@ -182,27 +187,30 @@ public class MaidChatScenarioDefinition implements AiScenarioDefinition<MaidChat
         }
     }
 
-    private void appendArticleContext(StringBuilder builder, Article article) {
+    private void appendArticleContext(StringBuilder builder, Article article, AiAdminConfigDTO aiConfig) {
         builder.append("### Current article\n");
         builder.append("Title: ").append(normalizeText(article.getTitle())).append('\n');
         if (StringUtils.hasText(article.getSummary())) {
             builder.append("Summary: ")
-                    .append(truncate(article.getSummary(), aiRuntimeProperties.getChat().getMaxArticleSummaryChars()))
+                    .append(truncate(article.getSummary(), resolveMaxArticleSummaryChars(aiConfig)))
                     .append('\n');
         }
         if (StringUtils.hasText(article.getContent())) {
             builder.append("Content:\n")
-                    .append(truncate(article.getContent(), aiRuntimeProperties.getChat().getMaxArticleContentChars()))
+                    .append(truncate(article.getContent(), resolveMaxArticleContentChars(aiConfig)))
                     .append('\n');
         }
     }
 
-    private List<String> normalizeSuggestions(JSONArray rawSuggestions, AiMaidPromptScene scene, Article currentArticle) {
+    private List<String> normalizeSuggestions(JSONArray rawSuggestions, AiMaidPromptScene scene, Article currentArticle, AiAdminConfigDTO aiConfig) {
+        int maxSuggestionCount = resolveMaxSuggestionCount(aiConfig);
+        if (maxSuggestionCount <= 0) {
+            return List.of();
+        }
         if (rawSuggestions == null || rawSuggestions.isEmpty()) {
-            return defaultSuggestions(scene, currentArticle);
+            return defaultSuggestions(scene, currentArticle, aiConfig);
         }
         List<String> suggestions = new ArrayList<>();
-        int maxSuggestionCount = aiRuntimeProperties.getChat().getMaxSuggestionCount();
         for (int i = 0; i < rawSuggestions.size() && suggestions.size() < maxSuggestionCount; i++) {
             String item = rawSuggestions.getString(i);
             if (!StringUtils.hasText(item)) {
@@ -210,17 +218,111 @@ public class MaidChatScenarioDefinition implements AiScenarioDefinition<MaidChat
             }
             suggestions.add(item.trim());
         }
-        return suggestions.isEmpty() ? defaultSuggestions(scene, currentArticle) : suggestions;
+        return suggestions.isEmpty() ? defaultSuggestions(scene, currentArticle, aiConfig) : suggestions;
     }
 
-    private List<String> defaultSuggestions(AiMaidPromptScene scene, Article currentArticle) {
+    private List<String> defaultSuggestions(AiMaidPromptScene scene, Article currentArticle, AiAdminConfigDTO aiConfig) {
+        int maxSuggestionCount = resolveMaxSuggestionCount(aiConfig);
+        if (maxSuggestionCount <= 0) {
+            return List.of();
+        }
+        List<String> defaults;
         if (scene == AiMaidPromptScene.HELPER && currentArticle != null) {
-            return List.of("帮我总结这篇", "这篇的重点是什么", "推荐两篇相关的");
+            defaults = List.of("帮我总结这篇", "这篇的重点是什么", "推荐两篇相关的");
+        } else if (scene == AiMaidPromptScene.HELPER) {
+            defaults = List.of("站内能看什么", "推荐一篇文章", "帮我找找相关内容");
+        } else {
+            defaults = List.of("随便陪我聊聊", "给我一句打气的话", "今天适合看什么");
         }
-        if (scene == AiMaidPromptScene.HELPER) {
-            return List.of("站内能看什么", "推荐一篇文章", "帮我找找相关内容");
+        return defaults.stream().limit(maxSuggestionCount).toList();
+    }
+
+    private LlmTextRequest buildLlmRequest(MaidChatScenarioRequest request, String userPrompt) {
+        AiAdminConfigDTO config = request.aiConfig();
+        if (config == null || config.getLlm() == null) {
+            return LlmTextRequest.of(request.systemPrompt(), userPrompt);
         }
-        return List.of("随便陪我聊聊", "给我一句打气的话", "今天适合看什么");
+        return new LlmTextRequest(
+                config.getLlm().getModel(),
+                request.systemPrompt(),
+                userPrompt,
+                config.getLlm().getTemperature(),
+                config.getLlm().getMaxTokens(),
+                config.getLlm().getBaseUrl(),
+                config.getLlm().getApiKey(),
+                config.getLlm().getApiStyle(),
+                null,
+                null,
+                config.getLlm().getTimeoutSeconds()
+        );
+    }
+
+    private String resolvePanelAnswerField(JSONObject payload) {
+        String panelAnswer = payload.getString(OUTPUT_FIELD_PANEL_ANSWER);
+        return StringUtils.hasText(panelAnswer) ? panelAnswer : payload.getString(OUTPUT_FIELD_REPLY_TEXT);
+    }
+
+    private String resolveBubbleText(String bubbleText, MaidChatScenarioRequest request) {
+        return resolveBubbleText(bubbleText, bubbleText, request);
+    }
+
+    private String resolveBubbleText(String bubbleText, String panelAnswer, MaidChatScenarioRequest request) {
+        int maxChars = resolveBubbleMaxChars(request);
+        String candidate = StringUtils.hasText(bubbleText) ? bubbleText.trim() : panelAnswer;
+        if (!StringUtils.hasText(candidate)) {
+            return request.scene() == AiMaidPromptScene.HELPER ? DEFAULT_HELPER_REPLY : DEFAULT_REPLY;
+        }
+        String normalized = candidate.trim();
+        if (normalized.length() > maxChars || normalized.contains("\n")) {
+            return resolveLongBubbleText(request);
+        }
+        return normalized;
+    }
+
+    private int resolveBubbleMaxChars(MaidChatScenarioRequest request) {
+        if (request.aiConfig() != null
+                && request.aiConfig().getChat() != null
+                && request.aiConfig().getChat().getBubbleMaxChars() != null) {
+            return request.aiConfig().getChat().getBubbleMaxChars();
+        }
+        return 36;
+    }
+
+    private String resolveLongBubbleText(MaidChatScenarioRequest request) {
+        if (request.aiConfig() != null
+                && request.aiConfig().getChat() != null
+                && StringUtils.hasText(request.aiConfig().getChat().getBubbleLongReplyText())) {
+            return request.aiConfig().getChat().getBubbleLongReplyText();
+        }
+        return "我整理好了，打开聊天框看详细内容吧。";
+    }
+
+    private int resolveMaxContextMessages(AiAdminConfigDTO config) {
+        if (config != null && config.getChat() != null && config.getChat().getMaxContextMessages() != null) {
+            return config.getChat().getMaxContextMessages();
+        }
+        return aiRuntimeProperties.getChat().getMaxContextMessages();
+    }
+
+    private int resolveMaxSuggestionCount(AiAdminConfigDTO config) {
+        if (config != null && config.getChat() != null && config.getChat().getMaxSuggestionCount() != null) {
+            return config.getChat().getMaxSuggestionCount();
+        }
+        return aiRuntimeProperties.getChat().getMaxSuggestionCount();
+    }
+
+    private int resolveMaxArticleSummaryChars(AiAdminConfigDTO config) {
+        if (config != null && config.getChat() != null && config.getChat().getMaxArticleSummaryChars() != null) {
+            return config.getChat().getMaxArticleSummaryChars();
+        }
+        return aiRuntimeProperties.getChat().getMaxArticleSummaryChars();
+    }
+
+    private int resolveMaxArticleContentChars(AiAdminConfigDTO config) {
+        if (config != null && config.getChat() != null && config.getChat().getMaxArticleContentChars() != null) {
+            return config.getChat().getMaxArticleContentChars();
+        }
+        return aiRuntimeProperties.getChat().getMaxArticleContentChars();
     }
 
     private String stripCodeFence(String text) {
@@ -232,12 +334,11 @@ public class MaidChatScenarioDefinition implements AiScenarioDefinition<MaidChat
         return trimmed;
     }
 
-    private String resolveReplyText(String replyText, AiMaidPromptScene scene) {
+    private String resolvePanelAnswer(String replyText, AiMaidPromptScene scene) {
         if (!StringUtils.hasText(replyText)) {
             return scene == AiMaidPromptScene.HELPER ? DEFAULT_HELPER_REPLY : DEFAULT_REPLY;
         }
-        String trimmed = replyText.trim();
-        return trimmed.length() > 180 ? trimmed.substring(0, 180) : trimmed;
+        return replyText.trim();
     }
 
     private String resolveMood(String mood) {

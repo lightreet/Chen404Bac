@@ -1,6 +1,7 @@
 package com.chen404.service.support.scenario.chat;
 
 import com.chen404.config.AiRuntimeProperties;
+import com.chen404.domain.dto.AiAdminConfigDTO;
 import com.chen404.domain.dto.AiChatMessageDTO;
 import com.chen404.domain.entity.Article;
 import com.chen404.service.support.LlmClient;
@@ -28,7 +29,7 @@ class MaidChatScenarioDefinitionTest {
     void shouldBuildStructuredPromptAndParseStructuredReply() {
         LlmClient llmClient = mock(LlmClient.class);
         when(llmClient.generateText(any(LlmTextRequest.class))).thenReturn("""
-                {"replyText":"这篇主要在讲女仆聊天接入思路，我可以继续帮你压成三条重点。","mood":"happy","suggestions":["帮我总结这篇"]}
+                {"panelAnswer":"This is a longer panel answer for the chat panel.","bubbleText":"Done.","mood":"happy","suggestions":["Summarize this article"]}
                 """);
 
         MaidChatScenarioDefinition definition = new MaidChatScenarioDefinition(llmClient, new AiRuntimeProperties());
@@ -37,24 +38,84 @@ class MaidChatScenarioDefinitionTest {
                 new MaidChatScenarioRequest(
                         AiMaidPromptScene.HELPER,
                         "system prompt",
-                        List.of(message("user", "帮我总结一下这篇文章")),
+                        List.of(message("user", "Please summarize this article")),
                         "article",
                         123L,
                         buildArticle(),
-                        List.of(new ArticleKnowledgeHit(123L, "智能女仆接入方案", "第一阶段先把聊天入口、短回复和站内知识引导做好。", "/articles/123", 95, true))
+                        List.of(new ArticleKnowledgeHit(123L, "AI maid plan", "The first section explains chat entry and site retrieval.", "/articles/123", 95, true)),
+                        defaultAiConfig()
                 )
         )).data();
 
-        assertTrue(result.replyText().contains("接入思路"));
+        assertEquals("This is a longer panel answer for the chat panel.", result.panelAnswer());
+        assertEquals("Done.", result.bubbleText());
         assertEquals("happy", result.mood());
-        assertEquals(List.of("帮我总结这篇"), result.suggestions());
+        assertEquals(List.of("Summarize this article"), result.suggestions());
 
         ArgumentCaptor<LlmTextRequest> requestCaptor = ArgumentCaptor.forClass(LlmTextRequest.class);
         verify(llmClient).generateText(requestCaptor.capture());
         assertEquals("system prompt", requestCaptor.getValue().systemInstruction());
+        assertEquals("gpt-test", requestCaptor.getValue().model());
+        assertEquals("https://llm.example/v1", requestCaptor.getValue().baseUrl());
         assertTrue(requestCaptor.getValue().userPrompt().contains("### Chat history"));
         assertTrue(requestCaptor.getValue().userPrompt().contains("### Retrieved knowledge"));
-        assertTrue(requestCaptor.getValue().userPrompt().contains("智能女仆接入方案"));
+        assertTrue(requestCaptor.getValue().userPrompt().contains("AI maid plan"));
+    }
+
+    @Test
+    void shouldKeepLongAnswerInPanelAndUseShortBubbleFallback() {
+        LlmClient llmClient = mock(LlmClient.class);
+        String longPanelAnswer = "This panel answer is intentionally longer than one hundred and eighty characters. "
+                + "It should stay complete because the chat panel is allowed to carry the detailed explanation, "
+                + "while only the small Live2D bubble should be shortened for visual comfort.";
+        when(llmClient.generateText(any(LlmTextRequest.class))).thenReturn("""
+                {"panelAnswer":"%s","mood":"happy","suggestions":[]}
+                """.formatted(longPanelAnswer));
+
+        MaidChatScenarioDefinition definition = new MaidChatScenarioDefinition(llmClient, new AiRuntimeProperties());
+        MaidChatScenarioResult result = definition.execute(AiScenarioRequest.of(
+                AiScenarioCode.MAID_CHAT,
+                new MaidChatScenarioRequest(
+                        AiMaidPromptScene.HELPER,
+                        "system prompt",
+                        List.of(message("user", "Please explain it")),
+                        "article",
+                        123L,
+                        buildArticle(),
+                        List.of(),
+                        defaultAiConfig()
+                )
+        )).data();
+
+        assertEquals(longPanelAnswer, result.panelAnswer());
+        assertEquals("我整理好了，打开聊天框看详细内容吧。", result.bubbleText());
+    }
+
+    @Test
+    void shouldReturnNoSuggestionsWhenAdminLimitIsZero() {
+        LlmClient llmClient = mock(LlmClient.class);
+        when(llmClient.generateText(any(LlmTextRequest.class))).thenReturn("""
+                {"panelAnswer":"ok","bubbleText":"ok","mood":"happy","suggestions":["one","two"]}
+                """);
+        AiAdminConfigDTO config = defaultAiConfig();
+        config.getChat().setMaxSuggestionCount(0);
+
+        MaidChatScenarioDefinition definition = new MaidChatScenarioDefinition(llmClient, new AiRuntimeProperties());
+        MaidChatScenarioResult result = definition.execute(AiScenarioRequest.of(
+                AiScenarioCode.MAID_CHAT,
+                new MaidChatScenarioRequest(
+                        AiMaidPromptScene.COMPANION,
+                        "system prompt",
+                        List.of(message("user", "Please chat")),
+                        "home",
+                        null,
+                        null,
+                        List.of(),
+                        config
+                )
+        )).data();
+
+        assertTrue(result.suggestions().isEmpty());
     }
 
     @Test
@@ -68,17 +129,51 @@ class MaidChatScenarioDefinitionTest {
                 new MaidChatScenarioRequest(
                         AiMaidPromptScene.COMPANION,
                         "system prompt",
-                        List.of(message("user", "今天有点累，陪我聊聊吧")),
+                        List.of(message("user", "I feel tired today")),
                         "home",
                         null,
                         null,
-                        List.of()
+                        List.of(),
+                        defaultAiConfig()
                 )
         )).data();
 
-        assertFalse(result.replyText().isBlank());
+        assertFalse(result.panelAnswer().isBlank());
+        assertFalse(result.bubbleText().isBlank());
         assertEquals("happy", result.mood());
         assertFalse(result.suggestions().isEmpty());
+    }
+
+    @Test
+    void shouldUseAdminContextAndSuggestionLimits() {
+        LlmClient llmClient = mock(LlmClient.class);
+        when(llmClient.generateText(any(LlmTextRequest.class))).thenReturn("""
+                {"panelAnswer":"ok","bubbleText":"ok","mood":"happy","suggestions":["one","two","three"]}
+                """);
+        AiAdminConfigDTO config = defaultAiConfig();
+        config.getChat().setMaxContextMessages(1);
+        config.getChat().setMaxSuggestionCount(1);
+
+        MaidChatScenarioDefinition definition = new MaidChatScenarioDefinition(llmClient, new AiRuntimeProperties());
+        MaidChatScenarioResult result = definition.execute(AiScenarioRequest.of(
+                AiScenarioCode.MAID_CHAT,
+                new MaidChatScenarioRequest(
+                        AiMaidPromptScene.COMPANION,
+                        "system prompt",
+                        List.of(message("user", "older message"), message("user", "newer message")),
+                        "home",
+                        null,
+                        null,
+                        List.of(),
+                        config
+                )
+        )).data();
+
+        assertEquals(List.of("one"), result.suggestions());
+        ArgumentCaptor<LlmTextRequest> requestCaptor = ArgumentCaptor.forClass(LlmTextRequest.class);
+        verify(llmClient).generateText(requestCaptor.capture());
+        assertFalse(requestCaptor.getValue().userPrompt().contains("older message"));
+        assertTrue(requestCaptor.getValue().userPrompt().contains("newer message"));
     }
 
     private AiChatMessageDTO message(String role, String content) {
@@ -91,9 +186,25 @@ class MaidChatScenarioDefinitionTest {
     private Article buildArticle() {
         Article article = new Article();
         article.setId(123L);
-        article.setTitle("智能女仆接入方案");
-        article.setSummary("第一阶段围绕当前文章和站内知识给出可靠的短回答。");
-        article.setContent("这里是更长一些的文章正文，用来给 Lyra 补充当前文章上下文。");
+        article.setTitle("AI maid plan");
+        article.setSummary("A concise summary about the AI maid assistant.");
+        article.setContent("Longer article body that gives Lyra enough page context.");
         return article;
+    }
+
+    private AiAdminConfigDTO defaultAiConfig() {
+        AiAdminConfigDTO config = new AiAdminConfigDTO();
+        config.getLlm().setEnabled(true);
+        config.getLlm().setBaseUrl("https://llm.example/v1");
+        config.getLlm().setModel("gpt-test");
+        config.getLlm().setApiStyle("chat-completions");
+        config.getLlm().setTemperature(0.2);
+        config.getLlm().setMaxTokens(512);
+        config.getLlm().setTimeoutSeconds(30);
+        config.getChat().setBubbleMaxChars(10);
+        config.getChat().setBubbleLongReplyText("我整理好了，打开聊天框看详细内容吧。");
+        config.getChat().setMaxArticleContentChars(3000);
+        config.getChat().setMaxArticleSummaryChars(360);
+        return config;
     }
 }

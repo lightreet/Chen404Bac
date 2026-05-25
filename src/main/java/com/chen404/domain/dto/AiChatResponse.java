@@ -27,6 +27,12 @@ public class AiChatResponse {
     @Schema(description = "女仆短回复")
     private String replyText;
 
+    @Schema(description = "聊天面板完整回答")
+    private String panelAnswer;
+
+    @Schema(description = "女仆旁短气泡文案")
+    private String bubbleText;
+
     @Schema(description = "情绪标签", example = "happy")
     private String mood;
 
