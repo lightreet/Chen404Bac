@@ -31,6 +31,8 @@ class BoundarySchemaAnnotationTest {
                 EmojiPackVO.class,
                 EmojiItemVO.class,
                 EmojiImportResultDTO.class,
+                AdminFileStatsBucketVO.class,
+                AdminFileStatsVO.class,
                 RecentCommentVO.class,
                 ArticleNeighborsVO.class,
                 FavoriteToggleResultDTO.class,

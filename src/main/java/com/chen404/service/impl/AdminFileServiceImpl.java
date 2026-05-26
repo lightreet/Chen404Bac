@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.chen404.domain.PageResult;
 import com.chen404.domain.dto.AdminFileDetailVO;
 import com.chen404.domain.dto.AdminFileReferenceVO;
+import com.chen404.domain.dto.AdminFileStatsBucketVO;
+import com.chen404.domain.dto.AdminFileStatsVO;
 import com.chen404.domain.dto.AdminFileVO;
 import com.chen404.domain.entity.FileReference;
 import com.chen404.domain.entity.SysFile;
@@ -25,10 +27,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
 public class AdminFileServiceImpl implements AdminFileService {
+
+    private static final String STATUS_REFERENCED = "REFERENCED";
+    private static final String STATUS_PENDING = "PENDING";
+    private static final String STATUS_UNREFERENCED = "UNREFERENCED";
+    private static final String STATUS_DELETED = "DELETED";
+    private static final String STATUS_UNKNOWN = "UNKNOWN";
 
     private final SysFileService sysFileService;
     private final FileReferenceService fileReferenceService;
@@ -130,13 +139,58 @@ public class AdminFileServiceImpl implements AdminFileService {
         return detail;
     }
 
+    @Override
+    public AdminFileStatsVO getAdminFileStats() {
+        List<SysFile> files = sysFileService.list(new LambdaQueryWrapper<SysFile>()
+                .select(SysFile::getId, SysFile::getStatus, SysFile::getRefType, SysFile::getFileSize));
+        List<FileReference> references = fileReferenceService.list(new LambdaQueryWrapper<FileReference>()
+                .select(FileReference::getFileId, FileReference::getModuleCode));
+
+        Map<Long, List<FileReference>> referenceMap = groupReferencesByFileId(references);
+        Map<String, Long> statusCounts = defaultStatusCounts();
+        Map<String, Long> refTypeCounts = new LinkedHashMap<>();
+        long totalSize = 0L;
+
+        for (SysFile file : files) {
+            if (file == null) {
+                continue;
+            }
+            if (file.getFileSize() != null && file.getFileSize() > 0) {
+                totalSize += file.getFileSize();
+            }
+
+            String referenceStatus = resolveReferenceStatus(file, referenceMap.getOrDefault(file.getId(), List.of()));
+            statusCounts.merge(referenceStatus, 1L, Long::sum);
+
+            if (StringUtils.hasText(file.getRefType())) {
+                refTypeCounts.merge(file.getRefType().trim(), 1L, Long::sum);
+            }
+        }
+
+        AdminFileStatsVO stats = new AdminFileStatsVO();
+        stats.setTotalFiles((long) files.size());
+        stats.setTotalSize(totalSize);
+        stats.setReferencedCount(statusCounts.getOrDefault(STATUS_REFERENCED, 0L));
+        stats.setPendingCount(statusCounts.getOrDefault(STATUS_PENDING, 0L));
+        stats.setUnreferencedCount(statusCounts.getOrDefault(STATUS_UNREFERENCED, 0L));
+        stats.setDeletedCount(statusCounts.getOrDefault(STATUS_DELETED, 0L));
+        stats.setReferenceRecordCount((long) references.size());
+        stats.setStatusBuckets(buildStatusBuckets(statusCounts));
+        stats.setRefTypeBuckets(buildBuckets(refTypeCounts, this::refTypeLabel));
+        return stats;
+    }
+
     private Map<Long, List<FileReference>> loadReferenceMap(Collection<Long> fileIds) {
         if (fileIds == null || fileIds.isEmpty()) {
             return Map.of();
         }
         List<FileReference> rows = fileReferenceService.list(new LambdaQueryWrapper<FileReference>()
                 .in(FileReference::getFileId, fileIds));
-        if (rows.isEmpty()) {
+        return groupReferencesByFileId(rows);
+    }
+
+    private Map<Long, List<FileReference>> groupReferencesByFileId(List<FileReference> rows) {
+        if (rows == null || rows.isEmpty()) {
             return Map.of();
         }
         Map<Long, List<FileReference>> map = new LinkedHashMap<>();
@@ -202,21 +256,21 @@ public class AdminFileServiceImpl implements AdminFileService {
 
     private String resolveReferenceStatus(SysFile file, List<FileReference> references) {
         if (file == null) {
-            return "UNREFERENCED";
+            return STATUS_UNREFERENCED;
         }
         if (SysFile.Status.TEMP.equals(file.getStatus())) {
-            return "PENDING";
+            return STATUS_PENDING;
         }
         if (SysFile.Status.DELETED.equals(file.getStatus())) {
-            return "DELETED";
+            return STATUS_DELETED;
         }
         if (references != null && !references.isEmpty()) {
-            return "REFERENCED";
+            return STATUS_REFERENCED;
         }
         if (SysFile.Status.PERMANENT.equals(file.getStatus())) {
-            return "UNREFERENCED";
+            return STATUS_UNREFERENCED;
         }
-        return "UNKNOWN";
+        return STATUS_UNKNOWN;
     }
 
     private List<String> extractReferenceModules(List<FileReference> references) {
@@ -253,6 +307,68 @@ public class AdminFileServiceImpl implements AdminFileService {
             case FileReference.ModuleCode.TRAVEL_MEMORY_ENTRY -> "旅行记忆图片#" + row.getBizId();
             case FileReference.ModuleCode.TRUST_REQUEST -> "受信申请#" + row.getBizId();
             default -> row.getModuleCode() + "#" + row.getBizId();
+        };
+    }
+
+    private Map<String, Long> defaultStatusCounts() {
+        Map<String, Long> counts = new LinkedHashMap<>();
+        counts.put(STATUS_REFERENCED, 0L);
+        counts.put(STATUS_PENDING, 0L);
+        counts.put(STATUS_UNREFERENCED, 0L);
+        counts.put(STATUS_DELETED, 0L);
+        return counts;
+    }
+
+    private List<AdminFileStatsBucketVO> buildStatusBuckets(Map<String, Long> counts) {
+        List<AdminFileStatsBucketVO> buckets = new ArrayList<>();
+        buckets.add(toBucket(STATUS_REFERENCED, "Referenced", counts.getOrDefault(STATUS_REFERENCED, 0L)));
+        buckets.add(toBucket(STATUS_PENDING, "Pending", counts.getOrDefault(STATUS_PENDING, 0L)));
+        buckets.add(toBucket(STATUS_UNREFERENCED, "Unreferenced", counts.getOrDefault(STATUS_UNREFERENCED, 0L)));
+        buckets.add(toBucket(STATUS_DELETED, "Deleted", counts.getOrDefault(STATUS_DELETED, 0L)));
+        if (counts.getOrDefault(STATUS_UNKNOWN, 0L) > 0) {
+            buckets.add(toBucket(STATUS_UNKNOWN, "Unknown", counts.getOrDefault(STATUS_UNKNOWN, 0L)));
+        }
+        return buckets;
+    }
+
+    private List<AdminFileStatsBucketVO> buildBuckets(Map<String, Long> counts, Function<String, String> labelResolver) {
+        if (counts == null || counts.isEmpty()) {
+            return List.of();
+        }
+        return counts.entrySet().stream()
+                .sorted((left, right) -> {
+                    int compareCount = Long.compare(right.getValue(), left.getValue());
+                    if (compareCount != 0) {
+                        return compareCount;
+                    }
+                    return left.getKey().compareTo(right.getKey());
+                })
+                .map(entry -> toBucket(entry.getKey(), labelResolver.apply(entry.getKey()), entry.getValue()))
+                .toList();
+    }
+
+    private AdminFileStatsBucketVO toBucket(String key, String label, Long count) {
+        AdminFileStatsBucketVO bucket = new AdminFileStatsBucketVO();
+        bucket.setKey(key);
+        bucket.setLabel(label);
+        bucket.setCount(count == null ? 0L : count);
+        return bucket;
+    }
+
+    private String refTypeLabel(String value) {
+        if (!StringUtils.hasText(value)) {
+            return "Unknown";
+        }
+        return switch (value) {
+            case SysFile.RefType.ARTICLE_CONTENT -> "Article Content";
+            case SysFile.RefType.ARTICLE_COVER -> "Article Cover";
+            case SysFile.RefType.SITE_ASSET -> "Site Asset";
+            case SysFile.RefType.SITE_HERO -> "Site Hero";
+            case SysFile.RefType.AVATAR -> "Avatar";
+            case SysFile.RefType.TRUST_REQUEST_ATTACHMENT -> "Trust Request Attachment";
+            case SysFile.RefType.TRAVEL_MEMORY_IMAGE -> "Travel Memory Image";
+            case SysFile.RefType.OTHER -> "Other";
+            default -> value;
         };
     }
 }

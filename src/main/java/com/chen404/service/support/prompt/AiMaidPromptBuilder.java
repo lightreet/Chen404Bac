@@ -49,7 +49,10 @@ public class AiMaidPromptBuilder {
                 resolveSystemPromptTemplate(maidConfig),
                 maidConfig
         );
-        String taskPrompt = resolveTaskPromptTemplate(scene, maidConfig);
+        String taskPrompt = renderPersonaTemplate(
+                resolveTaskPromptTemplate(scene, maidConfig),
+                maidConfig
+        );
         return String.join(LINE_SEPARATOR + LINE_SEPARATOR,
                 systemPrompt,
                 taskPrompt,

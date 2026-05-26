@@ -1,10 +1,12 @@
 package com.chen404.service.support.prompt;
 
 import com.chen404.config.AiMaidProperties;
+import com.chen404.domain.dto.AiAdminConfigDTO;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.DefaultResourceLoader;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -41,6 +43,24 @@ class AiMaidPromptBuilderTest {
         assertTrue(prompt.contains("Task mode: companion"));
         assertTrue(prompt.contains("allowCasualConversation: true"));
         assertTrue(prompt.contains("轻量陪伴聊天模式"));
+    }
+
+    @Test
+    void shouldRenderPlaceholdersInTaskPrompt() {
+        AiMaidPromptBuilder builder = createBuilder(new AiMaidProperties());
+        AiAdminConfigDTO config = new AiAdminConfigDTO();
+        config.getMaid().setName("Nova");
+        config.getMaid().setPersonaVersion("v9");
+
+        String prompt = builder.buildSystemPrompt(
+                AiMaidPromptScene.HELPER,
+                AiMaidPromptContext.empty(),
+                config
+        );
+
+        assertTrue(prompt.contains("活泼可爱的Nova"));
+        assertFalse(prompt.contains("{{maidName}}"));
+        assertFalse(prompt.contains("{{personaVersion}}"));
     }
 
     @Test

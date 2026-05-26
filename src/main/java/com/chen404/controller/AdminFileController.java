@@ -4,6 +4,7 @@ import com.chen404.annotation.RequireAdmin;
 import com.chen404.domain.PageResult;
 import com.chen404.domain.Result;
 import com.chen404.domain.dto.AdminFileDetailVO;
+import com.chen404.domain.dto.AdminFileStatsVO;
 import com.chen404.domain.dto.AdminFileVO;
 import com.chen404.service.AdminFileService;
 import com.chen404.service.FileReferenceService;
@@ -19,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
 
-@Tag(name = "后台文件管理", description = "后台文件列表、详情与引用关系维护接口")
+@Tag(name = "后台文件管理", description = "后台文件列表、详情、统计与引用关系维护接口")
 @RestController
 @RequestMapping("/admin/files")
 public class AdminFileController {
@@ -35,7 +36,7 @@ public class AdminFileController {
     }
 
     @RequireAdmin
-    @Operation(summary = "分页查询后台文件", description = "支持按关键字、状态、引用类型和是否已被引用筛选")
+    @Operation(summary = "分页查询后台文件", description = "支持按关键字、状态、归属类型和是否已引用筛选文件列表")
     @GetMapping
     public Result<PageResult<AdminFileVO>> getAdminFiles(
             @Parameter(description = "页码，从 1 开始", example = "1")
@@ -60,6 +61,13 @@ public class AdminFileController {
             @Parameter(description = "文件 ID", required = true, example = "1001")
             @PathVariable Long id) {
         return Result.success(adminFileService.getAdminFileDetail(id));
+    }
+
+    @RequireAdmin
+    @Operation(summary = "查询文件统计概览", description = "返回全量文件的状态分布、归属类型分布与总体大小统计")
+    @GetMapping("/stats")
+    public Result<AdminFileStatsVO> getAdminFileStats() {
+        return Result.success(adminFileService.getAdminFileStats());
     }
 
     @RequireAdmin

@@ -4,6 +4,7 @@ import com.chen404.domain.Result;
 import com.chen404.domain.dto.ArticleDetailVO;
 import com.chen404.domain.dto.ArticleListItemVO;
 import com.chen404.domain.dto.ArticleNeighborsVO;
+import com.chen404.domain.dto.AdminFileStatsVO;
 import com.chen404.domain.dto.CategoryVO;
 import com.chen404.domain.dto.CommentVO;
 import com.chen404.domain.dto.CreateArticleCommand;
@@ -239,6 +240,9 @@ class ControllerBoundaryModelTest {
 
         Method favoriteMethod = ArticleController.class.getMethod("toggleFavorite", Long.class, AuthenticatedUser.class);
         assertReturnTypeContains(favoriteMethod, FavoriteToggleResultDTO.class.getName());
+
+        Method fileStatsMethod = AdminFileController.class.getMethod("getAdminFileStats");
+        assertReturnTypeContains(fileStatsMethod, Result.class.getName() + "<com.chen404.domain.dto.AdminFileStatsVO>");
     }
 
     private void assertRequestBodyType(Method method, Class<?> expectedType) {

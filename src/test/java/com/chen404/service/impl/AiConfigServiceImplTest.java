@@ -10,8 +10,10 @@ import com.chen404.domain.entity.SiteConfig;
 import com.chen404.mapper.SiteConfigMapper;
 import com.chen404.service.support.LlmClient;
 import com.chen404.service.support.LlmTextRequest;
+import com.chen404.service.support.prompt.AiPromptTemplateLoader;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.core.io.DefaultResourceLoader;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -144,13 +146,30 @@ class AiConfigServiceImplTest {
         assertEquals("gpt-5.4", captor.getValue().model());
     }
 
+    @Test
+    void shouldExposeDefaultPromptTemplatesWhenAdminPromptOverridesAreBlank() {
+        SiteConfigMapper mapper = mapperWithSeed(Map.of(
+                "ai.maid.system_prompt", "",
+                "ai.maid.helper_prompt", "",
+                "ai.maid.companion_prompt", ""
+        ));
+        AiConfigServiceImpl service = buildService(mapper, mock(LlmClient.class));
+
+        AiAdminConfigDTO config = service.getAdminConfig();
+
+        assertTrue(config.getMaid().getSystemPrompt().contains("你叫{{maidName}}"));
+        assertTrue(config.getMaid().getHelperPrompt().contains("Task mode: helper"));
+        assertTrue(config.getMaid().getCompanionPrompt().contains("Task mode: companion"));
+    }
+
     private AiConfigServiceImpl buildService(SiteConfigMapper mapper, LlmClient llmClient) {
         LlmProperties llmProperties = new LlmProperties();
         llmProperties.setEnabled(false);
         llmProperties.setApiKey("");
         AiRuntimeProperties runtimeProperties = new AiRuntimeProperties();
         AiMaidProperties maidProperties = new AiMaidProperties();
-        return new AiConfigServiceImpl(mapper, llmProperties, runtimeProperties, maidProperties, llmClient);
+        AiPromptTemplateLoader promptTemplateLoader = new AiPromptTemplateLoader(new DefaultResourceLoader());
+        return new AiConfigServiceImpl(mapper, llmProperties, runtimeProperties, maidProperties, promptTemplateLoader, llmClient);
     }
 
     private SiteConfigMapper mapperWithSeed(Map<String, String> seed) {

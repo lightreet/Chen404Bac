@@ -2,6 +2,7 @@ package com.chen404.service;
 
 import com.chen404.domain.PageResult;
 import com.chen404.domain.dto.AdminFileDetailVO;
+import com.chen404.domain.dto.AdminFileStatsVO;
 import com.chen404.domain.dto.AdminFileVO;
 
 public interface AdminFileService {
@@ -16,4 +17,6 @@ public interface AdminFileService {
     );
 
     AdminFileDetailVO getAdminFileDetail(Long fileId);
+
+    AdminFileStatsVO getAdminFileStats();
 }

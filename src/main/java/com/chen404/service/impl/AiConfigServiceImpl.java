@@ -11,6 +11,8 @@ import com.chen404.mapper.SiteConfigMapper;
 import com.chen404.service.AiConfigService;
 import com.chen404.service.support.LlmClient;
 import com.chen404.service.support.LlmTextRequest;
+import com.chen404.service.support.prompt.AiMaidPromptScene;
+import com.chen404.service.support.prompt.AiPromptTemplateLoader;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -57,6 +59,7 @@ public class AiConfigServiceImpl implements AiConfigService {
     private final LlmProperties llmProperties;
     private final AiRuntimeProperties aiRuntimeProperties;
     private final AiMaidProperties aiMaidProperties;
+    private final AiPromptTemplateLoader promptTemplateLoader;
     private final LlmClient llmClient;
 
     public AiConfigServiceImpl(
@@ -64,17 +67,21 @@ public class AiConfigServiceImpl implements AiConfigService {
             LlmProperties llmProperties,
             AiRuntimeProperties aiRuntimeProperties,
             AiMaidProperties aiMaidProperties,
+            AiPromptTemplateLoader promptTemplateLoader,
             LlmClient llmClient) {
         this.siteConfigMapper = siteConfigMapper;
         this.llmProperties = llmProperties;
         this.aiRuntimeProperties = aiRuntimeProperties;
         this.aiMaidProperties = aiMaidProperties;
+        this.promptTemplateLoader = promptTemplateLoader;
         this.llmClient = llmClient;
     }
 
     @Override
     public AiAdminConfigDTO getAdminConfig() {
-        return sanitizeForAdmin(getEffectiveConfig());
+        AiAdminConfigDTO config = getEffectiveConfig();
+        applyDefaultPromptTemplatesForAdmin(config);
+        return sanitizeForAdmin(config);
     }
 
     @Override
@@ -84,7 +91,9 @@ public class AiConfigServiceImpl implements AiConfigService {
         applyPatch(current, patch);
         normalize(current, currentApiKey);
         writeToDatabase(current);
-        return sanitizeForAdmin(current);
+        AiAdminConfigDTO saved = getEffectiveConfig();
+        applyDefaultPromptTemplatesForAdmin(saved);
+        return sanitizeForAdmin(saved);
     }
 
     @Override
@@ -338,6 +347,19 @@ public class AiConfigServiceImpl implements AiConfigService {
         applyApiKeyStatus(source);
         source.getLlm().setApiKey(null);
         return source;
+    }
+
+    private void applyDefaultPromptTemplatesForAdmin(AiAdminConfigDTO config) {
+        AiAdminConfigDTO.MaidConfig maid = config.getMaid();
+        if (!StringUtils.hasText(maid.getSystemPrompt())) {
+            maid.setSystemPrompt(promptTemplateLoader.loadRequiredTemplate(aiMaidProperties.getSystemPromptLocation()));
+        }
+        if (!StringUtils.hasText(maid.getHelperPrompt())) {
+            maid.setHelperPrompt(promptTemplateLoader.loadRequiredTemplate(AiMaidPromptScene.HELPER.resolveTaskPromptLocation(aiMaidProperties)));
+        }
+        if (!StringUtils.hasText(maid.getCompanionPrompt())) {
+            maid.setCompanionPrompt(promptTemplateLoader.loadRequiredTemplate(AiMaidPromptScene.COMPANION.resolveTaskPromptLocation(aiMaidProperties)));
+        }
     }
 
     private void applyApiKeyStatus(AiAdminConfigDTO config) {
