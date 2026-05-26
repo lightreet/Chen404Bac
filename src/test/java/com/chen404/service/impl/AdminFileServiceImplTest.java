@@ -5,8 +5,10 @@ import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.chen404.domain.dto.AdminFileStatsBucketVO;
 import com.chen404.domain.dto.AdminFileStatsVO;
+import com.chen404.domain.dto.AdminFileVO;
 import com.chen404.domain.entity.FileReference;
 import com.chen404.domain.entity.SysFile;
+import com.chen404.domain.PageResult;
 import com.chen404.service.FileReferenceService;
 import com.chen404.service.SysFileService;
 import com.chen404.service.UserService;
@@ -17,6 +19,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertIterableEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -62,6 +65,35 @@ class AdminFileServiceImplTest {
         assertBucketCounts(result.getRefTypeBuckets(),
                 List.of(SysFile.RefType.ARTICLE_CONTENT, SysFile.RefType.SITE_ASSET, SysFile.RefType.SITE_HERO),
                 List.of(2L, 1L, 1L));
+    }
+
+    @Test
+    void shouldFilterFilesByReferenceStatusBeforePagination() {
+        initTableInfo(SysFile.class);
+        initTableInfo(FileReference.class);
+
+        SysFileService sysFileService = mock(SysFileService.class);
+        FileReferenceService fileReferenceService = mock(FileReferenceService.class);
+        UserService userService = mock(UserService.class);
+        AdminFileServiceImpl service = new AdminFileServiceImpl(sysFileService, fileReferenceService, userService);
+
+        SysFile referenced = file(1L, SysFile.Status.PERMANENT, SysFile.RefType.SITE_ASSET, 100L);
+        SysFile pending = file(2L, SysFile.Status.TEMP, SysFile.RefType.ARTICLE_CONTENT, 250L);
+        SysFile unreferenced = file(3L, SysFile.Status.PERMANENT, SysFile.RefType.ARTICLE_CONTENT, 300L);
+        SysFile deleted = file(4L, SysFile.Status.DELETED, SysFile.RefType.SITE_HERO, 50L);
+        when(sysFileService.list(org.mockito.ArgumentMatchers.<Wrapper<SysFile>>any()))
+                .thenReturn(List.of(referenced, pending, unreferenced, deleted));
+        when(fileReferenceService.list(org.mockito.ArgumentMatchers.<Wrapper<FileReference>>any()))
+                .thenReturn(List.of(reference(1L, FileReference.ModuleCode.ARTICLE)));
+        when(userService.listByIds(org.mockito.ArgumentMatchers.anyCollection())).thenReturn(List.of());
+
+        PageResult<AdminFileVO> result = service.getAdminFiles(1, 10, null, null, null, null, "UNREFERENCED");
+
+        assertEquals(1L, result.getTotal());
+        assertNotNull(result.getList());
+        assertEquals(1, result.getList().size());
+        assertEquals(3L, result.getList().get(0).getId());
+        assertEquals("UNREFERENCED", result.getList().get(0).getReferenceStatus());
     }
 
     private void assertBucketCounts(List<AdminFileStatsBucketVO> buckets, List<String> expectedKeys, List<Long> expectedCounts) {

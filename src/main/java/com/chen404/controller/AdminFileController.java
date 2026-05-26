@@ -42,8 +42,10 @@ public class AdminFileController {
             @Parameter(description = "上传归属类型，如 ARTICLE_CONTENT / AVATAR")
             @RequestParam(required = false) String refType,
             @Parameter(description = "是否已被引用")
-            @RequestParam(required = false) Boolean referenced) {
-        return Result.success(adminFileService.getAdminFiles(page, size, keyword, status, refType, referenced));
+            @RequestParam(required = false) Boolean referenced,
+            @Parameter(description = "引用状态，如 REFERENCED / PENDING / UNREFERENCED / DELETED")
+            @RequestParam(required = false) String referenceStatus) {
+        return Result.success(adminFileService.getAdminFiles(page, size, keyword, status, refType, referenced, referenceStatus));
     }
 
     @RequireAdmin

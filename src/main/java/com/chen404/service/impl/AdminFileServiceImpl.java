@@ -59,7 +59,8 @@ public class AdminFileServiceImpl implements AdminFileService {
             String keyword,
             String status,
             String refType,
-            Boolean referenced) {
+            Boolean referenced,
+            String referenceStatus) {
         long current = page == null || page < 1 ? 1L : page;
         long pageSize = size == null || size < 1 ? 10L : size;
 
@@ -79,6 +80,9 @@ public class AdminFileServiceImpl implements AdminFileService {
         }
         if (StringUtils.hasText(refType)) {
             wrapper.eq(SysFile::getRefType, refType.trim());
+        }
+        if (StringUtils.hasText(referenceStatus)) {
+            return getAdminFilesWithReferenceStatus(current, pageSize, wrapper, referenced, referenceStatus.trim());
         }
         if (referenced != null) {
             Set<Long> referencedFileIds = fileReferenceService.list(new LambdaQueryWrapper<FileReference>()
@@ -113,10 +117,50 @@ public class AdminFileServiceImpl implements AdminFileService {
                 .collect(Collectors.toSet()));
 
         List<AdminFileVO> list = files.stream()
-                .map(file -> toAdminFileVO(file, referenceMap.getOrDefault(file.getId(), List.of()), userMap.get(file.getUserId())))
+                .map(file -> toAdminFileVO(file, referenceMap.getOrDefault(file.getId(), List.of()), findUser(userMap, file)))
                 .toList();
 
         return new PageResult<>(list, filePage.getTotal(), current, pageSize);
+    }
+
+    private PageResult<AdminFileVO> getAdminFilesWithReferenceStatus(
+            long current,
+            long pageSize,
+            LambdaQueryWrapper<SysFile> wrapper,
+            Boolean referenced,
+            String referenceStatus) {
+        List<SysFile> matchedFiles = sysFileService.list(wrapper);
+        if (matchedFiles.isEmpty()) {
+            return new PageResult<>(List.of(), 0L, current, pageSize);
+        }
+
+        Map<Long, List<FileReference>> referenceMap = loadReferenceMap(matchedFiles.stream()
+                .map(SysFile::getId)
+                .filter(Objects::nonNull)
+                .toList());
+
+        List<SysFile> filteredFiles = matchedFiles.stream()
+                .filter(file -> matchesReferencedFilter(file, referenceMap.getOrDefault(file.getId(), List.of()), referenced))
+                .filter(file -> matchesReferenceStatus(file, referenceMap.getOrDefault(file.getId(), List.of()), referenceStatus))
+                .toList();
+        if (filteredFiles.isEmpty()) {
+            return new PageResult<>(List.of(), 0L, current, pageSize);
+        }
+
+        int fromIndex = (int) Math.min((current - 1) * pageSize, filteredFiles.size());
+        int toIndex = (int) Math.min(fromIndex + pageSize, filteredFiles.size());
+        List<SysFile> pageFiles = filteredFiles.subList(fromIndex, toIndex);
+
+        Map<Long, User> userMap = loadUserMap(pageFiles.stream()
+                .map(SysFile::getUserId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet()));
+
+        List<AdminFileVO> list = pageFiles.stream()
+                .map(file -> toAdminFileVO(file, referenceMap.getOrDefault(file.getId(), List.of()), findUser(userMap, file)))
+                .toList();
+
+        return new PageResult<>(list, (long) filteredFiles.size(), current, pageSize);
     }
 
     @Override
@@ -212,6 +256,13 @@ public class AdminFileServiceImpl implements AdminFileService {
                 .collect(Collectors.toMap(User::getId, user -> user));
     }
 
+    private User findUser(Map<Long, User> userMap, SysFile file) {
+        if (userMap == null || userMap.isEmpty() || file == null || file.getUserId() == null) {
+            return null;
+        }
+        return userMap.get(file.getUserId());
+    }
+
     private AdminFileVO toAdminFileVO(SysFile file, List<FileReference> references, User user) {
         AdminFileVO vo = new AdminFileVO();
         vo.setId(file.getId());
@@ -271,6 +322,21 @@ public class AdminFileServiceImpl implements AdminFileService {
             return STATUS_UNREFERENCED;
         }
         return STATUS_UNKNOWN;
+    }
+
+    private boolean matchesReferencedFilter(SysFile file, List<FileReference> references, Boolean referenced) {
+        if (referenced == null) {
+            return true;
+        }
+        boolean isReferenced = STATUS_REFERENCED.equals(resolveReferenceStatus(file, references));
+        return referenced == isReferenced;
+    }
+
+    private boolean matchesReferenceStatus(SysFile file, List<FileReference> references, String referenceStatus) {
+        if (!StringUtils.hasText(referenceStatus)) {
+            return true;
+        }
+        return referenceStatus.trim().equalsIgnoreCase(resolveReferenceStatus(file, references));
     }
 
     private List<String> extractReferenceModules(List<FileReference> references) {

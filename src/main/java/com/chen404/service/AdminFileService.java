@@ -13,7 +13,8 @@ public interface AdminFileService {
             String keyword,
             String status,
             String refType,
-            Boolean referenced
+            Boolean referenced,
+            String referenceStatus
     );
 
     AdminFileDetailVO getAdminFileDetail(Long fileId);
