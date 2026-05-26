@@ -39,6 +39,7 @@ public class FileReference implements Serializable {
 
     public interface ModuleCode {
         String ARTICLE = "ARTICLE";
+        String COMMENT = "COMMENT";
         String USER = "USER";
         String SITE_CONFIG = "SITE_CONFIG";
         String TRAVEL_MEMORY = "TRAVEL_MEMORY";
@@ -49,6 +50,7 @@ public class FileReference implements Serializable {
     public interface BizType {
         String ARTICLE_CONTENT = "ARTICLE_CONTENT";
         String ARTICLE_COVER = "ARTICLE_COVER";
+        String COMMENT_AUTHOR_AVATAR = "COMMENT_AUTHOR_AVATAR";
         String USER_AVATAR = "USER_AVATAR";
         String SITE_ASSET = "SITE_ASSET";
         String SITE_HERO = "SITE_HERO";
@@ -61,6 +63,7 @@ public class FileReference implements Serializable {
         String CONTENT = "content";
         String COVER_IMAGE = "coverImage";
         String AVATAR = "avatar";
+        String AUTHOR_AVATAR = "authorAvatar";
         String IMAGE_URL = "imageUrl";
         String ATTACHMENTS = "attachments";
         String SITE_LOGO = "site.logo";

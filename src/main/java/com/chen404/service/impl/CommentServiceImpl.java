@@ -9,6 +9,7 @@ import com.chen404.domain.dto.SiteConfigDTO;
 import com.chen404.domain.entity.Article;
 import com.chen404.domain.entity.Comment;
 import com.chen404.domain.entity.CommentGuestToken;
+import com.chen404.domain.entity.FileReference;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.entity.User;
 import com.chen404.domain.entity.UserCommentLike;
@@ -20,6 +21,7 @@ import com.chen404.mapper.CommentGuestTokenMapper;
 import com.chen404.mapper.UserCommentLikeMapper;
 import com.chen404.service.AccessService;
 import com.chen404.service.CommentService;
+import com.chen404.service.FileReferenceService;
 import com.chen404.service.SiteConfigService;
 import com.chen404.service.SysFileService;
 import com.chen404.service.support.UserAccessProfileSupport;
@@ -71,6 +73,9 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
 
     @Autowired
     private SiteConfigService siteConfigService;
+
+    @Autowired
+    private FileReferenceService fileReferenceService;
 
     @Override
     public Page<Comment> getCommentsByArticleId(Long articleId, int page, int size, Long requesterId) {
@@ -282,6 +287,7 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
             comment.setRootId(comment.getId());
             commentMapper.updateById(comment);
         }
+        fileReferenceService.syncCommentAuthorAvatarReference(comment.getId(), comment.getAuthorAvatarFileId());
 
         // 游客评论：生成自助删除 key（明文仅返回一次），仅保存 hash
         if (user == null) {
@@ -341,6 +347,11 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
 
         List<Long> idsToDelete = collectDescendantIds(id);
         idsToDelete.add(id);
+        fileReferenceService.removeByOwners(
+                FileReference.ModuleCode.COMMENT,
+                FileReference.BizType.COMMENT_AUTHOR_AVATAR,
+                idsToDelete
+        );
         commentMapper.deleteBatchIds(idsToDelete);
         commentGuestTokenMapper.delete(new LambdaQueryWrapper<CommentGuestToken>()
                 .in(CommentGuestToken::getCommentId, idsToDelete));
@@ -374,6 +385,11 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
 
         List<Long> idsToDelete = collectDescendantIds(id);
         idsToDelete.add(id);
+        fileReferenceService.removeByOwners(
+                FileReference.ModuleCode.COMMENT,
+                FileReference.BizType.COMMENT_AUTHOR_AVATAR,
+                idsToDelete
+        );
         commentMapper.deleteBatchIds(idsToDelete);
         commentGuestTokenMapper.delete(new LambdaQueryWrapper<CommentGuestToken>()
                 .in(CommentGuestToken::getCommentId, idsToDelete));

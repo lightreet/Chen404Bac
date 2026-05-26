@@ -367,6 +367,7 @@ public class AdminFileServiceImpl implements AdminFileService {
         }
         return switch (row.getModuleCode()) {
             case FileReference.ModuleCode.ARTICLE -> "文章#" + row.getBizId();
+            case FileReference.ModuleCode.COMMENT -> "评论#" + row.getBizId();
             case FileReference.ModuleCode.USER -> "用户#" + row.getBizId();
             case FileReference.ModuleCode.SITE_CONFIG -> "站点配置";
             case FileReference.ModuleCode.TRAVEL_MEMORY -> "旅行记忆地点#" + row.getBizId();

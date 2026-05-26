@@ -12,6 +12,8 @@ public interface FileReferenceService extends IService<FileReference> {
 
     void syncArticleReferences(Long articleId, String content, String coverImage);
 
+    void syncCommentAuthorAvatarReference(Long commentId, Long avatarFileId);
+
     void syncUserAvatarReference(Long userId, String avatarUrl);
 
     void syncSiteConfigReferences(Long configId, String siteLogo, String siteFavicon, Map<String, String> heroImages);

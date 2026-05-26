@@ -3,6 +3,7 @@ package com.chen404.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.chen404.domain.entity.Article;
+import com.chen404.domain.entity.Comment;
 import com.chen404.domain.entity.FileReference;
 import com.chen404.domain.entity.SiteConfig;
 import com.chen404.domain.entity.SysFile;
@@ -11,6 +12,7 @@ import com.chen404.domain.entity.TravelMemoryLocation;
 import com.chen404.domain.entity.User;
 import com.chen404.domain.entity.UserTrustRequest;
 import com.chen404.mapper.ArticleMapper;
+import com.chen404.mapper.CommentMapper;
 import com.chen404.mapper.FileReferenceMapper;
 import com.chen404.mapper.SiteConfigMapper;
 import com.chen404.mapper.TravelMemoryEntryMapper;
@@ -29,11 +31,11 @@ import org.springframework.util.StringUtils;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * 统一文件引用关系服务。
@@ -51,6 +53,7 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
 
     private final SysFileService sysFileService;
     private final ArticleMapper articleMapper;
+    private final CommentMapper commentMapper;
     private final UserMapper userMapper;
     private final SiteConfigMapper siteConfigMapper;
     private final TravelMemoryLocationMapper travelMemoryLocationMapper;
@@ -61,6 +64,7 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
     public FileReferenceServiceImpl(
             SysFileService sysFileService,
             ArticleMapper articleMapper,
+            CommentMapper commentMapper,
             UserMapper userMapper,
             SiteConfigMapper siteConfigMapper,
             TravelMemoryLocationMapper travelMemoryLocationMapper,
@@ -69,6 +73,7 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
             ObjectMapper objectMapper) {
         this.sysFileService = sysFileService;
         this.articleMapper = articleMapper;
+        this.commentMapper = commentMapper;
         this.userMapper = userMapper;
         this.siteConfigMapper = siteConfigMapper;
         this.travelMemoryLocationMapper = travelMemoryLocationMapper;
@@ -98,7 +103,7 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
                 FileReference.BizType.ARTICLE_COVER,
                 articleId,
                 resolveReferences(
-                        List.of(coverImage),
+                        Collections.singletonList(coverImage),
                         FileReference.FieldKey.COVER_IMAGE,
                         FileReference.SourceType.DIRECT
                 )
@@ -111,6 +116,26 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public void syncCommentAuthorAvatarReference(Long commentId, Long avatarFileId) {
+        if (commentId == null) {
+            return;
+        }
+        replaceReferences(
+                FileReference.ModuleCode.COMMENT,
+                FileReference.BizType.COMMENT_AUTHOR_AVATAR,
+                commentId,
+                resolveFileIdReferences(
+                        Collections.singletonList(avatarFileId),
+                        FileReference.FieldKey.AUTHOR_AVATAR,
+                        FileReference.SourceType.DIRECT
+                )
+        );
+        log.debug("[FILE_REFERENCE_SYNC] module=COMMENT bizId={} hasAuthorAvatar={}",
+                commentId, avatarFileId != null);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public void syncUserAvatarReference(Long userId, String avatarUrl) {
         if (userId == null) {
             return;
@@ -119,7 +144,7 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
                 FileReference.ModuleCode.USER,
                 FileReference.BizType.USER_AVATAR,
                 userId,
-                resolveReferences(List.of(avatarUrl), FileReference.FieldKey.AVATAR, FileReference.SourceType.DIRECT)
+                resolveReferences(Collections.singletonList(avatarUrl), FileReference.FieldKey.AVATAR, FileReference.SourceType.DIRECT)
         );
         log.debug("[FILE_REFERENCE_SYNC] module=USER bizId={} hasAvatar={}", userId, StringUtils.hasText(avatarUrl));
     }
@@ -169,7 +194,7 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
                 FileReference.ModuleCode.TRAVEL_MEMORY,
                 FileReference.BizType.TRAVEL_MEMORY_COVER,
                 locationId,
-                resolveReferences(List.of(coverImage), FileReference.FieldKey.COVER_IMAGE, FileReference.SourceType.DIRECT)
+                resolveReferences(Collections.singletonList(coverImage), FileReference.FieldKey.COVER_IMAGE, FileReference.SourceType.DIRECT)
         );
         if (entries == null) {
             return;
@@ -183,7 +208,7 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
                     FileReference.BizType.TRAVEL_MEMORY_ENTRY_IMAGE,
                     entry.getId(),
                     resolveReferences(
-                            List.of(entry.getImageUrl()),
+                            Collections.singletonList(entry.getImageUrl()),
                             FileReference.FieldKey.IMAGE_URL,
                             FileReference.SourceType.DIRECT
                     )
@@ -257,6 +282,15 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
             articleCount++;
         }
 
+        int commentCount = 0;
+        for (Comment comment : commentMapper.selectList(null)) {
+            if (comment == null || comment.getId() == null) {
+                continue;
+            }
+            syncCommentAuthorAvatarReference(comment.getId(), comment.getAuthorAvatarFileId());
+            commentCount++;
+        }
+
         int userCount = 0;
         for (User user : userMapper.selectList(null)) {
             if (user == null || user.getId() == null) {
@@ -312,6 +346,7 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
 
         Map<String, Integer> summary = new LinkedHashMap<>();
         summary.put("articles", articleCount);
+        summary.put("comments", commentCount);
         summary.put("users", userCount);
         summary.put("travelLocations", travelLocationCount);
         summary.put("trustRequests", trustRequestCount);
@@ -396,6 +431,24 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
             }
             SysFile file = sysFileService.findByFileUrl(rawUrl.trim());
             if (file == null || file.getId() == null) {
+                continue;
+            }
+            resolved.add(new ResolvedReference(file.getId(), fieldKey, sourceType));
+        }
+        return resolved;
+    }
+
+    private List<ResolvedReference> resolveFileIdReferences(List<Long> fileIds, String fieldKey, String sourceType) {
+        if (fileIds == null || fileIds.isEmpty()) {
+            return List.of();
+        }
+        List<ResolvedReference> resolved = new ArrayList<>();
+        for (Long fileId : fileIds) {
+            if (fileId == null) {
+                continue;
+            }
+            SysFile file = sysFileService.getById(fileId);
+            if (file == null || file.getId() == null || SysFile.Status.DELETED.equals(file.getStatus())) {
                 continue;
             }
             resolved.add(new ResolvedReference(file.getId(), fieldKey, sourceType));

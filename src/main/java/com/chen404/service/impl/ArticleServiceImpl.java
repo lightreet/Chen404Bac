@@ -31,7 +31,6 @@ import com.chen404.mapper.UserArticleFavoriteMapper;
 import com.chen404.mapper.UserArticleLikeMapper;
 import com.chen404.mapper.UserMapper;
 import com.chen404.service.AccessService;
-import com.chen404.service.ArticleFileRefService;
 import com.chen404.service.FileReferenceService;
 import com.chen404.service.ArticleKnowledgeService;
 import com.chen404.service.ArticleService;
@@ -82,9 +81,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
     @Autowired
     private SysFileService sysFileService;
-
-    @Autowired
-    private ArticleFileRefService articleFileRefService;
 
     @Autowired
     private TagService tagService;
@@ -304,7 +300,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         // 将文章中引用的文件转为永久状态
         convertArticleFilesToPermanent(article);
 
-        articleFileRefService.syncForArticle(article.getId(), article.getContent(), article.getCoverImage());
         persistCoverFileId(article.getId(), article.getCoverImage());
         fileReferenceService.syncArticleReferences(article.getId(), article.getContent(), article.getCoverImage());
         articleKnowledgeService.syncArticleChunks(article.getId());
@@ -384,7 +379,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         // 将新引用的文件转为永久状态
         convertArticleFilesToPermanent(article);
 
-        articleFileRefService.syncForArticle(id, article.getContent(), article.getCoverImage());
         persistCoverFileId(id, article.getCoverImage());
         fileReferenceService.syncArticleReferences(id, article.getContent(), article.getCoverImage());
         articleKnowledgeService.syncArticleChunks(id);
@@ -407,7 +401,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
             throw new ForbiddenException("仅管理员可删除文章");
         }
 
-        articleFileRefService.removeByArticleId(id);
         fileReferenceService.removeByOwner(
                 com.chen404.domain.entity.FileReference.ModuleCode.ARTICLE,
                 com.chen404.domain.entity.FileReference.BizType.ARTICLE_CONTENT,
