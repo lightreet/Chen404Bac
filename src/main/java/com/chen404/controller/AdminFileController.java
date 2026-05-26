@@ -7,32 +7,24 @@ import com.chen404.domain.dto.AdminFileDetailVO;
 import com.chen404.domain.dto.AdminFileStatsVO;
 import com.chen404.domain.dto.AdminFileVO;
 import com.chen404.service.AdminFileService;
-import com.chen404.service.FileReferenceService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Map;
-
-@Tag(name = "后台文件管理", description = "后台文件列表、详情、统计与引用关系维护接口")
+@Tag(name = "后台文件管理", description = "后台文件列表、详情与统计接口")
 @RestController
 @RequestMapping("/admin/files")
 public class AdminFileController {
 
     private final AdminFileService adminFileService;
-    private final FileReferenceService fileReferenceService;
 
-    public AdminFileController(
-            AdminFileService adminFileService,
-            FileReferenceService fileReferenceService) {
+    public AdminFileController(AdminFileService adminFileService) {
         this.adminFileService = adminFileService;
-        this.fileReferenceService = fileReferenceService;
     }
 
     @RequireAdmin
@@ -68,12 +60,5 @@ public class AdminFileController {
     @GetMapping("/stats")
     public Result<AdminFileStatsVO> getAdminFileStats() {
         return Result.success(adminFileService.getAdminFileStats());
-    }
-
-    @RequireAdmin
-    @Operation(summary = "重建文件引用关系", description = "基于现有业务数据重新生成统一文件引用表")
-    @PostMapping("/rebuild-references")
-    public Result<Map<String, Integer>> rebuildReferences() {
-        return Result.success("重建完成", fileReferenceService.rebuildAllReferences());
     }
 }
