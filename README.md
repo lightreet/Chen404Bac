@@ -1,6 +1,6 @@
 # Chen404 博客系统 - 后端
 
-基于 Spring Boot 3.1.8 + Java 17 + MyBatis Plus 的博客后端服务。当前代码已经覆盖认证、文章、分类、标签、评论/留言板、站点配置、上传与文件引用、表情包、受信申请、旅行纪念地图、AI 文章辅助、Lyra 女仆聊天、AI 后台配置等模块。
+基于 Spring Boot 3.1.8 + Java 17 + MyBatis Plus 的博客后端服务。当前代码已经覆盖认证、文章、分类、标签、评论/留言板、站点配置、上传与文件引用、表情包、受信申请、旅行纪念地图、Sakura Radio 音乐电台、AI 文章辅助、AI 音乐曲目信息补全、Lyra 女仆聊天、AI 后台配置等模块。
 
 ## 技术栈
 
@@ -49,6 +49,8 @@ CREATE DATABASE chen404 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 | `V2026052101__create_file_reference_table.sql` | 统一文件引用 |
 | `V2026052401__add_travel_memory_visited_end_at.sql` | 旅行时间范围结束日期 |
 | `V2026052501__ai_admin_config.sql` | AI 后台配置默认项 |
+| `V2026052601__simplify_file_reference_and_drop_unused_tables.sql` | 文件引用结构收敛 |
+| `V2026052701__create_music_radio_tables.sql` | Sakura Radio 歌曲、歌单与排序关系 |
 
 兼容策略：
 
@@ -114,7 +116,7 @@ Chen404Bac/
 │  ├─ exception/        # 全局异常体系
 │  ├─ filter/           # JWT、TraceId、请求体缓存
 │  ├─ interceptor/      # 请求日志、SQL 性能
-│  ├─ job/              # 定时清理任务
+│  ├─ job/              # XXL-JOB 文件引用重建与清理任务
 │  ├─ mapper/           # MyBatis Plus Mapper
 │  ├─ security/         # 认证用户模型
 │  ├─ service/          # 业务接口与支持层
@@ -151,6 +153,7 @@ Chen404Bac/
 | `TrustRequestController` | `/trust-requests/**`, `/admin/trust-requests/**` | 受信申请提交、查询、审批、邮件审批入口 |
 | `AdminUserController` | `/admin/users/**` | 用户信任级别维护 |
 | `TravelMemoryController` | `/travel-memories/**`, `/admin/travel-memories/**` | 旅行纪念地图公开查询与后台管理 |
+| `MusicRadioController` | `/music/**`, `/admin/music/**` | Sakura Radio 公开歌曲/歌单、管理员歌曲与歌单维护、音乐 AI 补全 |
 
 ## 当前接口约定
 
@@ -177,11 +180,15 @@ Chen404Bac/
 | 表情包公开下发与后台导入 | 已实现 |
 | 受信申请与知友访问控制 | 已实现 |
 | 旅行纪念地图 | 已实现 |
+| Sakura Radio 音乐电台 | 已实现公开播放、歌单、曲目管理、默认电台 |
 | AI 文章辅助 | 已实现 |
+| AI 音乐曲目信息补全 | 已实现 |
 | Lyra 聊天、SSE、会话恢复、站内检索、相关推荐 | 已实现 |
 | AI 后台配置、API Key 脱敏、连接测试 | 已实现 |
 | Web Search 工具调用 | 仅预留开关，尚未接入真实联网搜索 |
 | 向量数据库 / embedding 检索 | 尚未实现，当前为 MySQL 轻量检索 |
+| 音乐文件引用重建 | sys_file 可标记音乐音频/封面，file_reference 统一重建尚未纳入音乐模块 |
+| 音乐播放统计 / 用户互动 | 尚未实现 |
 
 ## 常用验证
 
@@ -195,10 +202,18 @@ AI 或配置相关变更建议至少覆盖：
 mvn "-Dtest=AiConfigServiceImplTest,AdminAiConfigControllerTest,MaidChatScenarioDefinitionTest,AiChatServiceImplTest,OpenAiCompatibleLlmClientTest" test
 ```
 
+音乐相关变更建议至少覆盖：
+
+```bash
+mvn "-Dtest=MusicRadioControllerTest,MusicRadioServiceImplTest,LlmMusicTrackAiSuggestServiceImplTest,MusicTrackSuggestScenarioDefinitionTest" test
+```
+
 ## 文档
 
 - [后端架构设计](doc/architecture/项目架构设计.md)
 - [项目 AI 接入设计](doc/architecture/项目AI接入设计.md)
+- [Sakura Radio 音乐功能需求与 UI 设计](doc/architecture/音乐电台功能需求与界面设计.md)
+- [后端功能审查与优化清单](doc/architecture/feature-audit-2026-05-28.md)
 - [AI 女仆后台配置设计](doc/architecture/AI女仆后台配置设计.md)
 - [旅行纪念地图功能方案](doc/architecture/旅行纪念地图功能方案.md)
 - [旅行纪念地图改造推进计划](doc/architecture/旅行纪念地图改造推进计划.md)

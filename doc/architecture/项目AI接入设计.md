@@ -1,6 +1,6 @@
 # Chen404 项目 AI 设计与接入文档
 
-本文档描述 Chen404 当前已经落地的 AI 能力、运行链路、数据结构和前后端协作方式。最后同步时间：2026-05-25。
+本文档描述 Chen404 当前已经落地的 AI 能力、运行链路、数据结构和前后端协作方式。最后同步时间：2026-05-28。
 
 ## 1. 当前 AI 能力总览
 
@@ -11,6 +11,7 @@
 | Lyra 流式聊天 | `POST /ai/chat/stream` | 已上线 | SSE + LLM streaming |
 | 历史会话恢复 | `GET /ai/chat/sessions/{sessionId}` | 已上线 | `ai_chat_session` + `ai_chat_message` |
 | 相关推荐 | 聊天响应中的 `relatedArticles` | 已上线，规则版 | `ARTICLE_RECOMMEND` 场景 |
+| 音乐曲目信息补全 | `POST /admin/music/tracks/ai/suggest` | 已上线 | `MUSIC_TRACK_SUGGEST` 场景 |
 | AI 后台配置 | `/admin/ai/config/**` | 已上线 | `AiConfigService` + `site_config ai.*` |
 
 当前 AI 的定位不是完整 AI 平台，而是“可持续演进的应用能力层”：业务层不直接操作模型协议，AI 能力沉淀为场景，模型配置和 Lyra 表现可以在后台调试。
@@ -20,22 +21,27 @@
 ```mermaid
 flowchart TB
     ArticleEditor["管理员文章编辑页"] --> ArticleApi["AiArticleController"]
+    MusicEditor["管理员音乐曲目编辑页"] --> MusicApi["MusicRadioController"]
     Live2D["前台 Live2D / 聊天面板"] --> ChatApi["AiChatController"]
     Admin["后台 AI 配置页"] --> AdminApi["AdminAiConfigController"]
 
     ArticleApi --> ArticleService["LlmArticleAssistServiceImpl"]
+    MusicApi --> MusicService["LlmMusicTrackAiSuggestServiceImpl"]
     ChatApi --> ChatService["AiChatServiceImpl"]
     AdminApi --> ConfigService["AiConfigServiceImpl"]
 
     ArticleService --> Executor["AiScenarioExecutor"]
+    MusicService --> Executor
     ChatService --> Executor
 
     Executor --> Assist["ARTICLE_ASSIST"]
     Executor --> Maid["MAID_CHAT"]
     Executor --> Recommend["ARTICLE_RECOMMEND"]
+    Executor --> MusicSuggest["MUSIC_TRACK_SUGGEST"]
 
     Maid --> Llm["OpenAiCompatibleLlmClient"]
     Assist --> Llm
+    MusicSuggest --> Llm
     ConfigService --> Llm
 
     ChatService --> Knowledge["ArticleKnowledgeServiceImpl"]
@@ -53,11 +59,13 @@ flowchart TB
 
 - `AiArticleController`：文章摘要与标签生成。
 - `AiChatController`：Lyra 同步聊天、流式聊天、会话恢复。
+- `MusicRadioController`：管理员音乐曲目信息 AI 补全。
 - `AdminAiConfigController`：后台 AI 配置读取、保存、连接测试。
 
 ### 业务编排层
 
 - `LlmArticleAssistServiceImpl`：校验文章 AI 请求，调用场景执行器。
+- `LlmMusicTrackAiSuggestServiceImpl`：校验音乐补全开关，调用音乐场景执行器并转换响应。
 - `AiChatServiceImpl`：识别场景、加载文章、检索知识、保存会话、组装响应、发送 SSE。
 - `AiConfigServiceImpl`：合成有效配置、保存私有配置、API Key 脱敏、测试模型连接。
 
@@ -74,6 +82,7 @@ flowchart TB
 - `ARTICLE_ASSIST`
 - `MAID_CHAT`
 - `ARTICLE_RECOMMEND`
+- `MUSIC_TRACK_SUGGEST`
 
 ### Provider Adapter
 
@@ -186,6 +195,33 @@ flowchart TB
 
 - 推荐需要可控、稳定、可解释。
 - 后续可以在规则召回基础上增加 AI rerank。
+
+### 5.4 `MUSIC_TRACK_SUGGEST`
+
+入口：
+
+- `POST /admin/music/tracks/ai/suggest`
+
+目标：
+
+- 根据歌曲标题和可选歌手信息，辅助管理员填写音乐资料。
+- 返回歌名、歌手、专辑、发行年份、语言、风格、标签、推荐语、心情短句和歌词来源提示。
+
+关键实现：
+
+- `LlmMusicTrackAiSuggestServiceImpl`
+- `MusicTrackSuggestScenarioDefinition`
+- `MusicTrackSuggestScenarioRequest`
+- `MusicTrackSuggestScenarioResult`
+
+重要约束：
+
+- 只返回 JSON，不返回音频 URL、封面 URL 或受版权保护的歌词。
+- 不确定的事实字段返回 `null` 或空值，避免强行编造。
+- `recommendation` 和 `moodText` 是原创中文短文案。
+- `releaseYear` 会被限制在 1900 到当前年份之间。
+- 标签去重并限制最多 5 个。
+- 开关来源为 `app.ai.runtime.music-assist.enabled`，当前不在 AI 后台配置页中单独暴露。
 
 ## 6. 站内知识检索
 
@@ -308,6 +344,8 @@ Article delete
 - `AiConfigServiceImplTest`
 - `AdminAiConfigControllerTest`
 - `OpenAiCompatibleLlmClientTest`
+- `LlmMusicTrackAiSuggestServiceImplTest`
+- `MusicTrackSuggestScenarioDefinitionTest`
 
 建议命令：
 
@@ -324,4 +362,5 @@ mvn "-Dtest=AiConfigServiceImplTest,AdminAiConfigControllerTest,MaidChatScenario
 3. AI 调用日志、成本统计、限流和审计。
 4. 站内检索升级为关键词召回 + embedding + rerank。
 5. 推荐能力独立服务化，并增加 AI rerank 或推荐理由生成。
-6. `webSearchEnabled` 接入真实联网搜索工具。
+6. 音乐曲目信息补全增加可解释置信度或“需要人工确认”字段。
+7. `webSearchEnabled` 接入真实联网搜索工具。

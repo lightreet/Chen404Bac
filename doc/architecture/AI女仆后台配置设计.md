@@ -1,10 +1,10 @@
 # AI 女仆后台配置设计
 
-本文档描述当前已落地的 Lyra AI 后台配置能力。最后同步时间：2026-05-25。
+本文档描述当前已落地的 Lyra AI 后台配置能力。最后同步时间：2026-05-28。
 
 ## 1. 背景
 
-Chen404 已具备基础 AI 能力：文章 AI 辅助、Lyra 女仆聊天、站内文章知识切片、会话持久化和 SSE 流式输出。早期配置主要来自 `application.yml`、环境变量和 classpath prompt 模板，适合部署时配置，不适合日常调试 Lyra 的模型、人设、检索策略和小气泡表现。
+Chen404 已具备基础 AI 能力：文章 AI 辅助、音乐曲目信息补全、Lyra 女仆聊天、站内文章知识切片、会话持久化和 SSE 流式输出。早期配置主要来自 `application.yml`、环境变量和 classpath prompt 模板，适合部署时配置，不适合日常调试 Lyra 的模型、人设、检索策略和小气泡表现。
 
 因此当前已经新增后台 AI 配置中心，让管理员可以在不重启服务的情况下调整：
 
@@ -34,6 +34,7 @@ Chen404 已具备基础 AI 能力：文章 AI 辅助、Lyra 女仆聊天、站�
 - 未实现多供应商密钥池。
 - 未实现按用户、页面、场景的复杂模型策略。
 - 未实现 prompt 多版本回滚和 A/B 测试。
+- 音乐曲目信息补全已复用全局 LLM 配置，但 `musicAssist.enabled` 暂未在后台配置页单独暴露。
 
 ## 3. 总体架构
 
@@ -46,8 +47,11 @@ flowchart TD
     Service --> Defaults["LlmProperties / AiRuntimeProperties / AiMaidProperties"]
 
     Chat["AiChatServiceImpl"] --> Service
+    Music["LlmMusicTrackAiSuggestServiceImpl"] --> Service
     Chat --> Scenario["MaidChatScenarioDefinition"]
+    Music --> MusicScenario["MusicTrackSuggestScenarioDefinition"]
     Scenario --> LLM["OpenAiCompatibleLlmClient"]
+    MusicScenario --> LLM
     LLM --> Provider["OpenAI-compatible Provider"]
 ```
 
