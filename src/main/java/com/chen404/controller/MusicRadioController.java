@@ -2,11 +2,14 @@ package com.chen404.controller;
 
 import com.chen404.annotation.RequireAdmin;
 import com.chen404.domain.Result;
+import com.chen404.domain.dto.MusicTrackAiSuggestRequest;
+import com.chen404.domain.dto.MusicTrackAiSuggestResponse;
 import com.chen404.domain.dto.MusicPlaylistTracksCommand;
 import com.chen404.domain.dto.MusicPlaylistUpsertCommand;
 import com.chen404.domain.dto.MusicPlaylistVO;
 import com.chen404.domain.dto.MusicTrackUpsertCommand;
 import com.chen404.domain.dto.MusicTrackVO;
+import com.chen404.service.MusicTrackAiSuggestService;
 import com.chen404.service.MusicRadioService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -29,9 +32,11 @@ import java.util.List;
 public class MusicRadioController {
 
     private final MusicRadioService musicRadioService;
+    private final MusicTrackAiSuggestService musicTrackAiSuggestService;
 
-    public MusicRadioController(MusicRadioService musicRadioService) {
+    public MusicRadioController(MusicRadioService musicRadioService, MusicTrackAiSuggestService musicTrackAiSuggestService) {
         this.musicRadioService = musicRadioService;
+        this.musicTrackAiSuggestService = musicTrackAiSuggestService;
     }
 
     @Operation(summary = "获取公开音乐列表")
@@ -76,6 +81,13 @@ public class MusicRadioController {
     @GetMapping("/admin/music/tracks/{id}")
     public Result<MusicTrackVO> getAdminTrack(@PathVariable Long id) {
         return Result.success(musicRadioService.getAdminTrack(id));
+    }
+
+    @RequireAdmin
+    @Operation(summary = "AI 补全音乐信息")
+    @PostMapping("/admin/music/tracks/ai/suggest")
+    public Result<MusicTrackAiSuggestResponse> suggestTrack(@Valid @RequestBody MusicTrackAiSuggestRequest request) {
+        return Result.success(musicTrackAiSuggestService.suggest(request));
     }
 
     @RequireAdmin

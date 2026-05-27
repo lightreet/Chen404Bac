@@ -1,9 +1,12 @@
 package com.chen404.controller;
 
 import com.chen404.domain.Result;
+import com.chen404.domain.dto.MusicTrackAiSuggestRequest;
+import com.chen404.domain.dto.MusicTrackAiSuggestResponse;
 import com.chen404.domain.dto.MusicPlaylistVO;
 import com.chen404.domain.dto.MusicTrackVO;
 import com.chen404.service.MusicRadioService;
+import com.chen404.service.MusicTrackAiSuggestService;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -18,7 +21,8 @@ class MusicRadioControllerTest {
     @Test
     void shouldExposePublicTracks() {
         MusicRadioService service = mock(MusicRadioService.class);
-        MusicRadioController controller = new MusicRadioController(service);
+        MusicTrackAiSuggestService suggestService = mock(MusicTrackAiSuggestService.class);
+        MusicRadioController controller = new MusicRadioController(service, suggestService);
         List<MusicTrackVO> tracks = List.of(new MusicTrackVO());
         when(service.listPublicTracks()).thenReturn(tracks);
 
@@ -31,7 +35,8 @@ class MusicRadioControllerTest {
     @Test
     void shouldExposeDefaultRadioForLyraPlayer() {
         MusicRadioService service = mock(MusicRadioService.class);
-        MusicRadioController controller = new MusicRadioController(service);
+        MusicTrackAiSuggestService suggestService = mock(MusicTrackAiSuggestService.class);
+        MusicRadioController controller = new MusicRadioController(service, suggestService);
         MusicPlaylistVO playlist = new MusicPlaylistVO();
         when(service.getDefaultRadio()).thenReturn(playlist);
 
@@ -44,7 +49,8 @@ class MusicRadioControllerTest {
     @Test
     void shouldExposeAdminTrackDetailForEditor() {
         MusicRadioService service = mock(MusicRadioService.class);
-        MusicRadioController controller = new MusicRadioController(service);
+        MusicTrackAiSuggestService suggestService = mock(MusicTrackAiSuggestService.class);
+        MusicRadioController controller = new MusicRadioController(service, suggestService);
         MusicTrackVO track = new MusicTrackVO();
         when(service.getAdminTrack(9L)).thenReturn(track);
 
@@ -57,10 +63,27 @@ class MusicRadioControllerTest {
     @Test
     void shouldExposeAdminTrackDeletion() {
         MusicRadioService service = mock(MusicRadioService.class);
-        MusicRadioController controller = new MusicRadioController(service);
+        MusicTrackAiSuggestService suggestService = mock(MusicTrackAiSuggestService.class);
+        MusicRadioController controller = new MusicRadioController(service, suggestService);
 
         controller.deleteTrack(9L);
 
         verify(service).deleteTrack(9L);
+    }
+
+    @Test
+    void shouldExposeAdminAiTrackSuggestion() {
+        MusicRadioService service = mock(MusicRadioService.class);
+        MusicTrackAiSuggestService suggestService = mock(MusicTrackAiSuggestService.class);
+        MusicRadioController controller = new MusicRadioController(service, suggestService);
+        MusicTrackAiSuggestRequest request = new MusicTrackAiSuggestRequest();
+        request.setTitle("夜に駆ける");
+        MusicTrackAiSuggestResponse response = new MusicTrackAiSuggestResponse();
+        when(suggestService.suggest(request)).thenReturn(response);
+
+        Result<MusicTrackAiSuggestResponse> result = controller.suggestTrack(request);
+
+        assertSame(response, result.getData());
+        verify(suggestService).suggest(request);
     }
 }

@@ -26,6 +26,11 @@ public class AiRuntimeProperties {
     private ArticleAssist articleAssist = new ArticleAssist();
 
     /**
+     * 音乐曲目补全运行参数。
+     */
+    private MusicAssist musicAssist = new MusicAssist();
+
+    /**
      * 相关文章推荐运行参数。
      */
     private Recommend recommend = new Recommend();
@@ -101,6 +106,15 @@ public class AiRuntimeProperties {
          * 标签上限。
          */
         private int maxTagCount = 5;
+    }
+
+    @Data
+    public static class MusicAssist {
+
+        /**
+         * 是否开启音乐曲目信息补全能力。
+         */
+        private boolean enabled = true;
     }
 
     @Data

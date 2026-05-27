@@ -9,5 +9,6 @@ public enum AiScenarioCode {
 
     ARTICLE_ASSIST,
     MAID_CHAT,
-    ARTICLE_RECOMMEND
+    ARTICLE_RECOMMEND,
+    MUSIC_TRACK_SUGGEST
 }
