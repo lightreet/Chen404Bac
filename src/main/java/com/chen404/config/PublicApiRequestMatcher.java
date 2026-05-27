@@ -47,6 +47,10 @@ public class PublicApiRequestMatcher implements RequestMatcher {
             return isPublicCommentRequest(path, method);
         }
 
+        if (path.equals("/music") || path.startsWith("/music/")) {
+            return "GET".equalsIgnoreCase(method);
+        }
+
         if (path.equals("/ai/chat") || path.equals("/ai/chat/stream")) {
             return "POST".equalsIgnoreCase(method);
         }

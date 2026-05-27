@@ -76,9 +76,21 @@ public class UploadController {
             "application/x-rar-compressed",
             "application/vnd.rar"
     );
+    private static final Set<String> ALLOWED_AUDIO_TYPES = Set.of(
+            "audio/mpeg",
+            "audio/mp3",
+            "audio/wav",
+            "audio/x-wav",
+            "audio/flac",
+            "audio/ogg",
+            "audio/aac",
+            "audio/mp4",
+            "audio/x-m4a"
+    );
 
     private static final long MAX_IMAGE_SIZE = 12 * 1024 * 1024;
     private static final long MAX_COVER_SIZE = 12 * 1024 * 1024;
+    private static final long MAX_AUDIO_SIZE = 60 * 1024 * 1024;
     private static final long MAX_TRUST_ATTACHMENT_SIZE = 15 * 1024 * 1024;
     private static final int MAX_BATCH_IMAGE_COUNT = 10;
 
@@ -217,6 +229,61 @@ public class UploadController {
             return Result.success("上传成功", buildUploadData(sysFile));
         } catch (Exception e) {
             log.error("上传站点资源失败", e);
+            return Result.error(500, "上传失败，请稍后重试");
+        }
+    }
+
+    @RequireAdmin
+    @Operation(summary = "上传音乐音频", description = "音乐馆歌曲音频上传，仅管理员可用")
+    @PostMapping(value = "/music-audio", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Result<UploadFileVO> uploadMusicAudio(
+            @ModelAttribute SingleFileUploadDTO form,
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
+        MultipartFile file = form.getFile();
+        Result<UploadFileVO> validateResult = validateFile(
+                file,
+                MAX_AUDIO_SIZE,
+                ALLOWED_AUDIO_TYPES,
+                "仅允许上传 mp3、wav、flac、ogg、aac 或 m4a 音频文件"
+        );
+        if (validateResult != null) {
+            return validateResult;
+        }
+
+        try {
+            SysFile sysFile = sysFileService.uploadTempFile(file, userId, SysFile.RefType.MUSIC_AUDIO);
+            log.info("[MUSIC_AUDIO_UPLOAD] userId={} url={}", userId, sysFile.getFileUrl());
+            return Result.success("上传成功", buildUploadData(sysFile));
+        } catch (Exception e) {
+            log.error("[MUSIC_AUDIO_UPLOAD_FAIL] userId={} fileName={}",
+                    userId, file == null ? null : file.getOriginalFilename(), e);
+            return Result.error(500, "上传失败，请稍后重试");
+        }
+    }
+
+    @RequireAdmin
+    @Operation(summary = "上传音乐封面", description = "音乐馆歌曲封面上传，仅管理员可用")
+    @PostMapping(value = "/music-cover", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Result<UploadFileVO> uploadMusicCover(
+            @ModelAttribute SingleFileUploadDTO form,
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
+        MultipartFile file = form.getFile();
+        Result<UploadFileVO> validateResult = validateImage(file, MAX_COVER_SIZE, resolveAllowedImageTypes());
+        if (validateResult != null) {
+            return validateResult;
+        }
+
+        try {
+            SysFile sysFile = sysFileService.uploadTempFile(file, userId, SysFile.RefType.MUSIC_COVER);
+            log.info("[MUSIC_COVER_UPLOAD] userId={} url={}", userId, sysFile.getFileUrl());
+            return Result.success("上传成功", buildUploadData(sysFile));
+        } catch (Exception e) {
+            log.error("[MUSIC_COVER_UPLOAD_FAIL] userId={} fileName={}",
+                    userId, file == null ? null : file.getOriginalFilename(), e);
             return Result.error(500, "上传失败，请稍后重试");
         }
     }
@@ -389,6 +456,7 @@ public class UploadController {
 
     private UploadFileVO buildUploadData(SysFile sysFile) {
         UploadFileVO data = new UploadFileVO();
+        data.setId(sysFile.getId());
         data.setUrl(sysFile.getFileUrl());
         data.setName(sysFile.getFileName());
         data.setSize(String.valueOf(sysFile.getFileSize()));

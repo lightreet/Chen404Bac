@@ -434,6 +434,8 @@ public class AdminFileServiceImpl implements AdminFileService {
             case SysFile.RefType.AVATAR -> "Avatar";
             case SysFile.RefType.TRUST_REQUEST_ATTACHMENT -> "Trust Request Attachment";
             case SysFile.RefType.TRAVEL_MEMORY_IMAGE -> "Travel Memory Image";
+            case SysFile.RefType.MUSIC_AUDIO -> "Music Audio";
+            case SysFile.RefType.MUSIC_COVER -> "Music Cover";
             case SysFile.RefType.OTHER -> "Other";
             default -> value;
         };

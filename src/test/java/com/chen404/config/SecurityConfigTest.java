@@ -64,6 +64,13 @@ class SecurityConfigTest {
     }
 
     @Test
+    void shouldAllowPublicMusicWithoutToken() throws Exception {
+        mockMvc.perform(get("/music/tracks"))
+                .andExpect(status().isOk())
+                .andExpect(content().string("music"));
+    }
+
+    @Test
     void shouldRejectProtectedArticleWriteWithoutToken() throws Exception {
         mockMvc.perform(post("/articles"))
                 .andExpect(status().isUnauthorized());
@@ -154,6 +161,11 @@ class SecurityConfigTest {
         @GetMapping("/articles")
         public ResponseEntity<String> publicArticles() {
             return ResponseEntity.ok("public");
+        }
+
+        @GetMapping("/music/tracks")
+        public ResponseEntity<String> publicMusicTracks() {
+            return ResponseEntity.ok("music");
         }
 
         @PostMapping("/articles")

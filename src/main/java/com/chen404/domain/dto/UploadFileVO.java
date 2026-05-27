@@ -10,6 +10,9 @@ import java.time.LocalDateTime;
 @Data
 public class UploadFileVO {
 
+    @Schema(description = "文件记录 ID", example = "1")
+    private Long id;
+
     @Schema(description = "文件访问地址", example = "https://cdn.example.com/upload/demo.png")
     private String url;
 
