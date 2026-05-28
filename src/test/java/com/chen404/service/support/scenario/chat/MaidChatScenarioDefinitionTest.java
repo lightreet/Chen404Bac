@@ -4,6 +4,8 @@ import com.chen404.config.AiRuntimeProperties;
 import com.chen404.domain.dto.AiAdminConfigDTO;
 import com.chen404.domain.dto.AiChatMessageDTO;
 import com.chen404.domain.entity.Article;
+import com.chen404.service.AiConfigService;
+import com.chen404.service.support.AiLlmRequestFactory;
 import com.chen404.service.support.LlmClient;
 import com.chen404.service.support.LlmTextRequest;
 import com.chen404.service.support.chat.ArticleKnowledgeHit;
@@ -32,7 +34,11 @@ class MaidChatScenarioDefinitionTest {
                 {"panelAnswer":"This is a longer panel answer for the chat panel.","bubbleText":"Done.","mood":"happy","suggestions":["Summarize this article"]}
                 """);
 
-        MaidChatScenarioDefinition definition = new MaidChatScenarioDefinition(llmClient, new AiRuntimeProperties());
+        MaidChatScenarioDefinition definition = new MaidChatScenarioDefinition(
+                llmClient,
+                new AiRuntimeProperties(),
+                requestFactory()
+        );
         MaidChatScenarioResult result = definition.execute(AiScenarioRequest.of(
                 AiScenarioCode.MAID_CHAT,
                 new MaidChatScenarioRequest(
@@ -72,7 +78,11 @@ class MaidChatScenarioDefinitionTest {
                 {"panelAnswer":"%s","mood":"happy","suggestions":[]}
                 """.formatted(longPanelAnswer));
 
-        MaidChatScenarioDefinition definition = new MaidChatScenarioDefinition(llmClient, new AiRuntimeProperties());
+        MaidChatScenarioDefinition definition = new MaidChatScenarioDefinition(
+                llmClient,
+                new AiRuntimeProperties(),
+                requestFactory()
+        );
         MaidChatScenarioResult result = definition.execute(AiScenarioRequest.of(
                 AiScenarioCode.MAID_CHAT,
                 new MaidChatScenarioRequest(
@@ -100,7 +110,11 @@ class MaidChatScenarioDefinitionTest {
         AiAdminConfigDTO config = defaultAiConfig();
         config.getChat().setMaxSuggestionCount(0);
 
-        MaidChatScenarioDefinition definition = new MaidChatScenarioDefinition(llmClient, new AiRuntimeProperties());
+        MaidChatScenarioDefinition definition = new MaidChatScenarioDefinition(
+                llmClient,
+                new AiRuntimeProperties(),
+                requestFactory()
+        );
         MaidChatScenarioResult result = definition.execute(AiScenarioRequest.of(
                 AiScenarioCode.MAID_CHAT,
                 new MaidChatScenarioRequest(
@@ -123,7 +137,11 @@ class MaidChatScenarioDefinitionTest {
         LlmClient llmClient = mock(LlmClient.class);
         when(llmClient.generateText(any(LlmTextRequest.class))).thenReturn("not-json");
 
-        MaidChatScenarioDefinition definition = new MaidChatScenarioDefinition(llmClient, new AiRuntimeProperties());
+        MaidChatScenarioDefinition definition = new MaidChatScenarioDefinition(
+                llmClient,
+                new AiRuntimeProperties(),
+                requestFactory()
+        );
         MaidChatScenarioResult result = definition.execute(AiScenarioRequest.of(
                 AiScenarioCode.MAID_CHAT,
                 new MaidChatScenarioRequest(
@@ -154,7 +172,11 @@ class MaidChatScenarioDefinitionTest {
         config.getChat().setMaxContextMessages(1);
         config.getChat().setMaxSuggestionCount(1);
 
-        MaidChatScenarioDefinition definition = new MaidChatScenarioDefinition(llmClient, new AiRuntimeProperties());
+        MaidChatScenarioDefinition definition = new MaidChatScenarioDefinition(
+                llmClient,
+                new AiRuntimeProperties(),
+                requestFactory()
+        );
         MaidChatScenarioResult result = definition.execute(AiScenarioRequest.of(
                 AiScenarioCode.MAID_CHAT,
                 new MaidChatScenarioRequest(
@@ -192,11 +214,18 @@ class MaidChatScenarioDefinitionTest {
         return article;
     }
 
+    private AiLlmRequestFactory requestFactory() {
+        AiConfigService aiConfigService = mock(AiConfigService.class);
+        when(aiConfigService.getEffectiveConfig()).thenReturn(defaultAiConfig());
+        return new AiLlmRequestFactory(aiConfigService);
+    }
+
     private AiAdminConfigDTO defaultAiConfig() {
         AiAdminConfigDTO config = new AiAdminConfigDTO();
         config.getLlm().setEnabled(true);
         config.getLlm().setBaseUrl("https://llm.example/v1");
         config.getLlm().setModel("gpt-test");
+        config.getLlm().setApiKey("sk-test");
         config.getLlm().setApiStyle("chat-completions");
         config.getLlm().setTemperature(0.2);
         config.getLlm().setMaxTokens(512);

@@ -1,6 +1,7 @@
 package com.chen404.service.impl;
 
 import com.chen404.config.AiRuntimeProperties;
+import com.chen404.domain.dto.MusicTrackAiCandidate;
 import com.chen404.domain.dto.MusicTrackAiSuggestRequest;
 import com.chen404.domain.dto.MusicTrackAiSuggestResponse;
 import com.chen404.service.MusicTrackAiSuggestService;
@@ -8,10 +9,10 @@ import com.chen404.service.support.scenario.AiScenarioCode;
 import com.chen404.service.support.scenario.AiScenarioExecutor;
 import com.chen404.service.support.scenario.AiScenarioRequest;
 import com.chen404.service.support.scenario.AiScenarioResult;
+import com.chen404.service.support.scenario.music.MusicTrackSuggestCandidate;
 import com.chen404.service.support.scenario.music.MusicTrackSuggestScenarioRequest;
 import com.chen404.service.support.scenario.music.MusicTrackSuggestScenarioResult;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 
 /**
  * 基于通用 LLM 场景执行器的音乐曲目信息补全服务。
@@ -38,7 +39,15 @@ public class LlmMusicTrackAiSuggestServiceImpl implements MusicTrackAiSuggestSer
         AiScenarioResult<MusicTrackSuggestScenarioResult> scenarioExecution = aiScenarioExecutor.execute(
                 AiScenarioRequest.of(
                         AiScenarioCode.MUSIC_TRACK_SUGGEST,
-                        new MusicTrackSuggestScenarioRequest(request.getTitle(), request.getArtist())
+                        new MusicTrackSuggestScenarioRequest(
+                                request.getTitle(),
+                                request.getArtist(),
+                                request.getAlbum(),
+                                request.getReleaseYear(),
+                                request.getLanguage(),
+                                request.getGenre(),
+                                request.getLimit()
+                        )
                 )
         );
         return toResponse(scenarioExecution.data());
@@ -46,31 +55,33 @@ public class LlmMusicTrackAiSuggestServiceImpl implements MusicTrackAiSuggestSer
 
     private MusicTrackAiSuggestResponse toResponse(MusicTrackSuggestScenarioResult scenarioResult) {
         MusicTrackAiSuggestResponse response = new MusicTrackAiSuggestResponse();
-        response.setTitle(scenarioResult.title());
-        response.setArtist(scenarioResult.artist());
-        response.setAlbum(scenarioResult.album());
-        response.setReleaseYear(scenarioResult.releaseYear());
-        response.setLanguage(scenarioResult.language());
-        response.setGenre(scenarioResult.genre());
-        response.setTags(scenarioResult.tags());
-        response.setRecommendation(scenarioResult.recommendation());
-        response.setMoodText(scenarioResult.moodText());
-        response.setLyricSource(scenarioResult.lyricSource());
+        response.setCandidates(scenarioResult.candidates().stream()
+                .map(this::toCandidateResponse)
+                .toList());
         if (isEmptyResponse(response)) {
             throw new IllegalStateException(EMPTY_RESULT_ERROR);
         }
         return response;
     }
 
+    private MusicTrackAiCandidate toCandidateResponse(MusicTrackSuggestCandidate scenarioCandidate) {
+        MusicTrackAiCandidate response = new MusicTrackAiCandidate();
+        response.setTitle(scenarioCandidate.title());
+        response.setArtist(scenarioCandidate.artist());
+        response.setAlbum(scenarioCandidate.album());
+        response.setReleaseYear(scenarioCandidate.releaseYear());
+        response.setLanguage(scenarioCandidate.language());
+        response.setGenre(scenarioCandidate.genre());
+        response.setTags(scenarioCandidate.tags());
+        response.setRecommendation(scenarioCandidate.recommendation());
+        response.setMoodText(scenarioCandidate.moodText());
+        response.setLyricSource(scenarioCandidate.lyricSource());
+        response.setConfidence(scenarioCandidate.confidence());
+        response.setMatchReason(scenarioCandidate.matchReason());
+        return response;
+    }
+
     private boolean isEmptyResponse(MusicTrackAiSuggestResponse response) {
-        return !StringUtils.hasText(response.getArtist())
-                && !StringUtils.hasText(response.getAlbum())
-                && response.getReleaseYear() == null
-                && !StringUtils.hasText(response.getLanguage())
-                && !StringUtils.hasText(response.getGenre())
-                && (response.getTags() == null || response.getTags().isEmpty())
-                && !StringUtils.hasText(response.getRecommendation())
-                && !StringUtils.hasText(response.getMoodText())
-                && !StringUtils.hasText(response.getLyricSource());
+        return response.getCandidates() == null || response.getCandidates().isEmpty();
     }
 }

@@ -92,6 +92,26 @@ class AiConfigServiceImplTest {
     }
 
     @Test
+    void shouldPreferDatabaseValuesAndFallbackToPropertyDefaultsForMissingValues() {
+        SiteConfigMapper mapper = mapperWithSeed(Map.of(
+                "ai.llm.base_url", "https://db.example/v1",
+                "ai.llm.model", ""
+        ));
+        LlmProperties properties = new LlmProperties();
+        properties.setBaseUrl("https://file.example/v1");
+        properties.setModel("gpt-file");
+        properties.setApiKey("sk-file");
+        properties.setEnabled(true);
+        AiConfigServiceImpl service = buildService(mapper, mock(LlmClient.class), properties);
+
+        AiAdminConfigDTO config = service.getEffectiveConfig();
+
+        assertEquals("https://db.example/v1", config.getLlm().getBaseUrl());
+        assertEquals("gpt-file", config.getLlm().getModel());
+        assertEquals("sk-file", config.getLlm().getApiKey());
+    }
+
+    @Test
     void shouldReturnSuccessWhenConnectionTestGeneratesText() {
         SiteConfigMapper mapper = mapperWithSeed(Map.of(
                 "ai.llm.enabled", "true",
@@ -166,6 +186,10 @@ class AiConfigServiceImplTest {
         LlmProperties llmProperties = new LlmProperties();
         llmProperties.setEnabled(false);
         llmProperties.setApiKey("");
+        return buildService(mapper, llmClient, llmProperties);
+    }
+
+    private AiConfigServiceImpl buildService(SiteConfigMapper mapper, LlmClient llmClient, LlmProperties llmProperties) {
         AiRuntimeProperties runtimeProperties = new AiRuntimeProperties();
         AiMaidProperties maidProperties = new AiMaidProperties();
         AiPromptTemplateLoader promptTemplateLoader = new AiPromptTemplateLoader(new DefaultResourceLoader());

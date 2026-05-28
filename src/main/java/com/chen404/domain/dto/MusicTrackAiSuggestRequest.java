@@ -13,4 +13,14 @@ public class MusicTrackAiSuggestRequest {
     private String title;
 
     private String artist;
+
+    private String album;
+
+    private Integer releaseYear;
+
+    private String language;
+
+    private String genre;
+
+    private Integer limit;
 }

@@ -11,14 +11,5 @@ import java.util.List;
 @Data
 public class MusicTrackAiSuggestResponse {
 
-    private String title;
-    private String artist;
-    private String album;
-    private Integer releaseYear;
-    private String language;
-    private String genre;
-    private List<String> tags = new ArrayList<>();
-    private String recommendation;
-    private String moodText;
-    private String lyricSource;
+    private List<MusicTrackAiCandidate> candidates = new ArrayList<>();
 }

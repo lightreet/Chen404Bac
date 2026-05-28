@@ -3,6 +3,9 @@ package com.chen404.service.impl;
 import com.chen404.config.AiRuntimeProperties;
 import com.chen404.domain.dto.AiArticleAssistRequest;
 import com.chen404.domain.dto.AiArticleAssistResponse;
+import com.chen404.domain.dto.AiAdminConfigDTO;
+import com.chen404.service.AiConfigService;
+import com.chen404.service.support.AiLlmRequestFactory;
 import com.chen404.service.support.LlmClient;
 import com.chen404.service.support.LlmTextRequest;
 import com.chen404.service.support.scenario.AiScenarioExecutor;
@@ -35,7 +38,7 @@ class LlmArticleAssistServiceImplTest {
                 """);
 
         AiRuntimeProperties aiRuntimeProperties = new AiRuntimeProperties();
-        AiScenarioExecutor executor = new AiScenarioExecutor(List.of(new ArticleAssistScenarioDefinition(llmClient, aiRuntimeProperties)));
+        AiScenarioExecutor executor = new AiScenarioExecutor(List.of(new ArticleAssistScenarioDefinition(llmClient, aiRuntimeProperties, requestFactory())));
         LlmArticleAssistServiceImpl service = new LlmArticleAssistServiceImpl(executor, aiRuntimeProperties);
         AiArticleAssistRequest request = new AiArticleAssistRequest();
         request.setTitle("Spring Boot 接入大模型");
@@ -50,6 +53,9 @@ class LlmArticleAssistServiceImplTest {
         verify(llmClient).generateText(requestCaptor.capture());
         LlmTextRequest llmRequest = requestCaptor.getValue();
         assertEquals("You are an assistant for a Chinese technical blog CMS. Return valid JSON only.", llmRequest.systemInstruction());
+        assertEquals("https://db.example/v1", llmRequest.baseUrl());
+        assertEquals("gpt-db", llmRequest.model());
+        assertEquals("sk-db", llmRequest.apiKey());
         assertTrue(llmRequest.userPrompt().contains("Spring Boot 接入大模型"));
         assertTrue(llmRequest.userPrompt().contains("这是一段用于测试的正文内容。"));
         assertTrue(llmRequest.userPrompt().contains("prefer exactly 3 concise Chinese tags"));
@@ -67,7 +73,7 @@ class LlmArticleAssistServiceImplTest {
                 """);
 
         AiRuntimeProperties aiRuntimeProperties = new AiRuntimeProperties();
-        AiScenarioExecutor executor = new AiScenarioExecutor(List.of(new ArticleAssistScenarioDefinition(llmClient, aiRuntimeProperties)));
+        AiScenarioExecutor executor = new AiScenarioExecutor(List.of(new ArticleAssistScenarioDefinition(llmClient, aiRuntimeProperties, requestFactory())));
         LlmArticleAssistServiceImpl service = new LlmArticleAssistServiceImpl(executor, aiRuntimeProperties);
         AiArticleAssistRequest request = new AiArticleAssistRequest();
         request.setTitle("Spring Boot 接入大模型");
@@ -86,5 +92,20 @@ class LlmArticleAssistServiceImplTest {
         assertTrue(prompt.contains("这是旧摘要"));
         assertTrue(prompt.contains("Current tags to avoid repeating exactly"));
         assertTrue(prompt.contains("旧标签, Spring Boot"));
+    }
+
+    private AiLlmRequestFactory requestFactory() {
+        AiAdminConfigDTO config = new AiAdminConfigDTO();
+        config.getLlm().setEnabled(true);
+        config.getLlm().setBaseUrl("https://db.example/v1");
+        config.getLlm().setModel("gpt-db");
+        config.getLlm().setApiKey("sk-db");
+        config.getLlm().setApiStyle("chat-completions");
+        config.getLlm().setTemperature(0.2);
+        config.getLlm().setMaxTokens(512);
+        config.getLlm().setTimeoutSeconds(30);
+        AiConfigService aiConfigService = mock(AiConfigService.class);
+        when(aiConfigService.getEffectiveConfig()).thenReturn(config);
+        return new AiLlmRequestFactory(aiConfigService);
     }
 }

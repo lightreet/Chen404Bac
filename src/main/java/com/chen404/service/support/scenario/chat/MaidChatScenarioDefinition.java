@@ -7,6 +7,7 @@ import com.chen404.domain.dto.AiAdminConfigDTO;
 import com.chen404.domain.dto.AiChatMessageDTO;
 import com.chen404.domain.entity.Article;
 import com.chen404.config.AiRuntimeProperties;
+import com.chen404.service.support.AiLlmRequestFactory;
 import com.chen404.service.support.LlmClient;
 import com.chen404.service.support.LlmTextRequest;
 import com.chen404.service.support.LlmTextStreamHandler;
@@ -50,10 +51,15 @@ public class MaidChatScenarioDefinition implements AiScenarioDefinition<MaidChat
 
     private final LlmClient llmClient;
     private final AiRuntimeProperties aiRuntimeProperties;
+    private final AiLlmRequestFactory aiLlmRequestFactory;
 
-    public MaidChatScenarioDefinition(LlmClient llmClient, AiRuntimeProperties aiRuntimeProperties) {
+    public MaidChatScenarioDefinition(
+            LlmClient llmClient,
+            AiRuntimeProperties aiRuntimeProperties,
+            AiLlmRequestFactory aiLlmRequestFactory) {
         this.llmClient = llmClient;
         this.aiRuntimeProperties = aiRuntimeProperties;
+        this.aiLlmRequestFactory = aiLlmRequestFactory;
     }
 
     @Override
@@ -240,21 +246,9 @@ public class MaidChatScenarioDefinition implements AiScenarioDefinition<MaidChat
     private LlmTextRequest buildLlmRequest(MaidChatScenarioRequest request, String userPrompt) {
         AiAdminConfigDTO config = request.aiConfig();
         if (config == null || config.getLlm() == null) {
-            return LlmTextRequest.of(request.systemPrompt(), userPrompt);
+            return aiLlmRequestFactory.buildTextRequest(request.systemPrompt(), userPrompt);
         }
-        return new LlmTextRequest(
-                config.getLlm().getModel(),
-                request.systemPrompt(),
-                userPrompt,
-                config.getLlm().getTemperature(),
-                config.getLlm().getMaxTokens(),
-                config.getLlm().getBaseUrl(),
-                config.getLlm().getApiKey(),
-                config.getLlm().getApiStyle(),
-                null,
-                null,
-                config.getLlm().getTimeoutSeconds()
-        );
+        return aiLlmRequestFactory.buildTextRequest(config, request.systemPrompt(), userPrompt);
     }
 
     private String resolvePanelAnswerField(JSONObject payload) {

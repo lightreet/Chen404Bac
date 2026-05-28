@@ -1,6 +1,9 @@
 package com.chen404.service.support.scenario.article;
 
 import com.chen404.config.AiRuntimeProperties;
+import com.chen404.domain.dto.AiAdminConfigDTO;
+import com.chen404.service.AiConfigService;
+import com.chen404.service.support.AiLlmRequestFactory;
 import com.chen404.service.support.LlmClient;
 import com.chen404.service.support.LlmTextRequest;
 import com.chen404.service.support.scenario.AiScenarioCode;
@@ -32,7 +35,11 @@ class ArticleAssistScenarioDefinitionTest {
                 ```
                 """);
 
-        ArticleAssistScenarioDefinition definition = new ArticleAssistScenarioDefinition(llmClient, new AiRuntimeProperties());
+        ArticleAssistScenarioDefinition definition = new ArticleAssistScenarioDefinition(
+                llmClient,
+                new AiRuntimeProperties(),
+                requestFactory()
+        );
         ArticleAssistScenarioResult result = definition.execute(
                 AiScenarioRequest.of(
                         AiScenarioCode.ARTICLE_ASSIST,
@@ -67,7 +74,11 @@ class ArticleAssistScenarioDefinitionTest {
                 }
                 """);
 
-        ArticleAssistScenarioDefinition definition = new ArticleAssistScenarioDefinition(llmClient, new AiRuntimeProperties());
+        ArticleAssistScenarioDefinition definition = new ArticleAssistScenarioDefinition(
+                llmClient,
+                new AiRuntimeProperties(),
+                requestFactory()
+        );
         definition.execute(
                 AiScenarioRequest.of(
                         AiScenarioCode.ARTICLE_ASSIST,
@@ -89,5 +100,24 @@ class ArticleAssistScenarioDefinitionTest {
         assertTrue(prompt.contains("这是旧摘要"));
         assertTrue(prompt.contains("Current tags to avoid repeating exactly"));
         assertTrue(prompt.contains("旧标签, Spring Boot"));
+    }
+
+    private AiLlmRequestFactory requestFactory() {
+        AiConfigService aiConfigService = mock(AiConfigService.class);
+        when(aiConfigService.getEffectiveConfig()).thenReturn(defaultAiConfig());
+        return new AiLlmRequestFactory(aiConfigService);
+    }
+
+    private AiAdminConfigDTO defaultAiConfig() {
+        AiAdminConfigDTO config = new AiAdminConfigDTO();
+        config.getLlm().setEnabled(true);
+        config.getLlm().setBaseUrl("https://llm.example/v1");
+        config.getLlm().setModel("gpt-test");
+        config.getLlm().setApiKey("sk-test");
+        config.getLlm().setApiStyle("chat-completions");
+        config.getLlm().setTemperature(0.2);
+        config.getLlm().setMaxTokens(512);
+        config.getLlm().setTimeoutSeconds(30);
+        return config;
     }
 }

@@ -11,6 +11,7 @@ import com.chen404.service.AiChatSessionService;
 import com.chen404.service.AiConfigService;
 import com.chen404.service.ArticleKnowledgeService;
 import com.chen404.service.ArticleService;
+import com.chen404.service.support.AiLlmRequestFactory;
 import com.chen404.service.support.LlmClient;
 import com.chen404.service.support.LlmTextRequest;
 import com.chen404.service.support.chat.ArticleKnowledgeHit;
@@ -69,7 +70,11 @@ class AiChatServiceImplTest {
         aiChatSessionService = mock(AiChatSessionService.class);
         aiConfigService = mock(AiConfigService.class);
         aiRuntimeProperties = new AiRuntimeProperties();
-        MaidChatScenarioDefinition scenarioDefinition = new MaidChatScenarioDefinition(llmClient, aiRuntimeProperties);
+        MaidChatScenarioDefinition scenarioDefinition = new MaidChatScenarioDefinition(
+                llmClient,
+                aiRuntimeProperties,
+                new AiLlmRequestFactory(aiConfigService)
+        );
         recommendScenarioDefinition = new StubRecommendScenarioDefinition();
         AiScenarioExecutor aiScenarioExecutor = new AiScenarioExecutor(List.of(scenarioDefinition, recommendScenarioDefinition));
         aiChatService = new AiChatServiceImpl(
@@ -240,6 +245,7 @@ class AiChatServiceImplTest {
         config.getLlm().setEnabled(true);
         config.getLlm().setBaseUrl("https://api.openai.com/v1");
         config.getLlm().setModel("gpt-5.4-mini");
+        config.getLlm().setApiKey("sk-test");
         config.getLlm().setApiStyle("chat-completions");
         config.getLlm().setTemperature(0.2);
         config.getLlm().setMaxTokens(512);

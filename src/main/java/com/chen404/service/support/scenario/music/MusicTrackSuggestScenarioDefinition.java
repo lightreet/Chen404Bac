@@ -3,8 +3,8 @@ package com.chen404.service.support.scenario.music;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.chen404.service.support.AiLlmRequestFactory;
 import com.chen404.service.support.LlmClient;
-import com.chen404.service.support.LlmTextRequest;
 import com.chen404.service.support.scenario.AiScenarioCode;
 import com.chen404.service.support.scenario.AiScenarioDefinition;
 import com.chen404.service.support.scenario.AiScenarioRequest;
@@ -30,13 +30,18 @@ public class MusicTrackSuggestScenarioDefinition implements AiScenarioDefinition
     private static final String EMPTY_TEXT = "";
     private static final int MIN_RELEASE_YEAR = 1900;
     private static final int MAX_TAG_COUNT = 5;
+    private static final int DEFAULT_CANDIDATE_COUNT = 5;
+    private static final int MAX_CANDIDATE_COUNT = 5;
     private static final int MAX_RECOMMENDATION_LENGTH = 140;
     private static final int MAX_MOOD_TEXT_LENGTH = 80;
+    private static final int MAX_MATCH_REASON_LENGTH = 120;
 
     private final LlmClient llmClient;
+    private final AiLlmRequestFactory aiLlmRequestFactory;
 
-    public MusicTrackSuggestScenarioDefinition(LlmClient llmClient) {
+    public MusicTrackSuggestScenarioDefinition(LlmClient llmClient, AiLlmRequestFactory aiLlmRequestFactory) {
         this.llmClient = llmClient;
+        this.aiLlmRequestFactory = aiLlmRequestFactory;
     }
 
     @Override
@@ -46,17 +51,19 @@ public class MusicTrackSuggestScenarioDefinition implements AiScenarioDefinition
 
     @Override
     public AiScenarioResult<MusicTrackSuggestScenarioResult> execute(AiScenarioRequest<MusicTrackSuggestScenarioRequest> request) {
-        String outputText = llmClient.generateText(LlmTextRequest.of(
+        String outputText = llmClient.generateText(aiLlmRequestFactory.buildTextRequest(
                 SYSTEM_INSTRUCTION,
                 buildPrompt(request.payload())
         ));
-        return AiScenarioResult.of(parseResponse(outputText));
+        return AiScenarioResult.of(parseResponse(outputText, normalizeLimit(request.payload().limit())));
     }
 
     private String buildPrompt(MusicTrackSuggestScenarioRequest request) {
+        int limit = normalizeLimit(request.limit());
         StringBuilder builder = new StringBuilder();
-        builder.append("Given a song title, infer safe, likely metadata for a music library form.\n");
-        builder.append("Return one JSON object with exactly these fields: title, artist, album, releaseYear, language, genre, tags, recommendation, moodText, lyricSource.\n");
+        builder.append("Given a song title and optional known fields, find likely song metadata candidates for a music library form.\n");
+        builder.append("Return up to ").append(limit).append(" candidates as one JSON object with exactly this shape: ");
+        builder.append("{\"candidates\":[{\"title\":string,\"artist\":string|null,\"album\":string|null,\"releaseYear\":number|null,\"language\":string|null,\"genre\":string|null,\"tags\":string[],\"recommendation\":string,\"moodText\":string,\"lyricSource\":string|null,\"confidence\":\"high|medium|low\",\"matchReason\":string}]}.\n");
         builder.append("Rules:\n");
         builder.append("1. Use null for uncertain factual fields instead of guessing aggressively.\n");
         builder.append("2. Do not provide audio URLs, cover URLs, or copyrighted lyrics.\n");
@@ -64,16 +71,49 @@ public class MusicTrackSuggestScenarioDefinition implements AiScenarioDefinition
         builder.append("4. tags must be 3 to 5 short Chinese tags or recognizable genre labels.\n");
         builder.append("5. releaseYear must be an integer year between 1900 and ").append(Year.now().getValue()).append(", or null when uncertain.\n");
         builder.append("6. lyricSource should be a short source hint like 官方歌词 / 网易云音乐 / 手动校对, or null.\n\n");
+        builder.append("7. If the same title has different singers, originals, covers, live versions, anime versions, or regional versions, return them as separate candidates.\n");
+        builder.append("8. Rank the most likely candidate first. Use confidence high only when the known fields strongly match.\n");
+        builder.append("9. If optional known fields narrow the match, filter candidates by those fields.\n\n");
         builder.append("Song title:\n").append(trim(request.title())).append("\n");
         if (StringUtils.hasText(request.artist())) {
             builder.append("Known artist:\n").append(trim(request.artist())).append("\n");
         }
+        if (StringUtils.hasText(request.album())) {
+            builder.append("Known album:\n").append(trim(request.album())).append("\n");
+        }
+        if (request.releaseYear() != null) {
+            builder.append("Known release year:\n").append(request.releaseYear()).append("\n");
+        }
+        if (StringUtils.hasText(request.language())) {
+            builder.append("Known language:\n").append(trim(request.language())).append("\n");
+        }
+        if (StringUtils.hasText(request.genre())) {
+            builder.append("Known genre:\n").append(trim(request.genre())).append("\n");
+        }
         return builder.toString();
     }
 
-    private MusicTrackSuggestScenarioResult parseResponse(String outputText) {
+    private MusicTrackSuggestScenarioResult parseResponse(String outputText, int limit) {
         JSONObject payload = JSON.parseObject(stripCodeFence(outputText));
-        return new MusicTrackSuggestScenarioResult(
+        JSONArray rawCandidates = payload.getJSONArray("candidates");
+        if (rawCandidates == null) {
+            rawCandidates = new JSONArray();
+            rawCandidates.add(payload);
+        }
+
+        List<MusicTrackSuggestCandidate> candidates = new ArrayList<>();
+        for (int i = 0; i < rawCandidates.size() && candidates.size() < limit; i++) {
+            JSONObject rawCandidate = rawCandidates.getJSONObject(i);
+            MusicTrackSuggestCandidate candidate = normalizeCandidate(rawCandidate);
+            if (!isEmptyCandidate(candidate)) {
+                candidates.add(candidate);
+            }
+        }
+        return new MusicTrackSuggestScenarioResult(candidates);
+    }
+
+    private MusicTrackSuggestCandidate normalizeCandidate(JSONObject payload) {
+        return new MusicTrackSuggestCandidate(
                 normalizeText(payload.getString("title")),
                 normalizeText(payload.getString("artist")),
                 normalizeText(payload.getString("album")),
@@ -83,8 +123,23 @@ public class MusicTrackSuggestScenarioDefinition implements AiScenarioDefinition
                 normalizeTags(payload.getJSONArray("tags")),
                 normalizeLimitedText(payload.getString("recommendation"), MAX_RECOMMENDATION_LENGTH),
                 normalizeLimitedText(payload.getString("moodText"), MAX_MOOD_TEXT_LENGTH),
-                normalizeText(payload.getString("lyricSource"))
+                normalizeText(payload.getString("lyricSource")),
+                normalizeConfidence(payload.getString("confidence")),
+                normalizeLimitedText(payload.getString("matchReason"), MAX_MATCH_REASON_LENGTH)
         );
+    }
+
+    private boolean isEmptyCandidate(MusicTrackSuggestCandidate candidate) {
+        return !StringUtils.hasText(candidate.title())
+                && !StringUtils.hasText(candidate.artist())
+                && !StringUtils.hasText(candidate.album())
+                && candidate.releaseYear() == null
+                && !StringUtils.hasText(candidate.language())
+                && !StringUtils.hasText(candidate.genre())
+                && (candidate.tags() == null || candidate.tags().isEmpty())
+                && !StringUtils.hasText(candidate.recommendation())
+                && !StringUtils.hasText(candidate.moodText())
+                && !StringUtils.hasText(candidate.lyricSource());
     }
 
     private String stripCodeFence(String text) {
@@ -105,6 +160,13 @@ public class MusicTrackSuggestScenarioDefinition implements AiScenarioDefinition
             return null;
         }
         return releaseYear;
+    }
+
+    private int normalizeLimit(Integer limit) {
+        if (limit == null || limit < 1) {
+            return DEFAULT_CANDIDATE_COUNT;
+        }
+        return Math.min(limit, MAX_CANDIDATE_COUNT);
     }
 
     private List<String> normalizeTags(JSONArray tags) {
@@ -131,6 +193,14 @@ public class MusicTrackSuggestScenarioDefinition implements AiScenarioDefinition
             return normalized;
         }
         return normalized.substring(0, maxLength);
+    }
+
+    private String normalizeConfidence(String confidence) {
+        String normalized = normalizeText(confidence).toLowerCase();
+        if ("high".equals(normalized) || "medium".equals(normalized) || "low".equals(normalized)) {
+            return normalized;
+        }
+        return "low";
     }
 
     private String normalizeText(String text) {

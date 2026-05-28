@@ -4,8 +4,8 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.chen404.config.AiRuntimeProperties;
+import com.chen404.service.support.AiLlmRequestFactory;
 import com.chen404.service.support.LlmClient;
-import com.chen404.service.support.LlmTextRequest;
 import com.chen404.service.support.scenario.AiScenarioCode;
 import com.chen404.service.support.scenario.AiScenarioDefinition;
 import com.chen404.service.support.scenario.AiScenarioRequest;
@@ -35,10 +35,15 @@ public class ArticleAssistScenarioDefinition implements AiScenarioDefinition<Art
 
     private final LlmClient llmClient;
     private final AiRuntimeProperties aiRuntimeProperties;
+    private final AiLlmRequestFactory aiLlmRequestFactory;
 
-    public ArticleAssistScenarioDefinition(LlmClient llmClient, AiRuntimeProperties aiRuntimeProperties) {
+    public ArticleAssistScenarioDefinition(
+            LlmClient llmClient,
+            AiRuntimeProperties aiRuntimeProperties,
+            AiLlmRequestFactory aiLlmRequestFactory) {
         this.llmClient = llmClient;
         this.aiRuntimeProperties = aiRuntimeProperties;
+        this.aiLlmRequestFactory = aiLlmRequestFactory;
     }
 
     @Override
@@ -49,7 +54,7 @@ public class ArticleAssistScenarioDefinition implements AiScenarioDefinition<Art
     @Override
     public AiScenarioResult<ArticleAssistScenarioResult> execute(AiScenarioRequest<ArticleAssistScenarioRequest> request) {
         ArticleAssistScenarioRequest payload = request.payload();
-        String outputText = llmClient.generateText(LlmTextRequest.of(
+        String outputText = llmClient.generateText(aiLlmRequestFactory.buildTextRequest(
                 SYSTEM_INSTRUCTION,
                 buildPrompt(payload)
         ));
