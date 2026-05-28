@@ -55,7 +55,8 @@ class MusicRadioServiceImplTest {
         verify(trackMapper).selectList(captor.capture());
         String sqlSegment = captor.getValue().getSqlSegment().toLowerCase();
         assertTrue(sqlSegment.contains("status"), () -> "公开查询必须过滤 status，实际为: " + sqlSegment);
-        assertTrue(sqlSegment.contains("sort_order"), () -> "公开查询必须按 sort_order 排序，实际为: " + sqlSegment);
+        assertTrue(sqlSegment.contains("create_time"), () -> "公开查询必须按添加时间排序，实际为: " + sqlSegment);
+        assertTrue(sqlSegment.contains("id"), () -> "公开查询必须使用 id 兜底排序，实际为: " + sqlSegment);
     }
 
     @Test
@@ -230,6 +231,32 @@ class MusicRadioServiceImplTest {
         assertThrows(BadRequestException.class, () -> service.createTrack(command));
 
         verify(trackMapper, never()).insert(any(MusicTrack.class));
+    }
+
+    @Test
+    void shouldAcceptLrcMetadataWhenCreatingTrack() {
+        initTableInfo(MusicTrack.class);
+        MusicTrackMapper trackMapper = mock(MusicTrackMapper.class);
+        MusicPlaylistMapper playlistMapper = mock(MusicPlaylistMapper.class);
+        MusicPlaylistTrackMapper playlistTrackMapper = mock(MusicPlaylistTrackMapper.class);
+        SysFileService sysFileService = mock(SysFileService.class);
+        MusicRadioServiceImpl service = new MusicRadioServiceImpl(trackMapper, playlistMapper, playlistTrackMapper, sysFileService);
+        MusicTrackUpsertCommand command = buildTrackCommand(
+                "https://cdn.example.com/audio/temp.mp3",
+                "https://cdn.example.com/cover/temp.webp");
+        command.setLyricType(MusicTrack.LYRIC_TYPE_LRC);
+        command.setLyrics("[ti:Night Walk]\n[ar:helychen]\n[00:12.00]第一句歌词");
+
+        when(trackMapper.insert(any(MusicTrack.class))).thenAnswer(invocation -> {
+            MusicTrack inserted = invocation.getArgument(0);
+            inserted.setId(43L);
+            return 1;
+        });
+        when(trackMapper.selectById(43L)).thenReturn(buildTrack(43L, "Night Walk", MusicTrack.STATUS_DRAFT, "radio"));
+
+        service.createTrack(command);
+
+        verify(trackMapper).insert(any(MusicTrack.class));
     }
 
     @Test

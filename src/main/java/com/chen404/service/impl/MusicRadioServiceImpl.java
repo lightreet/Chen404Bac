@@ -32,12 +32,17 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.regex.Pattern;
 
+/**
+ * 音乐馆歌曲、歌单和歌单曲目编排的业务服务实现。
+ */
 @Service
 public class MusicRadioServiceImpl implements MusicRadioService {
 
     private static final int YES = 1;
     private static final int NO = 0;
-    private static final Pattern LRC_LINE_PATTERN = Pattern.compile("^\\[\\d{1,2}:\\d{2}(?:\\.\\d{1,3})?].*$");
+    private static final int DEFAULT_SORT_ORDER = 0;
+    private static final Pattern LRC_TIME_LINE_PATTERN = Pattern.compile("^\\[\\d{1,2}:\\d{2}(?:\\.\\d{1,3})?].*$");
+    private static final Pattern LRC_METADATA_LINE_PATTERN = Pattern.compile("^\\[[a-zA-Z]+:.*]$");
 
     private final MusicTrackMapper musicTrackMapper;
     private final MusicPlaylistMapper musicPlaylistMapper;
@@ -59,7 +64,7 @@ public class MusicRadioServiceImpl implements MusicRadioService {
     public List<MusicTrackVO> listPublicTracks() {
         LambdaQueryWrapper<MusicTrack> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(MusicTrack::getStatus, MusicTrack.STATUS_PUBLISHED)
-                .orderByAsc(MusicTrack::getSortOrder)
+                .orderByDesc(MusicTrack::getCreateTime)
                 .orderByDesc(MusicTrack::getId);
         return musicTrackMapper.selectList(wrapper).stream().map(this::toTrackVO).toList();
     }
@@ -77,7 +82,7 @@ public class MusicRadioServiceImpl implements MusicRadioService {
     public List<MusicPlaylistVO> listPublicPlaylists() {
         LambdaQueryWrapper<MusicPlaylist> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(MusicPlaylist::getIsPublic, YES)
-                .orderByAsc(MusicPlaylist::getSortOrder)
+                .orderByDesc(MusicPlaylist::getCreateTime)
                 .orderByDesc(MusicPlaylist::getId);
         return musicPlaylistMapper.selectList(wrapper).stream()
                 .map(playlist -> toPlaylistVO(playlist, false))
@@ -98,7 +103,7 @@ public class MusicRadioServiceImpl implements MusicRadioService {
         LambdaQueryWrapper<MusicPlaylist> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(MusicPlaylist::getIsDefault, YES)
                 .eq(MusicPlaylist::getIsPublic, YES)
-                .orderByAsc(MusicPlaylist::getSortOrder)
+                .orderByDesc(MusicPlaylist::getCreateTime)
                 .orderByDesc(MusicPlaylist::getId)
                 .last("LIMIT 1");
         List<MusicPlaylist> playlists = musicPlaylistMapper.selectList(wrapper);
@@ -117,7 +122,7 @@ public class MusicRadioServiceImpl implements MusicRadioService {
     @Override
     public List<MusicTrackVO> listAdminTracks() {
         LambdaQueryWrapper<MusicTrack> wrapper = new LambdaQueryWrapper<>();
-        wrapper.orderByAsc(MusicTrack::getSortOrder).orderByDesc(MusicTrack::getId);
+        wrapper.orderByDesc(MusicTrack::getCreateTime).orderByDesc(MusicTrack::getId);
         return musicTrackMapper.selectList(wrapper).stream().map(this::toTrackVO).toList();
     }
 
@@ -171,7 +176,7 @@ public class MusicRadioServiceImpl implements MusicRadioService {
     @Override
     public List<MusicPlaylistVO> listAdminPlaylists() {
         LambdaQueryWrapper<MusicPlaylist> wrapper = new LambdaQueryWrapper<>();
-        wrapper.orderByAsc(MusicPlaylist::getSortOrder).orderByDesc(MusicPlaylist::getId);
+        wrapper.orderByDesc(MusicPlaylist::getCreateTime).orderByDesc(MusicPlaylist::getId);
         return musicPlaylistMapper.selectList(wrapper).stream()
                 .map(playlist -> toPlaylistVO(playlist, true, false))
                 .toList();
@@ -341,7 +346,7 @@ public class MusicRadioServiceImpl implements MusicRadioService {
         track.setRecommendation(trim(command.getRecommendation()));
         track.setMoodText(trim(command.getMoodText()));
         track.setStatus(normalizeStatus(command.getStatus()));
-        track.setSortOrder(command.getSortOrder() == null ? 0 : command.getSortOrder());
+        track.setSortOrder(DEFAULT_SORT_ORDER);
         return track;
     }
 
@@ -366,7 +371,7 @@ public class MusicRadioServiceImpl implements MusicRadioService {
         playlist.setOpeningText(trim(command.getOpeningText()));
         playlist.setIsDefault(Boolean.TRUE.equals(command.getDefaultPlaylist()) ? YES : NO);
         playlist.setIsPublic(command.getPublicPlaylist() == null || Boolean.TRUE.equals(command.getPublicPlaylist()) ? YES : NO);
-        playlist.setSortOrder(command.getSortOrder() == null ? 0 : command.getSortOrder());
+        playlist.setSortOrder(DEFAULT_SORT_ORDER);
         return playlist;
     }
 
@@ -408,10 +413,15 @@ public class MusicRadioServiceImpl implements MusicRadioService {
             if (!StringUtils.hasText(line)) {
                 continue;
             }
-            if (!LRC_LINE_PATTERN.matcher(line).matches()) {
+            if (!isSupportedLrcLine(line)) {
                 throw new BadRequestException("LRC 歌词第 " + (index + 1) + " 行格式不正确");
             }
         }
+    }
+
+    private boolean isSupportedLrcLine(String line) {
+        return LRC_TIME_LINE_PATTERN.matcher(line).matches()
+                || LRC_METADATA_LINE_PATTERN.matcher(line).matches();
     }
 
     private List<String> parseTags(String tags) {
