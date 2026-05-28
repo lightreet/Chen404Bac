@@ -2,6 +2,7 @@ package com.chen404.service.support.scenario.music;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONException;
 import com.alibaba.fastjson2.JSONObject;
 import com.chen404.service.support.AiLlmRequestFactory;
 import com.chen404.service.support.LlmClient;
@@ -35,6 +36,10 @@ public class MusicTrackSuggestScenarioDefinition implements AiScenarioDefinition
     private static final int MAX_RECOMMENDATION_LENGTH = 140;
     private static final int MAX_MOOD_TEXT_LENGTH = 80;
     private static final int MAX_MATCH_REASON_LENGTH = 120;
+    private static final char JSON_OBJECT_OPEN = '{';
+    private static final char JSON_OBJECT_CLOSE = '}';
+    private static final char JSON_ARRAY_OPEN = '[';
+    private static final char JSON_ARRAY_CLOSE = ']';
 
     private final LlmClient llmClient;
     private final AiLlmRequestFactory aiLlmRequestFactory;
@@ -94,7 +99,7 @@ public class MusicTrackSuggestScenarioDefinition implements AiScenarioDefinition
     }
 
     private MusicTrackSuggestScenarioResult parseResponse(String outputText, int limit) {
-        JSONObject payload = JSON.parseObject(stripCodeFence(outputText));
+        JSONObject payload = parseJsonObject(outputText);
         JSONArray rawCandidates = payload.getJSONArray("candidates");
         if (rawCandidates == null) {
             rawCandidates = new JSONArray();
@@ -110,6 +115,86 @@ public class MusicTrackSuggestScenarioDefinition implements AiScenarioDefinition
             }
         }
         return new MusicTrackSuggestScenarioResult(candidates);
+    }
+
+    private JSONObject parseJsonObject(String outputText) {
+        String jsonText = stripCodeFence(outputText);
+        try {
+            return JSON.parseObject(jsonText);
+        } catch (JSONException ex) {
+            return JSON.parseObject(repairJsonStructure(jsonText));
+        }
+    }
+
+    /**
+     * 尝试修复 LLM 常见的括号闭合错误，避免单个候选末尾把 `}` 写成 `]` 直接导致整段失败。
+     */
+    private String repairJsonStructure(String jsonText) {
+        if (!StringUtils.hasText(jsonText)) {
+            return EMPTY_TEXT;
+        }
+        StringBuilder repaired = new StringBuilder(jsonText.length() + 8);
+        List<Character> stack = new ArrayList<>();
+        boolean inString = false;
+        boolean escaping = false;
+        for (int i = 0; i < jsonText.length(); i++) {
+            char current = jsonText.charAt(i);
+            if (escaping) {
+                repaired.append(current);
+                escaping = false;
+                continue;
+            }
+            if (current == '\\') {
+                repaired.append(current);
+                escaping = true;
+                continue;
+            }
+            if (current == '"') {
+                repaired.append(current);
+                inString = !inString;
+                continue;
+            }
+            if (inString) {
+                repaired.append(current);
+                continue;
+            }
+            if (current == JSON_OBJECT_OPEN || current == JSON_ARRAY_OPEN) {
+                stack.add(current);
+                repaired.append(current);
+                continue;
+            }
+            if (current == JSON_OBJECT_CLOSE || current == JSON_ARRAY_CLOSE) {
+                char normalized = normalizeClosingChar(current, stack);
+                if (normalized != '\0') {
+                    repaired.append(normalized);
+                }
+                continue;
+            }
+            repaired.append(current);
+        }
+        for (int i = stack.size() - 1; i >= 0; i--) {
+            repaired.append(stack.get(i) == JSON_OBJECT_OPEN ? JSON_OBJECT_CLOSE : JSON_ARRAY_CLOSE);
+        }
+        return repaired.toString();
+    }
+
+    private char normalizeClosingChar(char current, List<Character> stack) {
+        if (stack.isEmpty()) {
+            return '\0';
+        }
+        char lastOpen = stack.get(stack.size() - 1);
+        if (matches(lastOpen, current)) {
+            stack.remove(stack.size() - 1);
+            return current;
+        }
+        char repaired = lastOpen == JSON_OBJECT_OPEN ? JSON_OBJECT_CLOSE : JSON_ARRAY_CLOSE;
+        stack.remove(stack.size() - 1);
+        return repaired;
+    }
+
+    private boolean matches(char openChar, char closeChar) {
+        return (openChar == JSON_OBJECT_OPEN && closeChar == JSON_OBJECT_CLOSE)
+                || (openChar == JSON_ARRAY_OPEN && closeChar == JSON_ARRAY_CLOSE);
     }
 
     private MusicTrackSuggestCandidate normalizeCandidate(JSONObject payload) {

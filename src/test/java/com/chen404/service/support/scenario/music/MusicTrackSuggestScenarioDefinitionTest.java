@@ -129,6 +129,28 @@ class MusicTrackSuggestScenarioDefinitionTest {
         assertEquals("low", candidate.confidence());
     }
 
+    @Test
+    void shouldRepairMismatchedJsonClosersFromLlm() {
+        LlmClient llmClient = mock(LlmClient.class);
+        when(llmClient.generateText(any(LlmTextRequest.class))).thenReturn("""
+                {"candidates":[{"title":"红蔷薇白玫瑰","artist":"邓紫棋","album":null,"releaseYear":null,"language":"中文","genre":"流行","tags":["华语流行","女声","抒情","都市情感"],"recommendation":"情绪层层递进，适合夜晚安静聆听。","moodText":"像在爱与自我之间轻轻拉扯，克制里带一点倔强。","lyricSource":null,"confidence":"medium","matchReason":"已提供歌手为邓紫棋，标题与歌手组合指向性较强，但缺少专辑与发行年份等进一步校验信息。"]}]}
+                """);
+
+        MusicTrackSuggestScenarioDefinition definition = new MusicTrackSuggestScenarioDefinition(llmClient, requestFactory());
+        MusicTrackSuggestScenarioResult result = definition.execute(
+                AiScenarioRequest.of(
+                        AiScenarioCode.MUSIC_TRACK_SUGGEST,
+                        new MusicTrackSuggestScenarioRequest("红蔷薇白玫瑰", "邓紫棋", null, null, null, null, 5)
+                )
+        ).data();
+
+        assertEquals(1, result.candidates().size());
+        MusicTrackSuggestCandidate candidate = result.candidates().get(0);
+        assertEquals("红蔷薇白玫瑰", candidate.title());
+        assertEquals("邓紫棋", candidate.artist());
+        assertEquals("medium", candidate.confidence());
+    }
+
     private AiLlmRequestFactory requestFactory() {
         AiConfigService aiConfigService = mock(AiConfigService.class);
         when(aiConfigService.getEffectiveConfig()).thenReturn(defaultAiConfig());
