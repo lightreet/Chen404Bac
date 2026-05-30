@@ -62,6 +62,7 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
     private static final String EMPTY_TEXT_ERROR = "LLM 响应缺少文本内容";
     private static final String SSE_DONE_MARKER = "[DONE]";
     private static final String SSE_DATA_PREFIX = "data:";
+    private static final String LINE_BREAK_REGEX = "\\R";
 
     private final LlmProperties llmProperties;
     private final HttpClient httpClient;
@@ -88,6 +89,10 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
             }
 
             String outputText = extractOutputText(response.body());
+            if (!StringUtils.hasText(outputText) && shouldRetryEmptySseWithStream(apiStyle, response.body())) {
+                log.warn("[LLM_TEXT_EMPTY_SSE_RETRY] model={}", resolveModel(request));
+                outputText = retryEmptySseWithStream(request);
+            }
             if (!StringUtils.hasText(outputText)) {
                 log.warn("[LLM_TEXT_EMPTY] model={} body={}", resolveModel(request), response.body());
                 throw new IllegalStateException(EMPTY_TEXT_ERROR);
@@ -168,6 +173,9 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
         boolean useResponses = STYLE_RESPONSES.equals(apiStyle);
         String endpoint = useResponses ? resolveResponsesPath(request) : resolveChatCompletionsPath(request);
         JSONObject body = useResponses ? buildResponsesBody(request) : buildChatCompletionsBody(request);
+        if (!useResponses) {
+            body.put(FIELD_STREAM, false);
+        }
 
         return HttpRequest.newBuilder()
                 .uri(URI.create(normalizeBaseUrl(resolveBaseUrl(request)) + normalizePath(endpoint)))
@@ -226,8 +234,75 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
     }
 
     private String extractOutputText(String rawBody) {
-        JSONObject root = JSON.parseObject(rawBody);
+        if (!StringUtils.hasText(rawBody)) {
+            return null;
+        }
+        if (isSseBody(rawBody)) {
+            return extractOutputTextFromSse(rawBody);
+        }
 
+        JSONObject root = JSON.parseObject(rawBody);
+        return extractOutputTextFromJson(root);
+    }
+
+    private boolean isSseBody(String rawBody) {
+        return rawBody.trim().startsWith(SSE_DATA_PREFIX);
+    }
+
+    private String extractOutputTextFromSse(String rawBody) {
+        StringBuilder outputText = new StringBuilder();
+        for (String line : rawBody.split(LINE_BREAK_REGEX)) {
+            String trimmed = line.trim();
+            if (!trimmed.startsWith(SSE_DATA_PREFIX)) {
+                continue;
+            }
+            String payload = trimmed.substring(SSE_DATA_PREFIX.length()).trim();
+            if (SSE_DONE_MARKER.equals(payload)) {
+                continue;
+            }
+            String text = extractSsePayloadText(payload);
+            if (StringUtils.hasText(text)) {
+                outputText.append(text);
+            }
+        }
+        return outputText.toString();
+    }
+
+    private boolean shouldRetryEmptySseWithStream(String apiStyle, String rawBody) {
+        return STYLE_CHAT_COMPLETIONS.equals(apiStyle) && isSseBody(rawBody);
+    }
+
+    private String retryEmptySseWithStream(LlmTextRequest request) {
+        StringBuilder outputText = new StringBuilder();
+        streamText(request, new LlmTextStreamHandler() {
+            @Override
+            public boolean isCancelled() {
+                return false;
+            }
+
+            @Override
+            public void onTextDelta(String text) {
+                outputText.append(text);
+            }
+
+            @Override
+            public void onComplete() {
+                // Completion is represented by returning the collected text.
+            }
+        });
+        return outputText.toString();
+    }
+
+    private String extractSsePayloadText(String payload) {
+        JSONObject root = JSON.parseObject(payload);
+        String deltaText = extractDeltaText(root);
+        if (StringUtils.hasText(deltaText)) {
+            return deltaText;
+        }
+        return extractOutputTextFromJson(root);
+    }
+
+    private String extractOutputTextFromJson(JSONObject root) {
         String outputText = root.getString(FIELD_OUTPUT_TEXT);
         if (StringUtils.hasText(outputText)) {
             return outputText;
@@ -287,7 +362,10 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
     }
 
     private String extractDeltaText(String payload) {
-        JSONObject root = JSON.parseObject(payload);
+        return extractDeltaText(JSON.parseObject(payload));
+    }
+
+    private String extractDeltaText(JSONObject root) {
         JSONArray choices = root.getJSONArray(FIELD_CHOICES);
         if (choices == null || choices.isEmpty()) {
             return null;
