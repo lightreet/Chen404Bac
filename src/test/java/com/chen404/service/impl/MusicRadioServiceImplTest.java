@@ -14,6 +14,7 @@ import com.chen404.exception.BadRequestException;
 import com.chen404.mapper.MusicPlaylistMapper;
 import com.chen404.mapper.MusicPlaylistTrackMapper;
 import com.chen404.mapper.MusicTrackMapper;
+import com.chen404.service.FileReferenceService;
 import com.chen404.service.SysFileService;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.Test;
@@ -41,7 +42,7 @@ class MusicRadioServiceImplTest {
         MusicPlaylistMapper playlistMapper = mock(MusicPlaylistMapper.class);
         MusicPlaylistTrackMapper playlistTrackMapper = mock(MusicPlaylistTrackMapper.class);
         SysFileService sysFileService = mock(SysFileService.class);
-        MusicRadioServiceImpl service = new MusicRadioServiceImpl(trackMapper, playlistMapper, playlistTrackMapper, sysFileService);
+        MusicRadioServiceImpl service = buildService(trackMapper, playlistMapper, playlistTrackMapper, sysFileService);
 
         when(trackMapper.selectList(any())).thenReturn(List.of(buildTrack(1L, "春日来信", "published", "夜读,日系")));
 
@@ -68,7 +69,7 @@ class MusicRadioServiceImplTest {
         MusicPlaylistMapper playlistMapper = mock(MusicPlaylistMapper.class);
         MusicPlaylistTrackMapper playlistTrackMapper = mock(MusicPlaylistTrackMapper.class);
         SysFileService sysFileService = mock(SysFileService.class);
-        MusicRadioServiceImpl service = new MusicRadioServiceImpl(trackMapper, playlistMapper, playlistTrackMapper, sysFileService);
+        MusicRadioServiceImpl service = buildService(trackMapper, playlistMapper, playlistTrackMapper, sysFileService);
 
         MusicPlaylist playlist = new MusicPlaylist();
         playlist.setId(7L);
@@ -111,7 +112,7 @@ class MusicRadioServiceImplTest {
         MusicPlaylistMapper playlistMapper = mock(MusicPlaylistMapper.class);
         MusicPlaylistTrackMapper playlistTrackMapper = mock(MusicPlaylistTrackMapper.class);
         SysFileService sysFileService = mock(SysFileService.class);
-        MusicRadioServiceImpl service = new MusicRadioServiceImpl(trackMapper, playlistMapper, playlistTrackMapper, sysFileService);
+        MusicRadioServiceImpl service = buildService(trackMapper, playlistMapper, playlistTrackMapper, sysFileService);
 
         MusicPlaylist playlist = new MusicPlaylist();
         playlist.setId(9L);
@@ -143,7 +144,7 @@ class MusicRadioServiceImplTest {
         MusicPlaylistMapper playlistMapper = mock(MusicPlaylistMapper.class);
         MusicPlaylistTrackMapper playlistTrackMapper = mock(MusicPlaylistTrackMapper.class);
         SysFileService sysFileService = mock(SysFileService.class);
-        MusicRadioServiceImpl service = new MusicRadioServiceImpl(trackMapper, playlistMapper, playlistTrackMapper, sysFileService);
+        MusicRadioServiceImpl service = buildService(trackMapper, playlistMapper, playlistTrackMapper, sysFileService);
         MusicTrackUpsertCommand command = buildTrackCommand(
                 "https://cdn.example.com/audio/temp.mp3",
                 "https://cdn.example.com/cover/temp.webp");
@@ -174,7 +175,7 @@ class MusicRadioServiceImplTest {
         MusicPlaylistMapper playlistMapper = mock(MusicPlaylistMapper.class);
         MusicPlaylistTrackMapper playlistTrackMapper = mock(MusicPlaylistTrackMapper.class);
         SysFileService sysFileService = mock(SysFileService.class);
-        MusicRadioServiceImpl service = new MusicRadioServiceImpl(trackMapper, playlistMapper, playlistTrackMapper, sysFileService);
+        MusicRadioServiceImpl service = buildService(trackMapper, playlistMapper, playlistTrackMapper, sysFileService);
         MusicTrack draftTrack = buildTrack(11L, "草稿里的歌", MusicTrack.STATUS_DRAFT, "draft,editor");
         when(trackMapper.selectById(11L)).thenReturn(draftTrack);
 
@@ -194,7 +195,7 @@ class MusicRadioServiceImplTest {
         MusicPlaylistMapper playlistMapper = mock(MusicPlaylistMapper.class);
         MusicPlaylistTrackMapper playlistTrackMapper = mock(MusicPlaylistTrackMapper.class);
         SysFileService sysFileService = mock(SysFileService.class);
-        MusicRadioServiceImpl service = new MusicRadioServiceImpl(trackMapper, playlistMapper, playlistTrackMapper, sysFileService);
+        MusicRadioServiceImpl service = buildService(trackMapper, playlistMapper, playlistTrackMapper, sysFileService);
         MusicTrack existing = buildTrack(7L, "Old Song", MusicTrack.STATUS_DRAFT, "radio");
         MusicTrackUpsertCommand command = buildTrackCommand(
                 "https://cdn.example.com/audio/new-temp.mp3",
@@ -221,7 +222,7 @@ class MusicRadioServiceImplTest {
         MusicPlaylistMapper playlistMapper = mock(MusicPlaylistMapper.class);
         MusicPlaylistTrackMapper playlistTrackMapper = mock(MusicPlaylistTrackMapper.class);
         SysFileService sysFileService = mock(SysFileService.class);
-        MusicRadioServiceImpl service = new MusicRadioServiceImpl(trackMapper, playlistMapper, playlistTrackMapper, sysFileService);
+        MusicRadioServiceImpl service = buildService(trackMapper, playlistMapper, playlistTrackMapper, sysFileService);
         MusicTrackUpsertCommand command = buildTrackCommand(
                 "https://cdn.example.com/audio/temp.mp3",
                 "https://cdn.example.com/cover/temp.webp");
@@ -240,7 +241,7 @@ class MusicRadioServiceImplTest {
         MusicPlaylistMapper playlistMapper = mock(MusicPlaylistMapper.class);
         MusicPlaylistTrackMapper playlistTrackMapper = mock(MusicPlaylistTrackMapper.class);
         SysFileService sysFileService = mock(SysFileService.class);
-        MusicRadioServiceImpl service = new MusicRadioServiceImpl(trackMapper, playlistMapper, playlistTrackMapper, sysFileService);
+        MusicRadioServiceImpl service = buildService(trackMapper, playlistMapper, playlistTrackMapper, sysFileService);
         MusicTrackUpsertCommand command = buildTrackCommand(
                 "https://cdn.example.com/audio/temp.mp3",
                 "https://cdn.example.com/cover/temp.webp");
@@ -267,7 +268,7 @@ class MusicRadioServiceImplTest {
         MusicPlaylistMapper playlistMapper = mock(MusicPlaylistMapper.class);
         MusicPlaylistTrackMapper playlistTrackMapper = mock(MusicPlaylistTrackMapper.class);
         SysFileService sysFileService = mock(SysFileService.class);
-        MusicRadioServiceImpl service = new MusicRadioServiceImpl(trackMapper, playlistMapper, playlistTrackMapper, sysFileService);
+        MusicRadioServiceImpl service = buildService(trackMapper, playlistMapper, playlistTrackMapper, sysFileService);
         when(trackMapper.selectById(5L)).thenReturn(buildTrack(5L, "Unlinked Song", MusicTrack.STATUS_DRAFT, "radio"));
         when(playlistTrackMapper.selectCount(any())).thenReturn(0L);
 
@@ -284,7 +285,7 @@ class MusicRadioServiceImplTest {
         MusicPlaylistMapper playlistMapper = mock(MusicPlaylistMapper.class);
         MusicPlaylistTrackMapper playlistTrackMapper = mock(MusicPlaylistTrackMapper.class);
         SysFileService sysFileService = mock(SysFileService.class);
-        MusicRadioServiceImpl service = new MusicRadioServiceImpl(trackMapper, playlistMapper, playlistTrackMapper, sysFileService);
+        MusicRadioServiceImpl service = buildService(trackMapper, playlistMapper, playlistTrackMapper, sysFileService);
         when(trackMapper.selectById(5L)).thenReturn(buildTrack(5L, "Linked Song", MusicTrack.STATUS_DRAFT, "radio"));
         when(playlistTrackMapper.selectCount(any())).thenReturn(1L);
 
@@ -313,6 +314,20 @@ class MusicRadioServiceImplTest {
         command.setCoverUrl(coverUrl);
         command.setStatus(MusicTrack.STATUS_DRAFT);
         return command;
+    }
+
+    private MusicRadioServiceImpl buildService(
+            MusicTrackMapper trackMapper,
+            MusicPlaylistMapper playlistMapper,
+            MusicPlaylistTrackMapper playlistTrackMapper,
+            SysFileService sysFileService) {
+        return new MusicRadioServiceImpl(
+                trackMapper,
+                playlistMapper,
+                playlistTrackMapper,
+                sysFileService,
+                mock(FileReferenceService.class)
+        );
     }
 
     private void initTableInfo(Class<?> entityClass) {
