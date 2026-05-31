@@ -16,6 +16,7 @@ import com.chen404.exception.ResourceNotFoundException;
 import com.chen404.mapper.MusicPlaylistMapper;
 import com.chen404.mapper.MusicPlaylistTrackMapper;
 import com.chen404.mapper.MusicTrackMapper;
+import com.chen404.service.FileReferenceService;
 import com.chen404.service.MusicRadioService;
 import com.chen404.service.SysFileService;
 import org.springframework.stereotype.Service;
@@ -48,16 +49,19 @@ public class MusicRadioServiceImpl implements MusicRadioService {
     private final MusicPlaylistMapper musicPlaylistMapper;
     private final MusicPlaylistTrackMapper musicPlaylistTrackMapper;
     private final SysFileService sysFileService;
+    private final FileReferenceService fileReferenceService;
 
     public MusicRadioServiceImpl(
             MusicTrackMapper musicTrackMapper,
             MusicPlaylistMapper musicPlaylistMapper,
             MusicPlaylistTrackMapper musicPlaylistTrackMapper,
-            SysFileService sysFileService) {
+            SysFileService sysFileService,
+            FileReferenceService fileReferenceService) {
         this.musicTrackMapper = musicTrackMapper;
         this.musicPlaylistMapper = musicPlaylistMapper;
         this.musicPlaylistTrackMapper = musicPlaylistTrackMapper;
         this.sysFileService = sysFileService;
+        this.fileReferenceService = fileReferenceService;
     }
 
     @Override
@@ -137,6 +141,7 @@ public class MusicRadioServiceImpl implements MusicRadioService {
         MusicTrack track = toTrack(command);
         musicTrackMapper.insert(track);
         convertTrackFilesToPermanent(track.getId(), track);
+        syncTrackFileReferences(track.getId(), track);
         return toTrackVO(musicTrackMapper.selectById(track.getId()));
     }
 
@@ -148,6 +153,7 @@ public class MusicRadioServiceImpl implements MusicRadioService {
         track.setId(id);
         musicTrackMapper.updateById(track);
         convertTrackFilesToPermanent(id, track);
+        syncTrackFileReferences(id, track);
         return toTrackVO(musicTrackMapper.selectById(id));
     }
 
@@ -171,6 +177,7 @@ public class MusicRadioServiceImpl implements MusicRadioService {
             throw new BadRequestException("歌曲已被分类引用，请先从分类中移除");
         }
         musicTrackMapper.deleteById(id);
+        fileReferenceService.syncMusicTrackReferences(id, null, null, null, null);
     }
 
     @Override
@@ -373,6 +380,19 @@ public class MusicRadioServiceImpl implements MusicRadioService {
         if (StringUtils.hasText(track.getCoverUrl())) {
             sysFileService.convertToPermanent(List.of(track.getCoverUrl()), SysFile.RefType.MUSIC_COVER, trackId);
         }
+    }
+
+    private void syncTrackFileReferences(Long trackId, MusicTrack track) {
+        if (trackId == null || track == null) {
+            return;
+        }
+        fileReferenceService.syncMusicTrackReferences(
+                trackId,
+                track.getAudioFileId(),
+                track.getAudioUrl(),
+                track.getCoverFileId(),
+                track.getCoverUrl()
+        );
     }
 
     private MusicPlaylist toPlaylist(MusicPlaylistUpsertCommand command) {

@@ -106,7 +106,7 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
             throw new RuntimeException("用户不存在");
         }
         if (UserRoleEnum.ADMIN.matchesRoleCode(currentUser.getRoleCode())) {
-            throw new RuntimeException("管理员无需申请受信权限");
+            throw new RuntimeException("管理员无需提交好友申请");
         }
         if (Objects.equals(currentUser.getTrustLevel(), UserTrustLevelEnum.FRIEND.getLevel())) {
             throw new RuntimeException("你已经是知友了");
@@ -144,7 +144,7 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
         try {
             sendAdminNotificationEmail(currentUser, request, attachments, approveToken);
         } catch (Exception e) {
-            log.warn("发送受信申请通知邮件失败，请求ID={}", request.getId(), e);
+            log.warn("发送好友申请通知邮件失败，请求ID={}", request.getId(), e);
         }
 
         return buildTrustRequestVO(request, currentUser, null, attachments);
@@ -261,7 +261,7 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
         try {
             sendApplicantResultEmail(applicant, false, note);
         } catch (Exception e) {
-            log.warn("发送受信申请拒绝邮件失败，请求ID={}", request.getId(), e);
+            log.warn("发送好友申请拒绝邮件失败，请求ID={}", request.getId(), e);
         }
 
         Map<Long, User> users = loadUsers(Set.of(request.getUserId()));
@@ -313,7 +313,7 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
         try {
             sendApplicantResultEmail(applicant, true, request.getReviewNote());
         } catch (Exception e) {
-            log.warn("发送受信申请通过邮件失败，请求ID={}", request.getId(), e);
+            log.warn("发送好友申请通过邮件失败，请求ID={}", request.getId(), e);
         }
 
         return request;
@@ -469,7 +469,7 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
     ) {
         String adminEmail = resolveAdminEmail();
         if (!StringUtils.hasText(adminEmail)) {
-            log.warn("未配置管理员通知邮箱，跳过受信申请邮件通知");
+            log.warn("未配置管理员通知邮箱，跳过好友申请邮件通知");
             return;
         }
 
@@ -481,9 +481,9 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
         String adminUrl = joinUrl(frontendBaseUrl, "/admin?tab=trust-requests");
 
         Map<String, String> variables = new LinkedHashMap<>(mailTemplateSupport.buildBrandVariables());
-        variables.put("mailEyebrow", "Trust Request");
-        variables.put("mailTitle", "新的受信任用户申请");
-        variables.put("mailLead", "有一位读者提交了受信任用户申请，下面是本次申请的核心信息。");
+        variables.put("mailEyebrow", "Friend Request");
+        variables.put("mailTitle", "新的好友申请");
+        variables.put("mailLead", "有一位读者提交了好友申请，下面是本次申请的核心信息。");
         variables.put("applicantName", mailTemplateSupport.safeText(applicantName));
         variables.put("username", mailTemplateSupport.safeText(applicant.getUsername()));
         variables.put("applicantAvatarVisual", buildApplicantAvatarVisual(applicant, applicantName));
@@ -499,7 +499,7 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
         String html = mailTemplateSupport.render(ADMIN_NOTIFICATION_TEMPLATE, variables);
         emailService.sendHtmlEmail(
                 adminEmail,
-                MAIL_SUBJECT_PREFIX + "新的受信任用户申请 - " + mailTemplateSupport.safeText(applicant.getUsername()),
+                MAIL_SUBJECT_PREFIX + "新的好友申请 - " + mailTemplateSupport.safeText(applicant.getUsername()),
                 html
         );
     }
@@ -509,7 +509,7 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
             return;
         }
 
-        String title = approved ? "你的受信任用户申请已通过" : "你的受信任用户申请未通过";
+        String title = approved ? "你的好友申请已通过" : "你的好友申请未通过";
         Map<String, String> variables = new LinkedHashMap<>(mailTemplateSupport.buildBrandVariables());
         variables.put("mailEyebrow", approved ? "Approved" : "Rejected");
         variables.put("title", mailTemplateSupport.safeText(title));

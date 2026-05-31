@@ -24,6 +24,7 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -38,6 +39,7 @@ public class AdminFileServiceImpl implements AdminFileService {
     private static final String STATUS_UNREFERENCED = "UNREFERENCED";
     private static final String STATUS_DELETED = "DELETED";
     private static final String STATUS_UNKNOWN = "UNKNOWN";
+    private static final String REFERENCED_FILE_IDS_SQL = "select distinct file_id from file_reference";
 
     private final SysFileService sysFileService;
     private final FileReferenceService fileReferenceService;
@@ -82,23 +84,9 @@ public class AdminFileServiceImpl implements AdminFileService {
             wrapper.eq(SysFile::getRefType, refType.trim());
         }
         if (StringUtils.hasText(referenceStatus)) {
-            return getAdminFilesWithReferenceStatus(current, pageSize, wrapper, referenced, referenceStatus.trim());
-        }
-        if (referenced != null) {
-            Set<Long> referencedFileIds = fileReferenceService.list(new LambdaQueryWrapper<FileReference>()
-                            .select(FileReference::getFileId))
-                    .stream()
-                    .map(FileReference::getFileId)
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toSet());
-            if (referenced) {
-                if (referencedFileIds.isEmpty()) {
-                    return new PageResult<>(List.of(), 0L, current, pageSize);
-                }
-                wrapper.in(SysFile::getId, referencedFileIds);
-            } else if (!referencedFileIds.isEmpty()) {
-                wrapper.notIn(SysFile::getId, referencedFileIds);
-            }
+            applyReferenceStatusFilter(wrapper, referenceStatus.trim());
+        } else {
+            applyReferencedFilter(wrapper, referenced);
         }
 
         Page<SysFile> filePage = sysFileService.page(new Page<>(current, pageSize), wrapper);
@@ -121,46 +109,6 @@ public class AdminFileServiceImpl implements AdminFileService {
                 .toList();
 
         return new PageResult<>(list, filePage.getTotal(), current, pageSize);
-    }
-
-    private PageResult<AdminFileVO> getAdminFilesWithReferenceStatus(
-            long current,
-            long pageSize,
-            LambdaQueryWrapper<SysFile> wrapper,
-            Boolean referenced,
-            String referenceStatus) {
-        List<SysFile> matchedFiles = sysFileService.list(wrapper);
-        if (matchedFiles.isEmpty()) {
-            return new PageResult<>(List.of(), 0L, current, pageSize);
-        }
-
-        Map<Long, List<FileReference>> referenceMap = loadReferenceMap(matchedFiles.stream()
-                .map(SysFile::getId)
-                .filter(Objects::nonNull)
-                .toList());
-
-        List<SysFile> filteredFiles = matchedFiles.stream()
-                .filter(file -> matchesReferencedFilter(file, referenceMap.getOrDefault(file.getId(), List.of()), referenced))
-                .filter(file -> matchesReferenceStatus(file, referenceMap.getOrDefault(file.getId(), List.of()), referenceStatus))
-                .toList();
-        if (filteredFiles.isEmpty()) {
-            return new PageResult<>(List.of(), 0L, current, pageSize);
-        }
-
-        int fromIndex = (int) Math.min((current - 1) * pageSize, filteredFiles.size());
-        int toIndex = (int) Math.min(fromIndex + pageSize, filteredFiles.size());
-        List<SysFile> pageFiles = filteredFiles.subList(fromIndex, toIndex);
-
-        Map<Long, User> userMap = loadUserMap(pageFiles.stream()
-                .map(SysFile::getUserId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet()));
-
-        List<AdminFileVO> list = pageFiles.stream()
-                .map(file -> toAdminFileVO(file, referenceMap.getOrDefault(file.getId(), List.of()), findUser(userMap, file)))
-                .toList();
-
-        return new PageResult<>(list, (long) filteredFiles.size(), current, pageSize);
     }
 
     @Override
@@ -324,19 +272,36 @@ public class AdminFileServiceImpl implements AdminFileService {
         return STATUS_UNKNOWN;
     }
 
-    private boolean matchesReferencedFilter(SysFile file, List<FileReference> references, Boolean referenced) {
-        if (referenced == null) {
-            return true;
+    private void applyReferencedFilter(LambdaQueryWrapper<SysFile> wrapper, Boolean referenced) {
+        if (wrapper == null || referenced == null) {
+            return;
         }
-        boolean isReferenced = STATUS_REFERENCED.equals(resolveReferenceStatus(file, references));
-        return referenced == isReferenced;
+        if (referenced) {
+            wrapper.inSql(SysFile::getId, REFERENCED_FILE_IDS_SQL);
+            return;
+        }
+        wrapper.notInSql(SysFile::getId, REFERENCED_FILE_IDS_SQL);
     }
 
-    private boolean matchesReferenceStatus(SysFile file, List<FileReference> references, String referenceStatus) {
-        if (!StringUtils.hasText(referenceStatus)) {
-            return true;
+    private void applyReferenceStatusFilter(LambdaQueryWrapper<SysFile> wrapper, String referenceStatus) {
+        if (wrapper == null || !StringUtils.hasText(referenceStatus)) {
+            return;
         }
-        return referenceStatus.trim().equalsIgnoreCase(resolveReferenceStatus(file, references));
+        String normalizedStatus = referenceStatus.trim().toUpperCase(Locale.ROOT);
+        switch (normalizedStatus) {
+            case STATUS_PENDING -> wrapper.eq(SysFile::getStatus, SysFile.Status.TEMP);
+            case STATUS_DELETED -> wrapper.eq(SysFile::getStatus, SysFile.Status.DELETED);
+            case STATUS_REFERENCED -> {
+                wrapper.eq(SysFile::getStatus, SysFile.Status.PERMANENT);
+                wrapper.inSql(SysFile::getId, REFERENCED_FILE_IDS_SQL);
+            }
+            case STATUS_UNREFERENCED -> {
+                wrapper.eq(SysFile::getStatus, SysFile.Status.PERMANENT);
+                wrapper.notInSql(SysFile::getId, REFERENCED_FILE_IDS_SQL);
+            }
+            default -> {
+            }
+        }
     }
 
     private List<String> extractReferenceModules(List<FileReference> references) {
@@ -372,7 +337,8 @@ public class AdminFileServiceImpl implements AdminFileService {
             case FileReference.ModuleCode.SITE_CONFIG -> "站点配置";
             case FileReference.ModuleCode.TRAVEL_MEMORY -> "旅行记忆地点#" + row.getBizId();
             case FileReference.ModuleCode.TRAVEL_MEMORY_ENTRY -> "旅行记忆图片#" + row.getBizId();
-            case FileReference.ModuleCode.TRUST_REQUEST -> "受信申请#" + row.getBizId();
+            case FileReference.ModuleCode.TRUST_REQUEST -> "好友申请#" + row.getBizId();
+            case FileReference.ModuleCode.MUSIC_TRACK -> "音乐曲目#" + row.getBizId();
             default -> row.getModuleCode() + "#" + row.getBizId();
         };
     }

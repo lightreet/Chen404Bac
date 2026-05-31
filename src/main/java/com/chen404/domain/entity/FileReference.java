@@ -45,6 +45,7 @@ public class FileReference implements Serializable {
         String TRAVEL_MEMORY = "TRAVEL_MEMORY";
         String TRAVEL_MEMORY_ENTRY = "TRAVEL_MEMORY_ENTRY";
         String TRUST_REQUEST = "TRUST_REQUEST";
+        String MUSIC_TRACK = "MUSIC_TRACK";
     }
 
     public interface BizType {
@@ -57,6 +58,8 @@ public class FileReference implements Serializable {
         String TRAVEL_MEMORY_COVER = "TRAVEL_MEMORY_COVER";
         String TRAVEL_MEMORY_ENTRY_IMAGE = "TRAVEL_MEMORY_ENTRY_IMAGE";
         String TRUST_REQUEST_ATTACHMENT = "TRUST_REQUEST_ATTACHMENT";
+        String MUSIC_TRACK_AUDIO = "MUSIC_TRACK_AUDIO";
+        String MUSIC_TRACK_COVER = "MUSIC_TRACK_COVER";
     }
 
     public interface FieldKey {
@@ -66,6 +69,8 @@ public class FileReference implements Serializable {
         String AUTHOR_AVATAR = "authorAvatar";
         String IMAGE_URL = "imageUrl";
         String ATTACHMENTS = "attachments";
+        String AUDIO_URL = "audioUrl";
+        String COVER_URL = "coverUrl";
         String SITE_LOGO = "site.logo";
         String SITE_FAVICON = "site.favicon";
     }

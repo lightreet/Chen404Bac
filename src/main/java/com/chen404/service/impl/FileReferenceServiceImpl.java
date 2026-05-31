@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.chen404.domain.entity.Article;
 import com.chen404.domain.entity.Comment;
 import com.chen404.domain.entity.FileReference;
+import com.chen404.domain.entity.MusicTrack;
 import com.chen404.domain.entity.SiteConfig;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.entity.TravelMemoryEntry;
@@ -14,6 +15,7 @@ import com.chen404.domain.entity.UserTrustRequest;
 import com.chen404.mapper.ArticleMapper;
 import com.chen404.mapper.CommentMapper;
 import com.chen404.mapper.FileReferenceMapper;
+import com.chen404.mapper.MusicTrackMapper;
 import com.chen404.mapper.SiteConfigMapper;
 import com.chen404.mapper.TravelMemoryEntryMapper;
 import com.chen404.mapper.TravelMemoryLocationMapper;
@@ -39,7 +41,7 @@ import java.util.Objects;
 
 /**
  * 统一文件引用关系服务。
- * 负责将文章、头像、站点配置、旅行记忆和受信申请等模块中的文件使用情况
+ * 负责将文章、头像、站点配置、旅行记忆和好友申请等模块中的文件使用情况
  * 同步到 file_reference，便于后台统一查询“文件是否被引用、被谁引用”。
  */
 @Slf4j
@@ -59,6 +61,7 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
     private final TravelMemoryLocationMapper travelMemoryLocationMapper;
     private final TravelMemoryEntryMapper travelMemoryEntryMapper;
     private final UserTrustRequestMapper userTrustRequestMapper;
+    private final MusicTrackMapper musicTrackMapper;
     private final ObjectMapper objectMapper;
 
     public FileReferenceServiceImpl(
@@ -70,6 +73,7 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
             TravelMemoryLocationMapper travelMemoryLocationMapper,
             TravelMemoryEntryMapper travelMemoryEntryMapper,
             UserTrustRequestMapper userTrustRequestMapper,
+            MusicTrackMapper musicTrackMapper,
             ObjectMapper objectMapper) {
         this.sysFileService = sysFileService;
         this.articleMapper = articleMapper;
@@ -79,6 +83,7 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
         this.travelMemoryLocationMapper = travelMemoryLocationMapper;
         this.travelMemoryEntryMapper = travelMemoryEntryMapper;
         this.userTrustRequestMapper = userTrustRequestMapper;
+        this.musicTrackMapper = musicTrackMapper;
         this.objectMapper = objectMapper;
     }
 
@@ -236,6 +241,28 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public void syncMusicTrackReferences(Long trackId, Long audioFileId, String audioUrl, Long coverFileId, String coverUrl) {
+        if (trackId == null) {
+            return;
+        }
+        replaceReferences(
+                FileReference.ModuleCode.MUSIC_TRACK,
+                FileReference.BizType.MUSIC_TRACK_AUDIO,
+                trackId,
+                resolvePreferredReference(audioFileId, audioUrl, FileReference.FieldKey.AUDIO_URL, SysFile.RefType.MUSIC_AUDIO, trackId)
+        );
+        replaceReferences(
+                FileReference.ModuleCode.MUSIC_TRACK,
+                FileReference.BizType.MUSIC_TRACK_COVER,
+                trackId,
+                resolvePreferredReference(coverFileId, coverUrl, FileReference.FieldKey.COVER_URL, SysFile.RefType.MUSIC_COVER, trackId)
+        );
+        log.debug("[FILE_REFERENCE_SYNC] module=MUSIC_TRACK bizId={} hasAudio={} hasCover={}",
+                trackId, audioFileId != null || StringUtils.hasText(audioUrl), coverFileId != null || StringUtils.hasText(coverUrl));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public void removeByOwner(String moduleCode, String bizType, Long bizId) {
         if (bizId == null || !StringUtils.hasText(moduleCode) || !StringUtils.hasText(bizType)) {
             return;
@@ -344,14 +371,60 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
             trustRequestCount++;
         }
 
+        int musicTrackCount = 0;
+        for (MusicTrack track : musicTrackMapper.selectList(null)) {
+            if (track == null || track.getId() == null) {
+                continue;
+            }
+            syncMusicTrackReferences(
+                    track.getId(),
+                    track.getAudioFileId(),
+                    track.getAudioUrl(),
+                    track.getCoverFileId(),
+                    track.getCoverUrl()
+            );
+            musicTrackCount++;
+        }
+
         Map<String, Integer> summary = new LinkedHashMap<>();
         summary.put("articles", articleCount);
         summary.put("comments", commentCount);
         summary.put("users", userCount);
         summary.put("travelLocations", travelLocationCount);
         summary.put("trustRequests", trustRequestCount);
+        summary.put("musicTracks", musicTrackCount);
         summary.put("references", (int) count());
         log.info("[FILE_REFERENCE_REBUILD] done summary={}", summary);
+        return summary;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Integer> rebuildMusicTrackReferences() {
+        log.info("[MUSIC_FILE_REFERENCE_REBUILD] start");
+        remove(new LambdaQueryWrapper<FileReference>()
+                .eq(FileReference::getModuleCode, FileReference.ModuleCode.MUSIC_TRACK));
+
+        int musicTrackCount = 0;
+        for (MusicTrack track : musicTrackMapper.selectList(null)) {
+            if (track == null || track.getId() == null) {
+                continue;
+            }
+            syncMusicTrackReferences(
+                    track.getId(),
+                    track.getAudioFileId(),
+                    track.getAudioUrl(),
+                    track.getCoverFileId(),
+                    track.getCoverUrl()
+            );
+            musicTrackCount++;
+        }
+
+        Map<String, Integer> summary = new LinkedHashMap<>();
+        summary.put("musicTracks", musicTrackCount);
+        summary.put("references", (int) count(new LambdaQueryWrapper<FileReference>()
+                .eq(FileReference::getModuleCode, FileReference.ModuleCode.MUSIC_TRACK)));
+        log.info("[MUSIC_FILE_REFERENCE_REBUILD] done summary={}", summary);
         return summary;
     }
 
@@ -472,6 +545,47 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
             resolved.add(new ResolvedReference(file.getId(), entry.getKey().trim(), sourceType));
         }
         return resolved;
+    }
+
+    private List<ResolvedReference> resolvePreferredReference(
+            Long fileId,
+            String fileUrl,
+            String fieldKey,
+            String fallbackRefType,
+            Long fallbackRefId) {
+        List<ResolvedReference> directReferences = resolveFileIdReferences(
+                fileId == null ? List.of() : List.of(fileId),
+                fieldKey,
+                FileReference.SourceType.DIRECT
+        );
+        if (!directReferences.isEmpty()) {
+            return directReferences;
+        }
+        List<ResolvedReference> ownerReferences = resolveRefOwnerReferences(fallbackRefType, fallbackRefId, fieldKey);
+        if (!ownerReferences.isEmpty()) {
+            return ownerReferences;
+        }
+        return resolveReferences(
+                StringUtils.hasText(fileUrl) ? List.of(fileUrl) : List.of(),
+                fieldKey,
+                FileReference.SourceType.URL_MATCH
+        );
+    }
+
+    private List<ResolvedReference> resolveRefOwnerReferences(String refType, Long refId, String fieldKey) {
+        if (!StringUtils.hasText(refType) || refId == null) {
+            return List.of();
+        }
+        List<SysFile> matchedFiles = sysFileService.list(new LambdaQueryWrapper<SysFile>()
+                .eq(SysFile::getRefType, refType)
+                .eq(SysFile::getRefId, refId)
+                .ne(SysFile::getStatus, SysFile.Status.DELETED)
+                .orderByDesc(SysFile::getId)
+                .last("limit 1"));
+        if (matchedFiles.isEmpty() || matchedFiles.get(0) == null || matchedFiles.get(0).getId() == null) {
+            return List.of();
+        }
+        return List.of(new ResolvedReference(matchedFiles.get(0).getId(), fieldKey, FileReference.SourceType.LEGACY_REF));
     }
 
     private record ResolvedReference(Long fileId, String fieldKey, String sourceType) {

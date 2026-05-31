@@ -20,7 +20,7 @@ public interface AccessService {
     boolean isAdmin(User user);
 
     /**
-     * 是否为好友 / 受信用户。
+     * 是否为好友 / 知友用户。
      */
     boolean isFriend(User user);
 

@@ -33,6 +33,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -40,7 +41,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
 /**
- * 统一处理文章、头像、站点资源与受信申请附件上传。
+ * 统一处理文章、头像、站点资源与好友申请附件上传。
  */
 @Slf4j
 @Tag(name = "文件上传", description = "图片上传、封面上传、头像上传等接口")
@@ -80,12 +81,22 @@ public class UploadController {
             "audio/mpeg",
             "audio/mp3",
             "audio/wav",
+            "audio/wave",
             "audio/x-wav",
+            "audio/vnd.wave",
             "audio/flac",
             "audio/ogg",
             "audio/aac",
             "audio/mp4",
             "audio/x-m4a"
+    );
+    private static final Set<String> ALLOWED_AUDIO_EXTENSIONS = Set.of(
+            "mp3",
+            "wav",
+            "flac",
+            "ogg",
+            "aac",
+            "m4a"
     );
 
     private static final long MAX_IMAGE_SIZE = 12 * 1024 * 1024;
@@ -242,12 +253,7 @@ public class UploadController {
 
         Long userId = CurrentUserUtil.requireUserId(currentUser);
         MultipartFile file = form.getFile();
-        Result<UploadFileVO> validateResult = validateFile(
-                file,
-                MAX_AUDIO_SIZE,
-                ALLOWED_AUDIO_TYPES,
-                "仅允许上传 mp3、wav、flac、ogg、aac 或 m4a 音频文件"
-        );
+        Result<UploadFileVO> validateResult = validateMusicAudioFile(file);
         if (validateResult != null) {
             return validateResult;
         }
@@ -311,7 +317,7 @@ public class UploadController {
         }
     }
 
-    @Operation(summary = "上传受信申请附件", description = "用于受信任用户申请的附件上传")
+    @Operation(summary = "上传好友申请附件", description = "用于好友申请的附件上传")
     @PostMapping(value = "/trust-attachment", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Result<UploadFileVO> uploadTrustAttachment(
             @ModelAttribute SingleFileUploadDTO form,
@@ -331,10 +337,10 @@ public class UploadController {
 
         try {
             SysFile sysFile = sysFileService.uploadTempFile(file, userId, SysFile.RefType.TRUST_REQUEST_ATTACHMENT);
-            log.info("用户 {} 上传受信申请附件成功: {}", userId, sysFile.getFileUrl());
+            log.info("用户 {} 上传好友申请附件成功: {}", userId, sysFile.getFileUrl());
             return Result.success("上传成功", buildUploadData(sysFile));
         } catch (Exception e) {
-            log.error("上传受信申请附件失败", e);
+            log.error("上传好友申请附件失败", e);
             return Result.error(500, "上传失败，请稍后重试");
         }
     }
@@ -452,6 +458,40 @@ public class UploadController {
             return Result.error(400, invalidTypeMessage);
         }
         return null;
+    }
+
+    /**
+     * 音频上传既兼容标准 MIME，也兼容部分浏览器只带扩展名或上报变体 MIME 的情况。
+     */
+    private Result<UploadFileVO> validateMusicAudioFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            return Result.error(400, "文件不能为空");
+        }
+        if (file.getSize() > MAX_AUDIO_SIZE) {
+            return Result.error(400, "文件大小不能超过 " + (MAX_AUDIO_SIZE / 1024 / 1024) + "MB");
+        }
+        if (hasAllowedContentType(file, ALLOWED_AUDIO_TYPES) || hasAllowedExtension(file, ALLOWED_AUDIO_EXTENSIONS)) {
+            return null;
+        }
+        return Result.error(400, "仅允许上传 mp3、wav、flac、ogg、aac 或 m4a 音频文件");
+    }
+
+    private boolean hasAllowedContentType(MultipartFile file, Set<String> allowedContentTypes) {
+        String contentType = file.getContentType();
+        return contentType != null && allowedContentTypes.contains(contentType.toLowerCase(Locale.ROOT));
+    }
+
+    private boolean hasAllowedExtension(MultipartFile file, Set<String> allowedExtensions) {
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename == null) {
+            return false;
+        }
+        int extensionIndex = originalFilename.lastIndexOf('.');
+        if (extensionIndex < 0 || extensionIndex == originalFilename.length() - 1) {
+            return false;
+        }
+        String extension = originalFilename.substring(extensionIndex + 1).toLowerCase(Locale.ROOT);
+        return allowedExtensions.contains(extension);
     }
 
     private UploadFileVO buildUploadData(SysFile sysFile) {
