@@ -22,5 +22,7 @@ public class MusicTrackAiSuggestRequest {
 
     private String genre;
 
+    private String lyrics;
+
     private Integer limit;
 }

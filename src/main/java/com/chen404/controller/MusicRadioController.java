@@ -27,7 +27,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-@Tag(name = "Sakura Radio", description = "公开音乐馆与音乐电台管理接口")
+/**
+ * 音乐馆公开播放、歌曲维护和分类维护控制器。
+ */
+@Tag(name = "音乐馆", description = "公开音乐馆与分类管理接口")
 @RestController
 public class MusicRadioController {
 
@@ -51,19 +54,19 @@ public class MusicRadioController {
         return Result.success(musicRadioService.getPublicTrack(id));
     }
 
-    @Operation(summary = "获取公开歌单列表")
+    @Operation(summary = "获取公开分类列表")
     @GetMapping("/music/playlists")
     public Result<List<MusicPlaylistVO>> listPublicPlaylists() {
         return Result.success(musicRadioService.listPublicPlaylists());
     }
 
-    @Operation(summary = "获取公开歌单详情")
+    @Operation(summary = "获取公开分类详情")
     @GetMapping("/music/playlists/{id}")
     public Result<MusicPlaylistVO> getPublicPlaylist(@PathVariable Long id) {
         return Result.success(musicRadioService.getPublicPlaylist(id));
     }
 
-    @Operation(summary = "获取默认电台")
+    @Operation(summary = "获取默认播放集")
     @GetMapping("/music/radio/default")
     public Result<MusicPlaylistVO> getDefaultRadio() {
         return Result.success(musicRadioService.getDefaultRadio());
@@ -125,21 +128,21 @@ public class MusicRadioController {
     }
 
     @RequireAdmin
-    @Operation(summary = "获取管理员歌单列表")
+    @Operation(summary = "获取管理员分类列表")
     @GetMapping("/admin/music/playlists")
     public Result<List<MusicPlaylistVO>> listAdminPlaylists() {
         return Result.success(musicRadioService.listAdminPlaylists());
     }
 
     @RequireAdmin
-    @Operation(summary = "新增歌单")
+    @Operation(summary = "新增分类")
     @PostMapping("/admin/music/playlists")
     public Result<MusicPlaylistVO> createPlaylist(@Valid @RequestBody MusicPlaylistUpsertCommand command) {
         return Result.success("创建成功", musicRadioService.createPlaylist(command));
     }
 
     @RequireAdmin
-    @Operation(summary = "更新歌单")
+    @Operation(summary = "更新分类")
     @PutMapping("/admin/music/playlists/{id}")
     public Result<MusicPlaylistVO> updatePlaylist(
             @PathVariable Long id,
@@ -148,18 +151,26 @@ public class MusicRadioController {
     }
 
     @RequireAdmin
-    @Operation(summary = "保存歌单歌曲排序")
+    @Operation(summary = "保存分类歌曲关系")
     @PutMapping("/admin/music/playlists/{id}/tracks")
     public Result<MusicPlaylistVO> savePlaylistTracks(
             @PathVariable Long id,
             @RequestBody MusicPlaylistTracksCommand command) {
-        return Result.success("歌单已保存", musicRadioService.savePlaylistTracks(id, command));
+        return Result.success("分类已保存", musicRadioService.savePlaylistTracks(id, command));
     }
 
     @RequireAdmin
-    @Operation(summary = "设置默认电台")
+    @Operation(summary = "删除分类")
+    @DeleteMapping("/admin/music/playlists/{id}")
+    public Result<Void> deletePlaylist(@PathVariable Long id) {
+        musicRadioService.deletePlaylist(id);
+        return Result.success("删除成功", null);
+    }
+
+    @RequireAdmin
+    @Operation(summary = "设置默认播放集")
     @PatchMapping("/admin/music/playlists/{id}/default")
     public Result<MusicPlaylistVO> setDefaultPlaylist(@PathVariable Long id) {
-        return Result.success("默认电台已更新", musicRadioService.setDefaultPlaylist(id));
+        return Result.success("默认播放集已更新", musicRadioService.setDefaultPlaylist(id));
     }
 }

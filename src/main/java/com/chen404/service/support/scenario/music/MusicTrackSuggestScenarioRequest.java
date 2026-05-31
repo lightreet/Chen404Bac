@@ -9,6 +9,7 @@ package com.chen404.service.support.scenario.music;
  * @param releaseYear 已知发行年份，可为空
  * @param language    已知语言，可为空
  * @param genre       已知风格，可为空
+ * @param lyrics      已知歌词内容，可为空
  * @param limit       返回候选数量，可为空
  */
 public record MusicTrackSuggestScenarioRequest(
@@ -18,6 +19,7 @@ public record MusicTrackSuggestScenarioRequest(
         Integer releaseYear,
         String language,
         String genre,
+        String lyrics,
         Integer limit
 ) {
 }

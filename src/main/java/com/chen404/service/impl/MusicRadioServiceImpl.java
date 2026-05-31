@@ -33,7 +33,7 @@ import java.util.stream.Collectors;
 import java.util.regex.Pattern;
 
 /**
- * 音乐馆歌曲、歌单和歌单曲目编排的业务服务实现。
+ * 音乐馆歌曲、分类和分类曲目编排的业务服务实现。
  */
 @Service
 public class MusicRadioServiceImpl implements MusicRadioService {
@@ -93,7 +93,7 @@ public class MusicRadioServiceImpl implements MusicRadioService {
     public MusicPlaylistVO getPublicPlaylist(Long id) {
         MusicPlaylist playlist = musicPlaylistMapper.selectById(id);
         if (playlist == null || !Integer.valueOf(YES).equals(playlist.getIsPublic())) {
-            throw new ResourceNotFoundException("歌单不存在");
+            throw new ResourceNotFoundException("分类不存在");
         }
         return toPlaylistVO(playlist, true);
     }
@@ -109,8 +109,8 @@ public class MusicRadioServiceImpl implements MusicRadioService {
         List<MusicPlaylist> playlists = musicPlaylistMapper.selectList(wrapper);
         if (playlists.isEmpty()) {
             MusicPlaylistVO empty = new MusicPlaylistVO();
-            empty.setName("Sakura Radio");
-            empty.setDescription("默认电台还没有准备好");
+            empty.setName("音乐馆");
+            empty.setDescription("默认播放集还没有准备好");
             empty.setDefaultPlaylist(true);
             empty.setPublicPlaylist(true);
             empty.setTracks(List.of());
@@ -168,7 +168,7 @@ public class MusicRadioServiceImpl implements MusicRadioService {
         wrapper.eq(MusicPlaylistTrack::getTrackId, id);
         Long referenceCount = musicPlaylistTrackMapper.selectCount(wrapper);
         if (referenceCount != null && referenceCount > 0) {
-            throw new BadRequestException("歌曲已被歌单引用，请先从歌单中移除");
+            throw new BadRequestException("歌曲已被分类引用，请先从分类中移除");
         }
         musicTrackMapper.deleteById(id);
     }
@@ -229,6 +229,19 @@ public class MusicRadioServiceImpl implements MusicRadioService {
 
     @Override
     @Transactional
+    public void deletePlaylist(Long id) {
+        requirePlaylist(id);
+
+        // 删除分类时仅移除分类本体与关联关系，不影响歌曲资源本身。
+        LambdaQueryWrapper<MusicPlaylistTrack> deleteWrapper = new LambdaQueryWrapper<>();
+        deleteWrapper.eq(MusicPlaylistTrack::getPlaylistId, id);
+        musicPlaylistTrackMapper.delete(deleteWrapper);
+
+        musicPlaylistMapper.deleteById(id);
+    }
+
+    @Override
+    @Transactional
     public MusicPlaylistVO setDefaultPlaylist(Long id) {
         MusicPlaylist playlist = requirePlaylist(id);
         clearDefaultPlaylist();
@@ -249,7 +262,7 @@ public class MusicRadioServiceImpl implements MusicRadioService {
     private MusicPlaylist requirePlaylist(Long id) {
         MusicPlaylist playlist = musicPlaylistMapper.selectById(id);
         if (playlist == null) {
-            throw new ResourceNotFoundException("歌单不存在");
+            throw new ResourceNotFoundException("分类不存在");
         }
         return playlist;
     }

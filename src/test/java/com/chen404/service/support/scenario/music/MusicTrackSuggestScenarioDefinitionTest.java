@@ -65,11 +65,11 @@ class MusicTrackSuggestScenarioDefinitionTest {
 
         MusicTrackSuggestScenarioDefinition definition = new MusicTrackSuggestScenarioDefinition(llmClient, requestFactory());
         MusicTrackSuggestScenarioResult result = definition.execute(
-                AiScenarioRequest.of(
-                        AiScenarioCode.MUSIC_TRACK_SUGGEST,
-                        new MusicTrackSuggestScenarioRequest("晴天", "周杰伦", "", null, "", "", 5)
-                )
-        ).data();
+                        AiScenarioRequest.of(
+                                AiScenarioCode.MUSIC_TRACK_SUGGEST,
+                                new MusicTrackSuggestScenarioRequest("晴天", "周杰伦", "", null, "", "", null, 5)
+                        )
+                ).data();
 
         assertEquals(2, result.candidates().size());
         MusicTrackSuggestCandidate first = result.candidates().get(0);
@@ -117,11 +117,11 @@ class MusicTrackSuggestScenarioDefinitionTest {
 
         MusicTrackSuggestScenarioDefinition definition = new MusicTrackSuggestScenarioDefinition(llmClient, requestFactory());
         MusicTrackSuggestScenarioResult result = definition.execute(
-                AiScenarioRequest.of(
-                        AiScenarioCode.MUSIC_TRACK_SUGGEST,
-                        new MusicTrackSuggestScenarioRequest("未知歌曲", null, null, null, null, null, null)
-                )
-        ).data();
+                        AiScenarioRequest.of(
+                                AiScenarioCode.MUSIC_TRACK_SUGGEST,
+                                new MusicTrackSuggestScenarioRequest("未知歌曲", null, null, null, null, null, null, null)
+                        )
+                ).data();
 
         MusicTrackSuggestCandidate candidate = result.candidates().get(0);
         assertNull(candidate.releaseYear());
@@ -138,17 +138,65 @@ class MusicTrackSuggestScenarioDefinitionTest {
 
         MusicTrackSuggestScenarioDefinition definition = new MusicTrackSuggestScenarioDefinition(llmClient, requestFactory());
         MusicTrackSuggestScenarioResult result = definition.execute(
-                AiScenarioRequest.of(
-                        AiScenarioCode.MUSIC_TRACK_SUGGEST,
-                        new MusicTrackSuggestScenarioRequest("红蔷薇白玫瑰", "邓紫棋", null, null, null, null, 5)
-                )
-        ).data();
+                        AiScenarioRequest.of(
+                                AiScenarioCode.MUSIC_TRACK_SUGGEST,
+                                new MusicTrackSuggestScenarioRequest("红蔷薇白玫瑰", "邓紫棋", null, null, null, null, null, 5)
+                        )
+                ).data();
 
         assertEquals(1, result.candidates().size());
         MusicTrackSuggestCandidate candidate = result.candidates().get(0);
         assertEquals("红蔷薇白玫瑰", candidate.title());
         assertEquals("邓紫棋", candidate.artist());
         assertEquals("medium", candidate.confidence());
+    }
+
+    @Test
+    void shouldEmbedLyricsGuidanceWhenLyricsAreProvided() {
+        LlmClient llmClient = mock(LlmClient.class);
+        when(llmClient.generateText(any(LlmTextRequest.class))).thenReturn("""
+                {
+                  "candidates": [
+                    {
+                      "title": "群青",
+                      "artist": "YOASOBI",
+                      "album": null,
+                      "releaseYear": 2020,
+                      "language": "日语",
+                      "genre": "J-pop",
+                      "tags": ["日语", "热血", "青春"],
+                      "recommendation": "像在夜色里把犹豫一点点唱亮。",
+                      "moodText": "嗚呼、いつもの様に / 過ぎる日々にあくびが出る",
+                      "lyricSource": "官方歌词",
+                      "confidence": "high",
+                      "matchReason": "标题与歌手都明确。"
+                    }
+                  ]
+                }
+                """);
+
+        MusicTrackSuggestScenarioDefinition definition = new MusicTrackSuggestScenarioDefinition(llmClient, requestFactory());
+        definition.execute(
+                AiScenarioRequest.of(
+                        AiScenarioCode.MUSIC_TRACK_SUGGEST,
+                        new MusicTrackSuggestScenarioRequest(
+                                "群青",
+                                "YOASOBI",
+                                null,
+                                2020,
+                                "日语",
+                                "J-pop",
+                                "嗚呼、いつもの様に\n過ぎる日々にあくびが出る",
+                                3
+                        )
+                )
+        );
+
+        ArgumentCaptor<LlmTextRequest> requestCaptor = ArgumentCaptor.forClass(LlmTextRequest.class);
+        verify(llmClient).generateText(requestCaptor.capture());
+        assertTrue(requestCaptor.getValue().userPrompt().contains("Lyrics content"));
+        assertTrue(requestCaptor.getValue().userPrompt().contains("choose 1 to 3 striking lyric lines directly"));
+        assertTrue(requestCaptor.getValue().userPrompt().contains("嗚呼、いつもの様に"));
     }
 
     private AiLlmRequestFactory requestFactory() {

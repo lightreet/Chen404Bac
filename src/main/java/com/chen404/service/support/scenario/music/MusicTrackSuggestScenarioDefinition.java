@@ -34,8 +34,10 @@ public class MusicTrackSuggestScenarioDefinition implements AiScenarioDefinition
     private static final int DEFAULT_CANDIDATE_COUNT = 5;
     private static final int MAX_CANDIDATE_COUNT = 5;
     private static final int MAX_RECOMMENDATION_LENGTH = 140;
-    private static final int MAX_MOOD_TEXT_LENGTH = 80;
+    private static final int MAX_MOOD_TEXT_LENGTH = 160;
     private static final int MAX_MATCH_REASON_LENGTH = 120;
+    private static final int MAX_LYRIC_CONTEXT_LINES = 40;
+    private static final int MAX_LYRIC_CONTEXT_LENGTH = 2200;
     private static final char JSON_OBJECT_OPEN = '{';
     private static final char JSON_OBJECT_CLOSE = '}';
     private static final char JSON_ARRAY_OPEN = '[';
@@ -72,13 +74,15 @@ public class MusicTrackSuggestScenarioDefinition implements AiScenarioDefinition
         builder.append("Rules:\n");
         builder.append("1. Use null for uncertain factual fields instead of guessing aggressively.\n");
         builder.append("2. Do not provide audio URLs, cover URLs, or copyrighted lyrics.\n");
-        builder.append("3. recommendation and moodText must be original Chinese copy, warm and concise, no markdown.\n");
+        builder.append("3. recommendation must be original Chinese copy, warm and concise, no markdown.\n");
         builder.append("4. tags must be 3 to 5 short Chinese tags or recognizable genre labels.\n");
         builder.append("5. releaseYear must be an integer year between 1900 and ").append(Year.now().getValue()).append(", or null when uncertain.\n");
         builder.append("6. lyricSource should be a short source hint like 官方歌词 / 网易云音乐 / 手动校对, or null.\n\n");
         builder.append("7. If the same title has different singers, originals, covers, live versions, anime versions, or regional versions, return them as separate candidates.\n");
         builder.append("8. Rank the most likely candidate first. Use confidence high only when the known fields strongly match.\n");
-        builder.append("9. If optional known fields narrow the match, filter candidates by those fields.\n\n");
+        builder.append("9. If optional known fields narrow the match, filter candidates by those fields.\n");
+        builder.append("10. moodText should be concise and display-ready. When Lyrics content is provided, choose 1 to 3 striking lyric lines directly from that provided lyrics content, preserve the original wording, do not paraphrase, do not add quotation marks, and join multiple lines with ' / '.\n");
+        builder.append("11. If Lyrics content is empty or unusable, moodText may fall back to one original Chinese mood sentence.\n\n");
         builder.append("Song title:\n").append(trim(request.title())).append("\n");
         if (StringUtils.hasText(request.artist())) {
             builder.append("Known artist:\n").append(trim(request.artist())).append("\n");
@@ -94,6 +98,9 @@ public class MusicTrackSuggestScenarioDefinition implements AiScenarioDefinition
         }
         if (StringUtils.hasText(request.genre())) {
             builder.append("Known genre:\n").append(trim(request.genre())).append("\n");
+        }
+        if (StringUtils.hasText(request.lyrics())) {
+            builder.append("Lyrics content:\n").append(normalizeLyricContext(request.lyrics())).append("\n");
         }
         return builder.toString();
     }
@@ -293,6 +300,28 @@ public class MusicTrackSuggestScenarioDefinition implements AiScenarioDefinition
             return "";
         }
         return text.trim().replaceAll("\\s+", " ");
+    }
+
+    private String normalizeLyricContext(String lyrics) {
+        if (!StringUtils.hasText(lyrics)) {
+            return EMPTY_TEXT;
+        }
+        String normalized = lyrics.replace("\r\n", "\n").replace('\r', '\n');
+        List<String> lines = new ArrayList<>();
+        for (String line : normalized.split("\n")) {
+            if (!StringUtils.hasText(line)) {
+                continue;
+            }
+            lines.add(line.trim());
+            if (lines.size() >= MAX_LYRIC_CONTEXT_LINES) {
+                break;
+            }
+        }
+        String excerpt = String.join("\n", lines);
+        if (excerpt.length() <= MAX_LYRIC_CONTEXT_LENGTH) {
+            return excerpt;
+        }
+        return excerpt.substring(0, MAX_LYRIC_CONTEXT_LENGTH).trim();
     }
 
     private String trim(String value) {

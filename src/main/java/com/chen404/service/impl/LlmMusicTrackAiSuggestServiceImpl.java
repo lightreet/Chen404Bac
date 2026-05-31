@@ -46,6 +46,7 @@ public class LlmMusicTrackAiSuggestServiceImpl implements MusicTrackAiSuggestSer
                                 request.getReleaseYear(),
                                 request.getLanguage(),
                                 request.getGenre(),
+                                request.getLyrics(),
                                 request.getLimit()
                         )
                 )
