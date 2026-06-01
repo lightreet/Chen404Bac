@@ -24,7 +24,7 @@ import java.util.List;
 @Component
 public class MusicTrackSuggestScenarioDefinition implements AiScenarioDefinition<MusicTrackSuggestScenarioRequest, MusicTrackSuggestScenarioResult> {
 
-    private static final String SYSTEM_INSTRUCTION = "You are a careful music metadata assistant for a personal Sakura Radio CMS. Return valid JSON only.";
+    private static final String SYSTEM_INSTRUCTION = "You are a careful music metadata assistant and music recommendation editor for a personal Sakura Radio CMS. Return valid JSON only.";
     private static final String CODE_FENCE_PREFIX = "```";
     private static final String JSON_FENCE_PATTERN = "^```(?:json)?\\s*";
     private static final String JSON_FENCE_SUFFIX_PATTERN = "\\s*```$";
@@ -69,12 +69,15 @@ public class MusicTrackSuggestScenarioDefinition implements AiScenarioDefinition
         int limit = normalizeLimit(request.limit());
         StringBuilder builder = new StringBuilder();
         builder.append("Given a song title and optional known fields, find likely song metadata candidates for a music library form.\n");
+        builder.append("For recommendation writing, act like a seasoned music listener and editor who can explain why this exact song is worth replaying.\n");
         builder.append("Return up to ").append(limit).append(" candidates as one JSON object with exactly this shape: ");
         builder.append("{\"candidates\":[{\"title\":string,\"artist\":string|null,\"album\":string|null,\"releaseYear\":number|null,\"language\":string|null,\"genre\":string|null,\"tags\":string[],\"recommendation\":string,\"moodText\":string,\"lyricSource\":string|null,\"confidence\":\"high|medium|low\",\"matchReason\":string}]}.\n");
         builder.append("Rules:\n");
         builder.append("1. Use null for uncertain factual fields instead of guessing aggressively.\n");
         builder.append("2. Do not provide audio URLs, cover URLs, or copyrighted lyrics.\n");
-        builder.append("3. recommendation must be original Chinese copy, warm and concise, no markdown.\n");
+        builder.append("3. recommendation must be original Chinese copy, no markdown, 60 to 120 Chinese characters when possible.\n");
+        builder.append("   Write from a music expert's listening perspective: mention at least two concrete angles such as vocal delivery, arrangement, melody progression, rhythm, lyrical theme, emotional arc, album/version context, or ideal listening scene.\n");
+        builder.append("   Make it song-specific. Avoid generic template phrases like 把心事轻轻唱开, 适合夜深时反复回味, 值得单曲循环, or any copy that could fit almost any ballad.\n");
         builder.append("4. tags must be 3 to 5 short Chinese tags or recognizable genre labels.\n");
         builder.append("5. releaseYear must be an integer year between 1900 and ").append(Year.now().getValue()).append(", or null when uncertain.\n");
         builder.append("6. lyricSource should be a short source hint like 官方歌词 / 网易云音乐 / 手动校对, or null.\n\n");
