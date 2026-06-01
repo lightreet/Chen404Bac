@@ -170,12 +170,11 @@ public class MusicRadioServiceImpl implements MusicRadioService {
     @Transactional
     public void deleteTrack(Long id) {
         requireTrack(id);
-        LambdaQueryWrapper<MusicPlaylistTrack> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(MusicPlaylistTrack::getTrackId, id);
-        Long referenceCount = musicPlaylistTrackMapper.selectCount(wrapper);
-        if (referenceCount != null && referenceCount > 0) {
-            throw new BadRequestException("歌曲已被分类引用，请先从分类中移除");
-        }
+        // 删除歌曲时先解除所有分类归属，避免分类关系阻塞歌曲本体删除。
+        LambdaQueryWrapper<MusicPlaylistTrack> deleteWrapper = new LambdaQueryWrapper<>();
+        deleteWrapper.eq(MusicPlaylistTrack::getTrackId, id);
+        musicPlaylistTrackMapper.delete(deleteWrapper);
+
         musicTrackMapper.deleteById(id);
         fileReferenceService.syncMusicTrackReferences(id, null, null, null, null);
     }

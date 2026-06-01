@@ -33,7 +33,7 @@ public class MusicTrackSuggestScenarioDefinition implements AiScenarioDefinition
     private static final int MAX_TAG_COUNT = 5;
     private static final int DEFAULT_CANDIDATE_COUNT = 5;
     private static final int MAX_CANDIDATE_COUNT = 5;
-    private static final int MAX_RECOMMENDATION_LENGTH = 140;
+    private static final int MAX_RECOMMENDATION_LENGTH = 32;
     private static final int MAX_MOOD_TEXT_LENGTH = 160;
     private static final int MAX_MATCH_REASON_LENGTH = 120;
     private static final int MAX_LYRIC_CONTEXT_LINES = 40;
@@ -75,9 +75,9 @@ public class MusicTrackSuggestScenarioDefinition implements AiScenarioDefinition
         builder.append("Rules:\n");
         builder.append("1. Use null for uncertain factual fields instead of guessing aggressively.\n");
         builder.append("2. Do not provide audio URLs, cover URLs, or copyrighted lyrics.\n");
-        builder.append("3. recommendation must be original Chinese copy, no markdown, 60 to 120 Chinese characters when possible.\n");
-        builder.append("   Write from a music expert's listening perspective: mention at least two concrete angles such as vocal delivery, arrangement, melody progression, rhythm, lyrical theme, emotional arc, album/version context, or ideal listening scene.\n");
-        builder.append("   Make it song-specific. Avoid generic template phrases like 把心事轻轻唱开, 适合夜深时反复回味, 值得单曲循环, or any copy that could fit almost any ballad.\n");
+        builder.append("3. recommendation must be original Chinese copy, no markdown, 15 to 25 Chinese characters, one concise and touching sentence.\n");
+        builder.append("   Write from a music expert's listening perspective, but keep only one concrete song-specific hook from vocal delivery, arrangement, melody, rhythm, lyrical theme, emotional arc, version context, or listening scene.\n");
+        builder.append("   Make it instantly readable and emotionally precise. Avoid generic template phrases like 把心事轻轻唱开, 适合夜深时反复回味, 值得单曲循环, or any copy that could fit almost any ballad.\n");
         builder.append("4. tags must be 3 to 5 short Chinese tags or recognizable genre labels.\n");
         builder.append("5. releaseYear must be an integer year between 1900 and ").append(Year.now().getValue()).append(", or null when uncertain.\n");
         builder.append("6. lyricSource should be a short source hint like 官方歌词 / 网易云音乐 / 手动校对, or null.\n\n");

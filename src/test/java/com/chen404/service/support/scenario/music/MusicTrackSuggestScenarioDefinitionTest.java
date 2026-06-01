@@ -90,6 +90,7 @@ class MusicTrackSuggestScenarioDefinitionTest {
         assertTrue(requestCaptor.getValue().userPrompt().contains("Return up to 5 candidates"));
         assertTrue(requestCaptor.getValue().userPrompt().contains("Do not provide audio URLs"));
         assertTrue(requestCaptor.getValue().userPrompt().contains("music expert's listening perspective"));
+        assertTrue(requestCaptor.getValue().userPrompt().contains("15 to 25 Chinese characters"));
         assertTrue(requestCaptor.getValue().userPrompt().contains("vocal delivery"));
         assertTrue(requestCaptor.getValue().userPrompt().contains("Avoid generic template phrases"));
     }

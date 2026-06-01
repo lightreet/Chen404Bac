@@ -261,7 +261,7 @@ class MusicRadioServiceImplTest {
     }
 
     @Test
-    void shouldDeleteUnreferencedTrack() {
+    void shouldDeleteTrackAndDetachPlaylistLinks() {
         initTableInfo(MusicTrack.class);
         initTableInfo(MusicPlaylistTrack.class);
         MusicTrackMapper trackMapper = mock(MusicTrackMapper.class);
@@ -270,28 +270,11 @@ class MusicRadioServiceImplTest {
         SysFileService sysFileService = mock(SysFileService.class);
         MusicRadioServiceImpl service = buildService(trackMapper, playlistMapper, playlistTrackMapper, sysFileService);
         when(trackMapper.selectById(5L)).thenReturn(buildTrack(5L, "Unlinked Song", MusicTrack.STATUS_DRAFT, "radio"));
-        when(playlistTrackMapper.selectCount(any())).thenReturn(0L);
 
         service.deleteTrack(5L);
 
+        verify(playlistTrackMapper).delete(any());
         verify(trackMapper).deleteById(5L);
-    }
-
-    @Test
-    void shouldRejectDeletingTrackReferencedByPlaylist() {
-        initTableInfo(MusicTrack.class);
-        initTableInfo(MusicPlaylistTrack.class);
-        MusicTrackMapper trackMapper = mock(MusicTrackMapper.class);
-        MusicPlaylistMapper playlistMapper = mock(MusicPlaylistMapper.class);
-        MusicPlaylistTrackMapper playlistTrackMapper = mock(MusicPlaylistTrackMapper.class);
-        SysFileService sysFileService = mock(SysFileService.class);
-        MusicRadioServiceImpl service = buildService(trackMapper, playlistMapper, playlistTrackMapper, sysFileService);
-        when(trackMapper.selectById(5L)).thenReturn(buildTrack(5L, "Linked Song", MusicTrack.STATUS_DRAFT, "radio"));
-        when(playlistTrackMapper.selectCount(any())).thenReturn(1L);
-
-        assertThrows(BadRequestException.class, () -> service.deleteTrack(5L));
-
-        verify(trackMapper, never()).deleteById(5L);
     }
 
     private MusicTrack buildTrack(Long id, String title, String status, String tags) {
