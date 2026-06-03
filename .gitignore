@@ -64,3 +64,5 @@ uploads/
 *.zip
 *.tar.gz
 *.rar
+
+.codegraph/
