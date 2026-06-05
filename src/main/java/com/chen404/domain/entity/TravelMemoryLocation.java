@@ -65,4 +65,7 @@ public class TravelMemoryLocation implements Serializable {
 
     @TableField(exist = false)
     private List<TravelMemoryEntry> entries;
+
+    @TableField(exist = false)
+    private List<TravelMemoryStop> stops;
 }
