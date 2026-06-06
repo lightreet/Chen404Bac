@@ -3,6 +3,7 @@ package com.chen404.service.impl;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.chen404.domain.dto.AdminFileStatsBucketVO;
 import com.chen404.domain.dto.AdminFileStatsVO;
 import com.chen404.domain.dto.AdminFileVO;
@@ -77,12 +78,13 @@ class AdminFileServiceImplTest {
         UserService userService = mock(UserService.class);
         AdminFileServiceImpl service = new AdminFileServiceImpl(sysFileService, fileReferenceService, userService);
 
-        SysFile referenced = file(1L, SysFile.Status.PERMANENT, SysFile.RefType.SITE_ASSET, 100L);
-        SysFile pending = file(2L, SysFile.Status.TEMP, SysFile.RefType.ARTICLE_CONTENT, 250L);
         SysFile unreferenced = file(3L, SysFile.Status.PERMANENT, SysFile.RefType.ARTICLE_CONTENT, 300L);
-        SysFile deleted = file(4L, SysFile.Status.DELETED, SysFile.RefType.SITE_HERO, 50L);
-        when(sysFileService.list(org.mockito.ArgumentMatchers.<Wrapper<SysFile>>any()))
-                .thenReturn(List.of(referenced, pending, unreferenced, deleted));
+        Page<SysFile> filePage = new Page<>(1, 10, 1);
+        filePage.setRecords(List.of(unreferenced));
+        when(sysFileService.page(
+                org.mockito.ArgumentMatchers.any(Page.class),
+                org.mockito.ArgumentMatchers.<Wrapper<SysFile>>any()))
+                .thenReturn(filePage);
         when(fileReferenceService.list(org.mockito.ArgumentMatchers.<Wrapper<FileReference>>any()))
                 .thenReturn(List.of(reference(1L, FileReference.ModuleCode.ARTICLE)));
         when(userService.listByIds(org.mockito.ArgumentMatchers.anyCollection())).thenReturn(List.of());
