@@ -32,7 +32,8 @@ class FlywayMigrationLayoutTest {
             "V2026052401__add_travel_memory_visited_end_at.sql",
             "V2026052501__ai_admin_config.sql",
             "V2026052601__simplify_file_reference_and_drop_unused_tables.sql",
-            "V2026052701__create_music_radio_tables.sql"
+            "V2026052701__create_music_radio_tables.sql",
+            "V2026060501__add_travel_memory_stop_groups.sql"
     );
 
     @Test

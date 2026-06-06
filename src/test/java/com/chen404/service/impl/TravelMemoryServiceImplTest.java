@@ -5,10 +5,12 @@ import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.chen404.domain.entity.TravelMemoryEntry;
 import com.chen404.domain.entity.TravelMemoryLocation;
+import com.chen404.domain.entity.TravelMemoryStop;
 import com.chen404.exception.BadRequestException;
 import com.chen404.exception.ResourceNotFoundException;
 import com.chen404.mapper.TravelMemoryEntryMapper;
 import com.chen404.mapper.TravelMemoryLocationMapper;
+import com.chen404.mapper.TravelMemoryStopMapper;
 import com.chen404.service.AccessService;
 import com.chen404.service.FileReferenceService;
 import com.chen404.service.SysFileService;
@@ -38,11 +40,18 @@ class TravelMemoryServiceImplTest {
     void shouldQueryLocationsBySortOrderThenVisitedAtThenId() {
         initTableInfo(TravelMemoryLocation.class);
         TravelMemoryLocationMapper locationMapper = mock(TravelMemoryLocationMapper.class);
+        TravelMemoryStopMapper stopMapper = mock(TravelMemoryStopMapper.class);
         TravelMemoryEntryMapper entryMapper = mock(TravelMemoryEntryMapper.class);
         AccessService accessService = mock(AccessService.class);
         SysFileService sysFileService = mock(SysFileService.class);
         FileReferenceService fileReferenceService = mock(FileReferenceService.class);
-        TravelMemoryServiceImpl service = new TravelMemoryServiceImpl(locationMapper, entryMapper, accessService, sysFileService, fileReferenceService);
+        TravelMemoryServiceImpl service = new TravelMemoryServiceImpl(
+                locationMapper,
+                stopMapper,
+                entryMapper,
+                accessService,
+                sysFileService,
+                fileReferenceService);
 
         when(accessService.canViewTravelMemory(1L)).thenReturn(true);
         when(locationMapper.selectList(any())).thenReturn(List.of());
@@ -61,13 +70,21 @@ class TravelMemoryServiceImplTest {
     @Test
     void shouldDeleteRemovedImagesOnlyAfterCommit() {
         initTableInfo(TravelMemoryLocation.class);
+        initTableInfo(TravelMemoryStop.class);
         initTableInfo(TravelMemoryEntry.class);
         TravelMemoryLocationMapper locationMapper = mock(TravelMemoryLocationMapper.class);
+        TravelMemoryStopMapper stopMapper = mock(TravelMemoryStopMapper.class);
         TravelMemoryEntryMapper entryMapper = mock(TravelMemoryEntryMapper.class);
         AccessService accessService = mock(AccessService.class);
         SysFileService sysFileService = mock(SysFileService.class);
         FileReferenceService fileReferenceService = mock(FileReferenceService.class);
-        TravelMemoryServiceImpl service = new TravelMemoryServiceImpl(locationMapper, entryMapper, accessService, sysFileService, fileReferenceService);
+        TravelMemoryServiceImpl service = new TravelMemoryServiceImpl(
+                locationMapper,
+                stopMapper,
+                entryMapper,
+                accessService,
+                sysFileService,
+                fileReferenceService);
 
         when(accessService.canManageTravelMemory(1L)).thenReturn(true);
 
@@ -77,6 +94,9 @@ class TravelMemoryServiceImplTest {
         when(locationMapper.selectById(7L)).thenAnswer(invocation ->
                 locationSelectCount.getAndIncrement() == 0 ? existing : updated);
         when(locationMapper.updateById(any(TravelMemoryLocation.class))).thenReturn(1);
+        when(stopMapper.selectList(any())).thenReturn(List.of());
+        when(stopMapper.update(any(), any())).thenReturn(1);
+        when(stopMapper.insert(any(TravelMemoryStop.class))).thenReturn(1);
 
         TravelMemoryEntry oldKeep = buildEntry(11L, 7L, "https://cdn.example.com/keep.jpg", 0, 1);
         TravelMemoryEntry oldRemove = buildEntry(12L, 7L, "https://cdn.example.com/remove.jpg", 1, 0);
@@ -103,7 +123,7 @@ class TravelMemoryServiceImplTest {
 
         TransactionSynchronizationManager.initSynchronization();
         try {
-            service.updateLocation(7L, commandLocation, List.of(commandEntry), 1L);
+            service.updateLocation(7L, commandLocation, List.of(), List.of(commandEntry), 1L);
 
             verify(sysFileService, never()).deleteByUrl("https://cdn.example.com/remove.jpg", 1L);
 
@@ -121,11 +141,18 @@ class TravelMemoryServiceImplTest {
     @Test
     void shouldThrowResourceNotFoundWhenUpdatingMissingLocation() {
         TravelMemoryLocationMapper locationMapper = mock(TravelMemoryLocationMapper.class);
+        TravelMemoryStopMapper stopMapper = mock(TravelMemoryStopMapper.class);
         TravelMemoryEntryMapper entryMapper = mock(TravelMemoryEntryMapper.class);
         AccessService accessService = mock(AccessService.class);
         SysFileService sysFileService = mock(SysFileService.class);
         FileReferenceService fileReferenceService = mock(FileReferenceService.class);
-        TravelMemoryServiceImpl service = new TravelMemoryServiceImpl(locationMapper, entryMapper, accessService, sysFileService, fileReferenceService);
+        TravelMemoryServiceImpl service = new TravelMemoryServiceImpl(
+                locationMapper,
+                stopMapper,
+                entryMapper,
+                accessService,
+                sysFileService,
+                fileReferenceService);
 
         when(accessService.canManageTravelMemory(1L)).thenReturn(true);
         when(locationMapper.selectById(99L)).thenReturn(null);
@@ -134,24 +161,31 @@ class TravelMemoryServiceImplTest {
         TravelMemoryEntry commandEntry = buildEntry(null, null, "https://cdn.example.com/keep.jpg", 0, 1);
 
         assertThrows(ResourceNotFoundException.class,
-                () -> service.updateLocation(99L, commandLocation, List.of(commandEntry), 1L));
+                () -> service.updateLocation(99L, commandLocation, List.of(), List.of(commandEntry), 1L));
     }
 
     @Test
     void shouldThrowBadRequestWhenEntriesMissing() {
         TravelMemoryLocationMapper locationMapper = mock(TravelMemoryLocationMapper.class);
+        TravelMemoryStopMapper stopMapper = mock(TravelMemoryStopMapper.class);
         TravelMemoryEntryMapper entryMapper = mock(TravelMemoryEntryMapper.class);
         AccessService accessService = mock(AccessService.class);
         SysFileService sysFileService = mock(SysFileService.class);
         FileReferenceService fileReferenceService = mock(FileReferenceService.class);
-        TravelMemoryServiceImpl service = new TravelMemoryServiceImpl(locationMapper, entryMapper, accessService, sysFileService, fileReferenceService);
+        TravelMemoryServiceImpl service = new TravelMemoryServiceImpl(
+                locationMapper,
+                stopMapper,
+                entryMapper,
+                accessService,
+                sysFileService,
+                fileReferenceService);
 
         when(accessService.canManageTravelMemory(1L)).thenReturn(true);
 
         TravelMemoryLocation commandLocation = buildLocation(null, "空照片地点", LocalDateTime.of(2026, 5, 11, 10, 0));
 
         assertThrows(BadRequestException.class,
-                () -> service.createLocation(commandLocation, List.of(), 1L));
+                () -> service.createLocation(commandLocation, List.of(), List.of(), 1L));
     }
 
     private TravelMemoryLocation buildLocation(Long id, String title, LocalDateTime visitedAt) {
