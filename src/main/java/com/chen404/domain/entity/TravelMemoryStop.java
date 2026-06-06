@@ -11,13 +11,14 @@ import lombok.Data;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
- * 旅行纪念照片条目实体。
+ * 旅行记忆旅途片段实体。
  */
 @Data
-@TableName("travel_memory_entry")
-public class TravelMemoryEntry implements Serializable {
+@TableName("travel_memory_stop")
+public class TravelMemoryStop implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
@@ -26,27 +27,19 @@ public class TravelMemoryEntry implements Serializable {
 
     private Long locationId;
 
-    private Long stopId;
+    private String title;
 
-    private String imageUrl;
+    private String storyNote;
 
-    private String remark;
+    private String coverImage;
 
-    private String thanksNote;
+    private LocalDateTime visitedAt;
 
-    private LocalDateTime shotAt;
+    private BigDecimal latitude;
 
-    private Integer displayOrder;
+    private BigDecimal longitude;
 
-    private Integer isCover;
-
-    private Integer isStopCover;
-
-    private BigDecimal sourceLatitude;
-
-    private BigDecimal sourceLongitude;
-
-    private String geoSource;
+    private Integer sortOrder;
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
@@ -56,4 +49,10 @@ public class TravelMemoryEntry implements Serializable {
 
     @TableLogic
     private Integer deleted;
+
+    @TableField(exist = false)
+    private Integer entryCount;
+
+    @TableField(exist = false)
+    private List<TravelMemoryEntry> entries;
 }

@@ -27,9 +27,9 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * 旅行纪念地图控制器，统一提供知友可见查询与管理员维护接口。
+ * 旅行记忆地图控制器。
  */
-@Tag(name = "旅行纪念地图", description = "旅行纪念地图查询与管理接口")
+@Tag(name = "旅行记忆地图", description = "旅行记忆地图查询与管理接口")
 @RestController
 public class TravelMemoryController {
 
@@ -43,7 +43,7 @@ public class TravelMemoryController {
         this.travelMemoryConverter = travelMemoryConverter;
     }
 
-    @Operation(summary = "获取当前用户可见的旅行纪念地点列表", description = "仅管理员与知友可访问")
+    @Operation(summary = "获取当前用户可见的旅行记忆地点列表", description = "仅管理员与知友可访问")
     @GetMapping("/travel-memories")
     public Result<List<TravelMemoryLocationListItemVO>> listVisibleMemories(
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
@@ -51,7 +51,7 @@ public class TravelMemoryController {
         return Result.success(travelMemoryConverter.toListItemVOList(travelMemoryService.listVisibleLocations(userId)));
     }
 
-    @Operation(summary = "获取旅行纪念地点详情", description = "仅管理员与知友可访问")
+    @Operation(summary = "获取旅行记忆地点详情", description = "仅管理员与知友可访问")
     @GetMapping("/travel-memories/{id}")
     public Result<TravelMemoryLocationDetailVO> getVisibleMemoryDetail(
             @Parameter(description = "地点 ID", required = true, example = "1001")
@@ -60,13 +60,13 @@ public class TravelMemoryController {
         Long userId = CurrentUserUtil.requireUserId(currentUser);
         TravelMemoryLocation location = travelMemoryService.getVisibleLocationDetail(id, userId);
         if (location == null) {
-            return Result.error(404, "旅行纪念地点不存在");
+            return Result.error(404, "旅行记忆地点不存在");
         }
         return Result.success(travelMemoryConverter.toDetailVO(location));
     }
 
     @RequireAdmin
-    @Operation(summary = "获取后台旅行纪念地点列表", description = "仅管理员可访问")
+    @Operation(summary = "获取后台旅行记忆地点列表", description = "仅管理员可访问")
     @GetMapping("/admin/travel-memories")
     public Result<List<TravelMemoryLocationDetailVO>> listAdminMemories() {
         return Result.success(
@@ -77,7 +77,7 @@ public class TravelMemoryController {
     }
 
     @RequireAdmin
-    @Operation(summary = "获取后台旅行纪念地点详情", description = "仅管理员可访问")
+    @Operation(summary = "获取后台旅行记忆地点详情", description = "仅管理员可访问")
     @GetMapping("/admin/travel-memories/{id}")
     public Result<TravelMemoryLocationDetailVO> getAdminMemoryDetail(
             @Parameter(description = "地点 ID", required = true, example = "1001")
@@ -89,7 +89,7 @@ public class TravelMemoryController {
     }
 
     @RequireAdmin
-    @Operation(summary = "创建旅行纪念地点", description = "仅管理员可访问")
+    @Operation(summary = "创建旅行记忆地点", description = "仅管理员可访问")
     @PostMapping("/admin/travel-memories")
     public Result<TravelMemoryLocationDetailVO> createTravelMemory(
             @Valid @RequestBody CreateTravelMemoryCommand command,
@@ -97,6 +97,7 @@ public class TravelMemoryController {
         Long adminId = CurrentUserUtil.requireUserId(currentUser);
         TravelMemoryLocation created = travelMemoryService.createLocation(
                 travelMemoryConverter.toEntity(command),
+                travelMemoryConverter.toStopEntityList(command.getStops()),
                 travelMemoryConverter.toEntryEntityList(command.getEntries()),
                 adminId
         );
@@ -104,7 +105,7 @@ public class TravelMemoryController {
     }
 
     @RequireAdmin
-    @Operation(summary = "更新旅行纪念地点", description = "仅管理员可访问")
+    @Operation(summary = "更新旅行记忆地点", description = "仅管理员可访问")
     @PutMapping("/admin/travel-memories/{id}")
     public Result<TravelMemoryLocationDetailVO> updateTravelMemory(
             @Parameter(description = "地点 ID", required = true, example = "1001")
@@ -115,6 +116,7 @@ public class TravelMemoryController {
         TravelMemoryLocation updated = travelMemoryService.updateLocation(
                 id,
                 travelMemoryConverter.toEntity(command),
+                travelMemoryConverter.toStopEntityList(command.getStops()),
                 travelMemoryConverter.toEntryEntityList(command.getEntries()),
                 adminId
         );
@@ -122,7 +124,7 @@ public class TravelMemoryController {
     }
 
     @RequireAdmin
-    @Operation(summary = "删除旅行纪念地点", description = "仅管理员可访问")
+    @Operation(summary = "删除旅行记忆地点", description = "仅管理员可访问")
     @DeleteMapping("/admin/travel-memories/{id}")
     public Result<Void> deleteTravelMemory(
             @Parameter(description = "地点 ID", required = true, example = "1001")
