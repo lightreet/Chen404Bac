@@ -74,7 +74,7 @@ src/main/resources/db/migration/
 - 好友申请
 - 站点运行时配置
 - AI 会话与文章知识切片
-- 旅行纪念地图
+- 旅行纪念地图（含停留片段 `stop` 分组与结束时间）
 - 统一文件引用
 - AI 后台配置
 - Sakura Radio 歌曲与歌单
@@ -84,6 +84,7 @@ src/main/resources/db/migration/
 - `baseline-on-migrate = true`
 - `validate-on-migrate = true`
 - `clean-disabled = true`
+- 默认 profile 为 `dev`
 
 ## 配置结构
 
@@ -103,7 +104,9 @@ src/main/resources/db/migration/
 - `minio.*`：对象存储
 - `jwt.*`：认证密钥与过期时间
 - `app.cors.*`：跨域
+- `app.frontend-base-url` / `app.backend-base-url`：前后端对外基础地址
 - `app.site-runtime.*`：文章分页、上传限制等运行时默认值
+- `app.image-processing.*`：上传图片压缩、WebP 转换与尺寸限制
 - `app.ai.runtime.*`：聊天、文章辅助、推荐默认策略
 - `app.ai.maid.*`：Lyra 默认 prompt 与人设资源
 - `llm.*`：OpenAI-compatible 模型调用配置
