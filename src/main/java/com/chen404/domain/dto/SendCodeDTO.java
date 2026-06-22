@@ -24,9 +24,9 @@ public class SendCodeDTO {
     private String phone;
 
     /**
-     * 验证码类型：register-注册 login-登录 reset-重置密码
+     * 验证码类型编码（register/login/reset）
      */
-    @Schema(description = "验证码类型：register-注册 login-登录 reset-重置密码", required = true, example = "register")
+    @Schema(description = "验证码类型编码（register/login/reset）", required = true, example = "register")
     @NotBlank(message = "验证码类型不能为空")
     private String type;
 }

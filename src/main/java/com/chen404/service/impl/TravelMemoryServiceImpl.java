@@ -6,8 +6,10 @@ import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.entity.TravelMemoryEntry;
 import com.chen404.domain.entity.TravelMemoryLocation;
 import com.chen404.domain.entity.TravelMemoryStop;
+import com.chen404.domain.entity.User;
 import com.chen404.domain.enums.TravelMemoryGeoSourceEnum;
 import com.chen404.domain.enums.TravelMemoryStatusEnum;
+import com.chen404.domain.enums.TravelMemoryVisibilityEnum;
 import com.chen404.exception.BadRequestException;
 import com.chen404.exception.ForbiddenException;
 import com.chen404.exception.ResourceNotFoundException;
@@ -45,6 +47,8 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
 
     private static final int DEFAULT_SORT_ORDER = 0;
     private static final int STATUS_VISIBLE = TravelMemoryStatusEnum.VISIBLE.getValue();
+    private static final int VISIBILITY_PUBLIC = TravelMemoryVisibilityEnum.PUBLIC.getValue();
+    private static final int VISIBILITY_FRIEND = TravelMemoryVisibilityEnum.FRIEND.getValue();
     private static final int COVER_YES = 1;
     private static final int COVER_NO = 0;
     private static final int STOP_COVER_YES = 1;
@@ -75,7 +79,7 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
     @Override
     public List<TravelMemoryLocation> listVisibleLocations(Long userId) {
         ensureCanView(userId);
-        List<TravelMemoryLocation> locations = queryLocations(true);
+        List<TravelMemoryLocation> locations = queryVisibleLocations(userId);
         attachStructuredChildren(locations);
         return locations;
     }
@@ -84,7 +88,9 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
     public TravelMemoryLocation getVisibleLocationDetail(Long id, Long userId) {
         ensureCanView(userId);
         TravelMemoryLocation location = travelMemoryLocationMapper.selectById(id);
-        if (location == null || !Objects.equals(location.getStatus(), STATUS_VISIBLE)) {
+        if (location == null
+                || !Objects.equals(location.getStatus(), STATUS_VISIBLE)
+                || !canViewLocation(userId, location)) {
             return null;
         }
         attachStructuredChildren(List.of(location));
@@ -204,7 +210,7 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
 
     private void ensureCanView(Long userId) {
         if (!accessService.canViewTravelMemory(userId)) {
-            throw new ForbiddenException("仅管理员和知友可访问旅行记忆地图");
+            throw new ForbiddenException("当前不可访问旅行记忆地图");
         }
     }
 
@@ -223,6 +229,37 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
                 .orderByDesc(TravelMemoryLocation::getVisitedAt)
                 .orderByDesc(TravelMemoryLocation::getId);
         return travelMemoryLocationMapper.selectList(wrapper);
+    }
+
+    private List<TravelMemoryLocation> queryVisibleLocations(Long userId) {
+        LambdaQueryWrapper<TravelMemoryLocation> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(TravelMemoryLocation::getStatus, STATUS_VISIBLE);
+        appendVisibilityCondition(wrapper, userId);
+        wrapper.orderByAsc(TravelMemoryLocation::getSortOrder)
+                .orderByDesc(TravelMemoryLocation::getVisitedAt)
+                .orderByDesc(TravelMemoryLocation::getId);
+        return travelMemoryLocationMapper.selectList(wrapper);
+    }
+
+    private void appendVisibilityCondition(LambdaQueryWrapper<TravelMemoryLocation> wrapper, Long userId) {
+        if (canViewFriendVisibility(userId)) {
+            wrapper.in(TravelMemoryLocation::getVisibility, VISIBILITY_PUBLIC, VISIBILITY_FRIEND);
+            return;
+        }
+        wrapper.eq(TravelMemoryLocation::getVisibility, VISIBILITY_PUBLIC);
+    }
+
+    private boolean canViewLocation(Long userId, TravelMemoryLocation location) {
+        TravelMemoryVisibilityEnum visibility = TravelMemoryVisibilityEnum.fromValue(location.getVisibility());
+        if (visibility == TravelMemoryVisibilityEnum.PUBLIC) {
+            return true;
+        }
+        return visibility == TravelMemoryVisibilityEnum.FRIEND && canViewFriendVisibility(userId);
+    }
+
+    private boolean canViewFriendVisibility(Long userId) {
+        User viewer = accessService.getUserOrNull(userId);
+        return viewer != null && (accessService.isAdmin(viewer) || accessService.isFriend(viewer));
     }
 
     private void attachStructuredChildren(List<TravelMemoryLocation> locations) {
@@ -345,6 +382,7 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
         List<TravelMemoryEntry> flattenedEntries = flattenEntries(normalizedStops);
 
         input.setStatus(TravelMemoryStatusEnum.normalizeValue(input.getStatus()));
+        input.setVisibility(TravelMemoryVisibilityEnum.normalizeValue(input.getVisibility()));
         input.setSortOrder(input.getSortOrder() == null ? DEFAULT_SORT_ORDER : input.getSortOrder());
         input.setCoverImage(resolveLocationCoverImage(flattenedEntries));
         fillDisplayCoordinates(input, normalizedStops, flattenedEntries);

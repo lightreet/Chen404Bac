@@ -43,21 +43,21 @@ public class TravelMemoryController {
         this.travelMemoryConverter = travelMemoryConverter;
     }
 
-    @Operation(summary = "获取当前用户可见的旅行记忆地点列表", description = "仅管理员与知友可访问")
+    @Operation(summary = "获取当前用户可见的旅行记忆地点列表", description = "游客可查看公开地点，知友与管理员可查看知友可见地点")
     @GetMapping("/travel-memories")
     public Result<List<TravelMemoryLocationListItemVO>> listVisibleMemories(
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
-        Long userId = CurrentUserUtil.requireUserId(currentUser);
+        Long userId = CurrentUserUtil.getUserId(currentUser);
         return Result.success(travelMemoryConverter.toListItemVOList(travelMemoryService.listVisibleLocations(userId)));
     }
 
-    @Operation(summary = "获取旅行记忆地点详情", description = "仅管理员与知友可访问")
+    @Operation(summary = "获取旅行记忆地点详情", description = "游客可查看公开地点详情，知友与管理员可查看知友可见地点详情")
     @GetMapping("/travel-memories/{id}")
     public Result<TravelMemoryLocationDetailVO> getVisibleMemoryDetail(
             @Parameter(description = "地点 ID", required = true, example = "1001")
             @PathVariable Long id,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
-        Long userId = CurrentUserUtil.requireUserId(currentUser);
+        Long userId = CurrentUserUtil.getUserId(currentUser);
         TravelMemoryLocation location = travelMemoryService.getVisibleLocationDetail(id, userId);
         if (location == null) {
             return Result.error(404, "旅行记忆地点不存在");

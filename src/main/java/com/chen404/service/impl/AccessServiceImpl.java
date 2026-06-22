@@ -44,11 +44,7 @@ public class AccessServiceImpl implements AccessService {
 
     @Override
     public boolean canViewTravelMemory(Long userId) {
-        User user = getUserOrNull(userId);
-        if (user == null) {
-            return false;
-        }
-        return isAdmin(user) || isFriend(user);
+        return true;
     }
 
     @Override

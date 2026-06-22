@@ -13,7 +13,7 @@ import static org.mockito.Mockito.when;
 class AccessServiceImplTravelMemoryPermissionTest {
 
     @Test
-    void shouldAllowAdminAndFriendToViewTravelMemory() {
+    void shouldAllowEveryVisitorToOpenTravelMemoryMap() {
         UserAccessProfileSupport support = mock(UserAccessProfileSupport.class);
         AccessServiceImpl service = new AccessServiceImpl();
         ReflectionTestUtils.setField(service, "userAccessProfileSupport", support);
@@ -24,8 +24,8 @@ class AccessServiceImplTravelMemoryPermissionTest {
 
         assertTrue(service.canViewTravelMemory(1L));
         assertTrue(service.canViewTravelMemory(2L));
-        assertFalse(service.canViewTravelMemory(3L));
-        assertFalse(service.canViewTravelMemory(null));
+        assertTrue(service.canViewTravelMemory(3L));
+        assertTrue(service.canViewTravelMemory(null));
     }
 
     @Test

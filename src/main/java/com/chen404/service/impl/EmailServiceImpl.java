@@ -1,5 +1,6 @@
 package com.chen404.service.impl;
 
+import com.chen404.domain.enums.VerificationCodeTypeEnum;
 import com.chen404.service.support.MailTemplateSupport;
 import com.chen404.service.EmailService;
 import jakarta.mail.MessagingException;
@@ -24,6 +25,8 @@ public class EmailServiceImpl implements EmailService {
     private static final String VERIFICATION_TEMPLATE = "mail/verification-code.html";
     private static final String DEFAULT_ACTION_HINT = "验证码有效期为 5 分钟，请勿泄露给他人。";
     private static final String DEFAULT_IGNORE_HINT = "如非本人操作，请忽略此邮件。";
+    private static final String DEFAULT_VERIFICATION_SUBJECT = "Chen404博客 - 验证码";
+    private static final String DEFAULT_VERIFICATION_DISPLAY_NAME = "验证";
 
     private final JavaMailSender mailSender;
     private final MailTemplateSupport mailTemplateSupport;
@@ -37,33 +40,15 @@ public class EmailServiceImpl implements EmailService {
     }
 
     @Override
-    public void sendVerificationCode(String toEmail, String code, String type) {
-        String subject;
-        String typeName;
-
-        switch (type) {
-            case "register":
-                subject = "Chen404博客 - 注册验证码";
-                typeName = "注册";
-                break;
-            case "reset":
-                subject = "Chen404博客 - 密码重置验证码";
-                typeName = "密码重置";
-                break;
-            case "login":
-                subject = "Chen404博客 - 登录验证码";
-                typeName = "登录";
-                break;
-            default:
-                subject = "Chen404博客 - 验证码";
-                typeName = "验证";
-        }
-
+    public void sendVerificationCode(String toEmail, String code, VerificationCodeTypeEnum type) {
+        VerificationCodeTypeEnum resolvedType = type == null ? null : type;
+        String subject = resolvedType == null ? DEFAULT_VERIFICATION_SUBJECT : resolvedType.getMailSubject();
+        String typeName = resolvedType == null ? DEFAULT_VERIFICATION_DISPLAY_NAME : resolvedType.getDisplayName();
         // 构建HTML邮件内容
         String htmlContent = buildVerificationEmail(typeName, code);
 
         sendHtmlEmail(toEmail, subject, htmlContent);
-        log.info("验证码邮件已发送至：{}，类型：{}", toEmail, type);
+        log.info("验证码邮件已发送至：{}，类型：{}", toEmail, resolvedType == null ? "unknown" : resolvedType.getCode());
     }
 
     @Override

@@ -3,6 +3,7 @@ package com.chen404.service.impl;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.chen404.converter.UserConverter;
 import com.chen404.domain.enums.UserTrustLevelEnum;
+import com.chen404.domain.dto.ForgotPasswordDTO;
 import com.chen404.domain.dto.LoginDTO;
 import com.chen404.domain.dto.LoginResultDTO;
 import com.chen404.domain.dto.RegisterDTO;
@@ -24,6 +25,7 @@ import com.chen404.util.JwtUtil;
 import com.chen404.util.RedisKeys;
 import com.chen404.util.RedisUtil;
 import com.chen404.exception.TooManyRequestsException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -39,6 +41,7 @@ import java.util.Objects;
 /**
  * 用户服务实现
  */
+@Slf4j
 @Service
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService {
 
@@ -46,6 +49,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     private static final int LOGIN_FAIL_LIMIT = 5;
     private static final Duration LOGIN_FAIL_WINDOW = Duration.ofMinutes(15);
     private static final Duration LOGIN_BLOCK_TTL = Duration.ofMinutes(15);
+    private static final String PASSWORD_CHANGE_SUBJECT = "Chen404 账号密码已修改提醒";
 
     @Autowired
     private UserMapper userMapper;
@@ -345,19 +349,48 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         }
         user.setPassword(passwordEncoder.encode(dto.getNewPassword()));
         userMapper.updateById(user);
+        log.info("[USER_PASSWORD_CHANGED] userId={} via=auth-change ip={}", userId, normalizeClientIp(clientIp));
 
-        // 若已绑定邮箱则发送密码修改提醒
+        sendPasswordChangeNotification(user, clientIp, userAgent, "账号设置");
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void resetPasswordByEmail(ForgotPasswordDTO dto, String clientIp, String userAgent) {
+        User user = userMapper.selectByEmail(dto.getEmail());
+        if (user == null) {
+            throw new RuntimeException("用户不存在");
+        }
+        if (user.getStatus() == 0) {
+            throw new RuntimeException("账号已被禁用");
+        }
+        if (passwordEncoder.matches(dto.getNewPassword(), user.getPassword())) {
+            throw new RuntimeException("新密码不能与当前密码相同");
+        }
+
+        user.setPassword(passwordEncoder.encode(dto.getNewPassword()));
+        userMapper.updateById(user);
+        log.info("[USER_PASSWORD_RESET] userId={} email={} ip={}",
+                user.getId(), dto.getEmail(), normalizeClientIp(clientIp));
+
+        sendPasswordChangeNotification(user, clientIp, userAgent, "邮箱找回");
+    }
+
+    /**
+     * 若已绑定邮箱则发送密码修改提醒
+     */
+    private void sendPasswordChangeNotification(User user, String clientIp, String userAgent, String scene) {
         if (StringUtils.hasText(user.getEmail())) {
             try {
-                String subject = "Chen404 账号密码已修改提醒";
-                String content = "您好，您的账号密码已在下列环境下完成修改：\n"
+                String content = "您好，您的账号密码已通过" + scene + "完成修改：\n"
                         + "时间：" + LocalDateTime.now() + "\n"
                         + "IP：" + (clientIp == null ? "-" : clientIp) + "\n"
                         + "设备：" + (userAgent == null ? "-" : userAgent) + "\n\n"
                         + "如非本人操作，请尽快登录并修改密码。";
-                emailService.sendEmail(user.getEmail(), subject, content);
-            } catch (Exception ignored) {
-                // ignore
+                emailService.sendEmail(user.getEmail(), PASSWORD_CHANGE_SUBJECT, content);
+            } catch (Exception ex) {
+                log.error("[USER_PASSWORD_NOTIFY_FAIL] userId={} email={} message={}",
+                        user.getId(), user.getEmail(), ex.getMessage(), ex);
             }
         }
     }

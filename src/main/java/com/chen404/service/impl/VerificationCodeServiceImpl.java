@@ -1,17 +1,19 @@
 package com.chen404.service.impl;
 
+import com.chen404.domain.enums.VerificationCodeTypeEnum;
 import com.chen404.service.EmailService;
 import com.chen404.service.VerificationCodeService;
+import com.chen404.util.AuthConstants;
 import com.chen404.util.RedisKeys;
 import com.chen404.util.RedisUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.Random;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * 验证码服务实现类
@@ -20,23 +22,19 @@ import java.time.ZoneId;
 @Service
 public class VerificationCodeServiceImpl implements VerificationCodeService {
 
+    private static final long CODE_EXPIRE_MINUTES = AuthConstants.SEND_CODE_EXPIRE_SECONDS / 60L;
+    private static final long SEND_INTERVAL_SECONDS = AuthConstants.SEND_CODE_INTERVAL_SECONDS;
+    private static final int MAX_DAILY_SEND_COUNT = AuthConstants.MAX_DAILY_SEND_CODE_COUNT;
+    private static final int DECIMAL_RADIX = 10;
+
     @Autowired
     private RedisUtil redisUtil;
 
     @Autowired
     private EmailService emailService;
 
-    // 验证码有效期：5分钟
-    private static final long CODE_EXPIRE_MINUTES = 5;
-
-    // 发送间隔：60秒
-    private static final long SEND_INTERVAL_SECONDS = 60;
-
-    // 每天最大发送次数
-    private static final int MAX_DAILY_SEND_COUNT = 10;
-
     @Override
-    public String generateAndSendCode(String target, String type) {
+    public String generateAndSendCode(String target, VerificationCodeTypeEnum type) {
         // 检查发送频率
         if (!canSend(target, type)) {
             throw new RuntimeException("发送过于频繁，请稍后再试");
@@ -53,18 +51,18 @@ public class VerificationCodeServiceImpl implements VerificationCodeService {
         recordSendCount(target, type);
 
         // 发送邮件
-        if (target.contains("@")) {
+        if (target.contains(AuthConstants.EMAIL_TARGET_SYMBOL)) {
             emailService.sendVerificationCode(target, code, type);
         }
         // 手机号短信发送（后续实现）
 
-        log.info("验证码已发送至：{}，类型：{}", target, type);
+        log.info("验证码已发送至：{}，类型：{}", target, type.getCode());
         return code;
     }
 
     @Override
-    public boolean verifyCode(String target, String type, String code) {
-        if (!target.contains("@")) {
+    public boolean verifyCode(String target, VerificationCodeTypeEnum type, String code) {
+        if (!target.contains(AuthConstants.EMAIL_TARGET_SYMBOL)) {
             // 手机号验证码验证（后续实现）
             return true;
         }
@@ -86,13 +84,13 @@ public class VerificationCodeServiceImpl implements VerificationCodeService {
     }
 
     @Override
-    public void deleteCode(String target, String type) {
+    public void deleteCode(String target, VerificationCodeTypeEnum type) {
         String codeKey = RedisKeys.verifyCode(type, target);
         redisUtil.delete(codeKey);
     }
 
     @Override
-    public boolean canSend(String target, String type) {
+    public boolean canSend(String target, VerificationCodeTypeEnum type) {
         // 检查发送间隔
         String intervalKey = RedisKeys.verifyInterval(type, target);
         if (redisUtil.exists(intervalKey)) {
@@ -115,10 +113,10 @@ public class VerificationCodeServiceImpl implements VerificationCodeService {
     /**
      * 记录发送次数
      */
-    private void recordSendCount(String target, String type) {
+    private void recordSendCount(String target, VerificationCodeTypeEnum type) {
         // 记录发送间隔
         String intervalKey = RedisKeys.verifyInterval(type, target);
-        redisUtil.setString(intervalKey, "1", Duration.ofSeconds(SEND_INTERVAL_SECONDS));
+        redisUtil.setString(intervalKey, AuthConstants.REDIS_FLAG_VALUE, Duration.ofSeconds(SEND_INTERVAL_SECONDS));
 
         // 记录每日次数
         String dailyKey = RedisKeys.verifyDailyCount(type, target);
@@ -140,10 +138,9 @@ public class VerificationCodeServiceImpl implements VerificationCodeService {
      * 生成6位数字验证码
      */
     private String generateCode() {
-        Random random = new Random();
         StringBuilder code = new StringBuilder();
-        for (int i = 0; i < 6; i++) {
-            code.append(random.nextInt(10));
+        for (int i = 0; i < AuthConstants.VERIFY_CODE_LENGTH; i++) {
+            code.append(ThreadLocalRandom.current().nextInt(DECIMAL_RADIX));
         }
         return code.toString();
     }

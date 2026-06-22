@@ -25,7 +25,7 @@ public interface AccessService {
     boolean isFriend(User user);
 
     /**
-     * 当前用户是否可浏览旅行纪念地图（管理员或知友）。
+     * 当前用户是否可浏览旅行纪念地图。
      */
     boolean canViewTravelMemory(Long userId);
 
