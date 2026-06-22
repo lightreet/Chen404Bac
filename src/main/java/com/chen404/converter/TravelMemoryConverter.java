@@ -35,6 +35,7 @@ public interface TravelMemoryConverter {
     @Mapping(target = "visitedAt", source = "visitedAt")
     @Mapping(target = "visitedEndAt", source = "visitedEndAt")
     @Mapping(target = "status", source = "status")
+    @Mapping(target = "visibility", source = "visibility")
     @Mapping(target = "sortOrder", source = "sortOrder")
     TravelMemoryLocation toEntity(CreateTravelMemoryCommand command);
 
@@ -48,6 +49,7 @@ public interface TravelMemoryConverter {
     @Mapping(target = "visitedAt", source = "visitedAt")
     @Mapping(target = "visitedEndAt", source = "visitedEndAt")
     @Mapping(target = "status", source = "status")
+    @Mapping(target = "visibility", source = "visibility")
     @Mapping(target = "sortOrder", source = "sortOrder")
     TravelMemoryLocation toEntity(UpdateTravelMemoryCommand command);
 
@@ -140,6 +142,7 @@ public interface TravelMemoryConverter {
     @Mapping(target = "visitedAt", source = "visitedAt")
     @Mapping(target = "visitedEndAt", source = "visitedEndAt")
     @Mapping(target = "entryCount", source = "entryCount")
+    @Mapping(target = "visibility", source = "visibility")
     TravelMemoryLocationListItemVO toListItemVO(TravelMemoryLocation location);
 
     List<TravelMemoryLocationListItemVO> toListItemVOList(List<TravelMemoryLocation> locations);
@@ -156,6 +159,7 @@ public interface TravelMemoryConverter {
     @Mapping(target = "visitedAt", source = "visitedAt")
     @Mapping(target = "visitedEndAt", source = "visitedEndAt")
     @Mapping(target = "status", source = "status")
+    @Mapping(target = "visibility", source = "visibility")
     @Mapping(target = "sortOrder", source = "sortOrder")
     @Mapping(target = "entryCount", source = "entryCount")
     @Mapping(target = "createTime", source = "createTime")

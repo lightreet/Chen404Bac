@@ -52,6 +52,10 @@ public class PublicApiRequestMatcher implements RequestMatcher {
             return "GET".equalsIgnoreCase(method);
         }
 
+        if (path.equals("/travel-memories") || path.startsWith("/travel-memories/")) {
+            return "GET".equalsIgnoreCase(method);
+        }
+
         if (path.equals("/ai/chat") || path.equals("/ai/chat/stream")) {
             return "POST".equalsIgnoreCase(method);
         }

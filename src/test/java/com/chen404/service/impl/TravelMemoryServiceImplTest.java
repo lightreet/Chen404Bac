@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.chen404.domain.entity.TravelMemoryEntry;
 import com.chen404.domain.entity.TravelMemoryLocation;
 import com.chen404.domain.entity.TravelMemoryStop;
+import com.chen404.domain.entity.User;
 import com.chen404.exception.BadRequestException;
 import com.chen404.exception.ResourceNotFoundException;
 import com.chen404.mapper.TravelMemoryEntryMapper;
@@ -26,6 +27,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -65,6 +68,89 @@ class TravelMemoryServiceImplTest {
         assertTrue(sqlSegment.contains("sort_order"), () -> "排序规则应包含 sort_order，实际为: " + sqlSegment);
         assertTrue(sqlSegment.contains("visited_at"), () -> "排序规则应包含 visited_at，实际为: " + sqlSegment);
         assertTrue(sqlSegment.contains("id"), () -> "排序规则应包含 id，实际为: " + sqlSegment);
+    }
+
+    @Test
+    void shouldOnlyListPublicLocationsForAnonymousViewer() {
+        initTableInfo(TravelMemoryLocation.class);
+        TravelMemoryLocationMapper locationMapper = mock(TravelMemoryLocationMapper.class);
+        TravelMemoryStopMapper stopMapper = mock(TravelMemoryStopMapper.class);
+        TravelMemoryEntryMapper entryMapper = mock(TravelMemoryEntryMapper.class);
+        AccessService accessService = mock(AccessService.class);
+        SysFileService sysFileService = mock(SysFileService.class);
+        FileReferenceService fileReferenceService = mock(FileReferenceService.class);
+        TravelMemoryServiceImpl service = new TravelMemoryServiceImpl(
+                locationMapper,
+                stopMapper,
+                entryMapper,
+                accessService,
+                sysFileService,
+                fileReferenceService);
+
+        when(accessService.canViewTravelMemory(null)).thenReturn(true);
+        when(locationMapper.selectList(any())).thenReturn(List.of());
+
+        service.listVisibleLocations(null);
+
+        ArgumentCaptor<LambdaQueryWrapper<TravelMemoryLocation>> captor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(locationMapper).selectList(captor.capture());
+
+        String sqlSegment = captor.getValue().getSqlSegment().toLowerCase();
+        assertTrue(sqlSegment.contains("status"), () -> "公开列表应先过滤展示状态，实际为: " + sqlSegment);
+        assertTrue(sqlSegment.contains("visibility"), () -> "未登录列表应按公开可见性过滤，实际为: " + sqlSegment);
+    }
+
+    @Test
+    void shouldHideFriendOnlyDetailFromAnonymousViewer() {
+        TravelMemoryLocationMapper locationMapper = mock(TravelMemoryLocationMapper.class);
+        TravelMemoryStopMapper stopMapper = mock(TravelMemoryStopMapper.class);
+        TravelMemoryEntryMapper entryMapper = mock(TravelMemoryEntryMapper.class);
+        AccessService accessService = mock(AccessService.class);
+        SysFileService sysFileService = mock(SysFileService.class);
+        FileReferenceService fileReferenceService = mock(FileReferenceService.class);
+        TravelMemoryServiceImpl service = new TravelMemoryServiceImpl(
+                locationMapper,
+                stopMapper,
+                entryMapper,
+                accessService,
+                sysFileService,
+                fileReferenceService);
+
+        TravelMemoryLocation location = buildLocation(7L, "知友地点", LocalDateTime.of(2026, 5, 10, 10, 0));
+        location.setVisibility(2);
+        when(accessService.canViewTravelMemory(null)).thenReturn(true);
+        when(locationMapper.selectById(7L)).thenReturn(location);
+
+        assertNull(service.getVisibleLocationDetail(7L, null));
+    }
+
+    @Test
+    void shouldShowFriendOnlyDetailToFriendViewer() {
+        TravelMemoryLocationMapper locationMapper = mock(TravelMemoryLocationMapper.class);
+        TravelMemoryStopMapper stopMapper = mock(TravelMemoryStopMapper.class);
+        TravelMemoryEntryMapper entryMapper = mock(TravelMemoryEntryMapper.class);
+        AccessService accessService = mock(AccessService.class);
+        SysFileService sysFileService = mock(SysFileService.class);
+        FileReferenceService fileReferenceService = mock(FileReferenceService.class);
+        TravelMemoryServiceImpl service = new TravelMemoryServiceImpl(
+                locationMapper,
+                stopMapper,
+                entryMapper,
+                accessService,
+                sysFileService,
+                fileReferenceService);
+
+        TravelMemoryLocation location = buildLocation(7L, "知友地点", LocalDateTime.of(2026, 5, 10, 10, 0));
+        location.setVisibility(2);
+        User viewer = new User();
+        when(accessService.canViewTravelMemory(2L)).thenReturn(true);
+        when(accessService.getUserOrNull(2L)).thenReturn(viewer);
+        when(accessService.isFriend(viewer)).thenReturn(true);
+        when(locationMapper.selectById(7L)).thenReturn(location);
+        when(stopMapper.selectList(any())).thenReturn(List.of());
+        when(entryMapper.selectList(any())).thenReturn(List.of());
+
+        assertSame(location, service.getVisibleLocationDetail(7L, 2L));
     }
 
     @Test
@@ -198,6 +284,7 @@ class TravelMemoryServiceImplTest {
         location.setLongitude(new java.math.BigDecimal("118.089400"));
         location.setVisitedAt(visitedAt);
         location.setStatus(1);
+        location.setVisibility(2);
         location.setSortOrder(0);
         return location;
     }

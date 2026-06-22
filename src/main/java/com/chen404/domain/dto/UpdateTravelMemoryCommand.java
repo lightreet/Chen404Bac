@@ -49,6 +49,9 @@ public class UpdateTravelMemoryCommand {
     @Schema(description = "显示状态：0-隐藏 1-显示", example = "1")
     private Integer status;
 
+    @Schema(description = "可见性：0-公开 2-知友可见", example = "2")
+    private Integer visibility;
+
     @Schema(description = "排序值", example = "10")
     private Integer sortOrder;
 

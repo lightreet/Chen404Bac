@@ -45,4 +45,7 @@ public class TravelMemoryLocationListItemVO {
 
     @Schema(description = "照片数量", example = "3")
     private Integer entryCount;
+
+    @Schema(description = "可见性：0-公开 2-知友可见", example = "0")
+    private Integer visibility;
 }

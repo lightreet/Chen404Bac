@@ -45,6 +45,8 @@ public class TravelMemoryLocation implements Serializable {
 
     private Integer status;
 
+    private Integer visibility;
+
     private Integer sortOrder;
 
     private Long createdBy;
