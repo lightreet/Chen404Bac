@@ -5,6 +5,7 @@ import com.chen404.domain.dto.LoginDTO;
 import com.chen404.domain.dto.LoginResultDTO;
 import com.chen404.domain.dto.RegisterDTO;
 import com.chen404.domain.dto.ChangePasswordDTO;
+import com.chen404.domain.dto.ForgotPasswordDTO;
 import com.chen404.domain.dto.UpdateProfileDTO;
 import com.chen404.domain.entity.User;
 
@@ -68,4 +69,9 @@ public interface UserService extends IService<User> {
      * 修改密码（校验旧密码）
      */
     void changePassword(Long userId, ChangePasswordDTO dto, String clientIp, String userAgent);
+
+    /**
+     * 通过邮箱重置密码
+     */
+    void resetPasswordByEmail(ForgotPasswordDTO dto, String clientIp, String userAgent);
 }

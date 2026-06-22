@@ -1,5 +1,7 @@
 package com.chen404.service;
 
+import com.chen404.domain.enums.VerificationCodeTypeEnum;
+
 /**
  * 邮件服务接口
  */
@@ -10,9 +12,9 @@ public interface EmailService {
      *
      * @param toEmail 目标邮箱
      * @param code    验证码
-     * @param type    类型：register-注册 reset-重置密码
+     * @param type    验证码业务类型
      */
-    void sendVerificationCode(String toEmail, String code, String type);
+    void sendVerificationCode(String toEmail, String code, VerificationCodeTypeEnum type);
 
     /**
      * 发送普通邮件

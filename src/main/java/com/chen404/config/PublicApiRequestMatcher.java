@@ -21,6 +21,7 @@ public class PublicApiRequestMatcher implements RequestMatcher {
         if (path.equals("/auth/login")
                 || path.equals("/auth/register")
                 || path.equals("/auth/send-code")
+                || path.equals("/auth/forgot-password")
                 || path.equals("/auth/refresh")) {
             return "POST".equalsIgnoreCase(method);
         }

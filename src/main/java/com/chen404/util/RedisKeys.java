@@ -1,5 +1,7 @@
 package com.chen404.util;
 
+import com.chen404.domain.enums.VerificationCodeTypeEnum;
+
 /**
  * Redis Key 命名规范（统一前缀，避免冲突，便于运维排查）
  *
@@ -10,16 +12,16 @@ public final class RedisKeys {
 
     public static final String PREFIX = "chen404:";
 
-    public static String verifyCode(String type, String target) {
-        return PREFIX + "verify:code:" + type + ":" + target;
+    public static String verifyCode(VerificationCodeTypeEnum type, String target) {
+        return PREFIX + "verify:code:" + type.getCode() + ":" + target;
     }
 
-    public static String verifyInterval(String type, String target) {
-        return PREFIX + "verify:interval:" + type + ":" + target;
+    public static String verifyInterval(VerificationCodeTypeEnum type, String target) {
+        return PREFIX + "verify:interval:" + type.getCode() + ":" + target;
     }
 
-    public static String verifyDailyCount(String type, String target) {
-        return PREFIX + "verify:daily:" + type + ":" + target;
+    public static String verifyDailyCount(VerificationCodeTypeEnum type, String target) {
+        return PREFIX + "verify:daily:" + type.getCode() + ":" + target;
     }
 
     /** 匿名文章点赞冷却（与 IP 绑定） */

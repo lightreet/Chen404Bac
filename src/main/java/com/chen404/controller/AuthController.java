@@ -1,8 +1,10 @@
 package com.chen404.controller;
 
 import com.chen404.converter.UserConverter;
+import com.chen404.domain.ApiErrorCode;
 import com.chen404.domain.Result;
 import com.chen404.domain.dto.ChangePasswordDTO;
+import com.chen404.domain.dto.ForgotPasswordDTO;
 import com.chen404.domain.dto.LoginDTO;
 import com.chen404.domain.dto.LoginResultDTO;
 import com.chen404.domain.dto.RefreshTokenDTO;
@@ -13,10 +15,12 @@ import com.chen404.domain.dto.TokenRefreshResultDTO;
 import com.chen404.domain.dto.UpdateProfileDTO;
 import com.chen404.domain.dto.UserProfileVO;
 import com.chen404.domain.entity.User;
+import com.chen404.domain.enums.VerificationCodeTypeEnum;
 import com.chen404.exception.TooManyRequestsException;
 import com.chen404.security.AuthenticatedUser;
 import com.chen404.service.UserService;
 import com.chen404.service.VerificationCodeService;
+import com.chen404.util.AuthConstants;
 import com.chen404.util.CurrentUserUtil;
 import com.chen404.util.RedisKeys;
 import com.chen404.util.RedisUtil;
@@ -77,7 +81,7 @@ public class AuthController {
         } catch (TooManyRequestsException e) {
             throw e;
         } catch (RuntimeException e) {
-            return Result.error(401, e.getMessage());
+            return Result.error(ApiErrorCode.UNAUTHORIZED, e.getMessage());
         }
     }
 
@@ -86,16 +90,20 @@ public class AuthController {
     public Result<UserProfileVO> register(@Valid @RequestBody RegisterDTO registerDTO) {
         try {
             if (registerDTO.getEmail() != null && !registerDTO.getEmail().isEmpty()) {
-                boolean valid = verificationCodeService.verifyCode(registerDTO.getEmail(), "register", registerDTO.getCode());
+                boolean valid = verificationCodeService.verifyCode(
+                        registerDTO.getEmail(),
+                        VerificationCodeTypeEnum.REGISTER,
+                        registerDTO.getCode()
+                );
                 if (!valid) {
-                    return Result.error(400, "验证码错误或已过期");
+                    return Result.error(ApiErrorCode.BAD_REQUEST, "验证码错误或已过期");
                 }
             }
 
             User user = userService.register(registerDTO);
             return Result.success("注册成功", userConverter.toVO(user));
         } catch (RuntimeException e) {
-            return Result.error(400, e.getMessage());
+            return Result.error(ApiErrorCode.BAD_REQUEST, e.getMessage());
         }
     }
 
@@ -103,25 +111,51 @@ public class AuthController {
     @PostMapping("/send-code")
     public Result<SendCodeResultDTO> sendCode(@Valid @RequestBody SendCodeDTO sendCodeDTO) {
         try {
+            VerificationCodeTypeEnum codeType = VerificationCodeTypeEnum.fromCode(sendCodeDTO.getType());
             String target;
             if (sendCodeDTO.getEmail() != null && !sendCodeDTO.getEmail().isEmpty()) {
                 target = sendCodeDTO.getEmail();
-                if ("register".equals(sendCodeDTO.getType()) && userService.isEmailExists(target)) {
-                    return Result.error(400, "该邮箱已被注册");
+                if (VerificationCodeTypeEnum.REGISTER == codeType && userService.isEmailExists(target)) {
+                    return Result.error(ApiErrorCode.BAD_REQUEST, "该邮箱已被注册");
+                }
+                if (VerificationCodeTypeEnum.RESET == codeType && !userService.isEmailExists(target)) {
+                    return Result.error(ApiErrorCode.BAD_REQUEST, "该邮箱尚未注册");
                 }
             } else if (sendCodeDTO.getPhone() != null && !sendCodeDTO.getPhone().isEmpty()) {
                 target = sendCodeDTO.getPhone();
-                if ("register".equals(sendCodeDTO.getType()) && userService.isPhoneExists(target)) {
-                    return Result.error(400, "该手机号已被注册");
+                if (VerificationCodeTypeEnum.REGISTER == codeType && userService.isPhoneExists(target)) {
+                    return Result.error(ApiErrorCode.BAD_REQUEST, "该手机号已被注册");
                 }
             } else {
-                return Result.error(400, "请输入邮箱或手机号");
+                return Result.error(ApiErrorCode.BAD_REQUEST, "请输入邮箱或手机号");
             }
 
-            verificationCodeService.generateAndSendCode(target, sendCodeDTO.getType());
-            return Result.success("验证码发送成功", new SendCodeResultDTO(300));
+            verificationCodeService.generateAndSendCode(target, codeType);
+            return Result.success("验证码发送成功", new SendCodeResultDTO(AuthConstants.SEND_CODE_EXPIRE_SECONDS));
         } catch (RuntimeException e) {
-            return Result.error(400, e.getMessage());
+            return Result.error(ApiErrorCode.BAD_REQUEST, e.getMessage());
+        }
+    }
+
+    @Operation(summary = "忘记密码", description = "通过邮箱验证码重置密码，无需登录")
+    @PostMapping("/forgot-password")
+    public Result<Void> forgotPassword(@Valid @RequestBody ForgotPasswordDTO dto, HttpServletRequest request) {
+        try {
+            if (!userService.isEmailExists(dto.getEmail())) {
+                return Result.error(ApiErrorCode.BAD_REQUEST, "该邮箱尚未注册");
+            }
+
+            boolean valid = verificationCodeService.verifyCode(dto.getEmail(), VerificationCodeTypeEnum.RESET, dto.getCode());
+            if (!valid) {
+                return Result.error(ApiErrorCode.BAD_REQUEST, "验证码错误或已过期");
+            }
+
+            String clientIp = WebRequestUtil.getClientIp(request);
+            String userAgent = request.getHeader("User-Agent");
+            userService.resetPasswordByEmail(dto, clientIp, userAgent);
+            return Result.success("密码重置成功");
+        } catch (RuntimeException e) {
+            return Result.error(ApiErrorCode.BAD_REQUEST, e.getMessage());
         }
     }
 
@@ -147,18 +181,18 @@ public class AuthController {
             var decoded = jwtUtil.verifyToken(refreshToken);
             String type = decoded.getClaim("type").asString();
             if (!"refresh".equals(type)) {
-                return Result.error(401, "refreshToken 无效");
+                return Result.error(ApiErrorCode.UNAUTHORIZED, "refreshToken 无效");
             }
             String tokenId = decoded.getId();
             if (tokenId == null || redisUtil.exists(RedisKeys.refreshTokenBlacklist(tokenId))) {
-                return Result.error(401, "refreshToken 已失效");
+                return Result.error(ApiErrorCode.UNAUTHORIZED, "refreshToken 已失效");
             }
             Long userId = Long.valueOf(decoded.getSubject());
             String username = decoded.getClaim("username").asString();
 
             User user = userService.getById(userId);
             if (user == null || user.getStatus() == 0) {
-                return Result.error(401, "用户不存在或已被禁用");
+                return Result.error(ApiErrorCode.UNAUTHORIZED, "用户不存在或已被禁用");
             }
 
             revokeRefreshToken(decoded);
@@ -167,7 +201,7 @@ public class AuthController {
             int expiresSeconds = expiration == null ? 0 : (int) (expiration / 1000);
             return Result.success(TokenRefreshResultDTO.of(newToken, newRefreshToken, expiresSeconds));
         } catch (Exception e) {
-            return Result.error(401, "refreshToken 无效或已过期");
+            return Result.error(ApiErrorCode.UNAUTHORIZED, "refreshToken 无效或已过期");
         }
     }
 
@@ -181,7 +215,7 @@ public class AuthController {
             User user = userService.updateProfile(userId, dto);
             return Result.success("更新成功", userConverter.toVO(user));
         } catch (RuntimeException e) {
-            return Result.error(400, e.getMessage());
+            return Result.error(ApiErrorCode.BAD_REQUEST, e.getMessage());
         }
     }
 
@@ -198,7 +232,7 @@ public class AuthController {
             userService.changePassword(userId, dto, clientIp, userAgent);
             return Result.success("修改成功");
         } catch (RuntimeException e) {
-            return Result.error(400, e.getMessage());
+            return Result.error(ApiErrorCode.BAD_REQUEST, e.getMessage());
         }
     }
 
