@@ -584,7 +584,13 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         w.eq(Article::getStatus, ArticleStatusEnum.PUBLISHED.getValue())
                 .isNotNull(Article::getPublishTime)
                 .orderByDesc(Article::getPublishTime);
-        w.select(Article::getId, Article::getTitle, Article::getPublishTime);
+        w.select(
+                Article::getId,
+                Article::getTitle,
+                Article::getAuthorId,
+                Article::getStatus,
+                Article::getVisibility,
+                Article::getPublishTime);
         List<Article> rows = filterVisibleArticles(articleMapper.selectList(w), requesterId, null, false);
         Map<Long, List<Tag>> tagsByArticleId = buildTagsByArticleId(rows);
 

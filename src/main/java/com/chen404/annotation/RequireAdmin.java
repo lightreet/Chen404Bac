@@ -8,7 +8,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * ????????????????? Spring Security ????????
+ * 标记仅管理员可访问的方法，实际权限校验交由 Spring Security 处理。
  */
 @PreAuthorize("hasRole('ADMIN')")
 @Target(ElementType.METHOD)

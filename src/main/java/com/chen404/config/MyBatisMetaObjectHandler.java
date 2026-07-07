@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDateTime;
 
 /**
- * MyBatis Plus ???? create_time?update_time ??????
+ * MyBatis Plus 自动填充 create_time、update_time 等审计字段。
  */
 @Component
 public class MyBatisMetaObjectHandler implements MetaObjectHandler {

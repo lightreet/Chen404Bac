@@ -4,7 +4,7 @@ import com.chen404.exception.UnauthorizedException;
 import jakarta.servlet.http.HttpServletRequest;
 
 /**
- * ??????????????? request attribute????? SecurityContext?
+ * 兼容从 request attribute 和当前 SecurityContext 中读取用户身份。
  */
 public final class RequestAttrUtil {
 

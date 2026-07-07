@@ -25,7 +25,7 @@ public class MailTemplateSupport {
 
     public MailTemplateSupport(
             SiteConfigService siteConfigService,
-            @Value("${app.frontend-base-url:http://localhost:5173}") String frontendBaseUrl
+            @Value("${app.frontend-base-url:http://localhost:20204}") String frontendBaseUrl
     ) {
         this.siteConfigService = siteConfigService;
         this.frontendBaseUrl = frontendBaseUrl;

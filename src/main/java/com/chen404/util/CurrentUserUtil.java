@@ -6,7 +6,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 /**
- * ????????????? Spring Security principal?
+ * 从当前线程的 Spring Security principal 中读取登录用户。
  */
 public final class CurrentUserUtil {
 

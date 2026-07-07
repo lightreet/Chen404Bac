@@ -5,7 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * ????????????????
+ * Spring Security 中保存的当前登录用户身份。
  */
 @Data
 @NoArgsConstructor
