@@ -19,7 +19,7 @@ public class WebConfig implements WebMvcConfigurer {
     @Autowired
     private LoggingInterceptor loggingInterceptor;
 
-    @Value("${app.cors.allowed-origins:http://localhost:5173,http://127.0.0.1:5173,http://192.168.1.6:5173}")
+    @Value("${app.cors.allowed-origins:http://localhost:20204,http://127.0.0.1:20204,http://192.168.1.6:20204,http://localhost:5173,http://127.0.0.1:5173,http://192.168.1.6:5173}")
     private String corsAllowedOrigins;
 
     private String[] parseCorsOrigins() {

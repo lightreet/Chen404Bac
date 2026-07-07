@@ -27,9 +27,9 @@ import org.springframework.web.bind.annotation.RestController;
 import java.nio.charset.StandardCharsets;
 
 /**
- * ??????????????????
+ * 好友申请提交与后台审核接口。
  */
-@Tag(name = "????", description = "??????????")
+@Tag(name = "好友申请", description = "好友申请提交、查询与审核接口")
 @RestController
 public class TrustRequestController {
 
@@ -39,16 +39,16 @@ public class TrustRequestController {
         this.userTrustRequestService = userTrustRequestService;
     }
 
-    @Operation(summary = "??????", description = "???????????????? URL ??")
+    @Operation(summary = "提交好友申请", description = "登录用户提交好友申请，可携带申请理由和附件 URL 列表")
     @PostMapping("/trust-requests")
     public Result<TrustRequestVO> createRequest(
             @RequestBody CreateTrustRequestDTO dto,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
         Long userId = CurrentUserUtil.requireUserId(currentUser);
-        return Result.success("?????", userTrustRequestService.createRequest(userId, dto));
+        return Result.success("申请已提交", userTrustRequestService.createRequest(userId, dto));
     }
 
-    @Operation(summary = "????????????", description = "??????????????????????????????")
+    @Operation(summary = "获取我最近的一条好友申请", description = "登录用户查询自己最近一次好友申请及审核状态")
     @GetMapping("/trust-requests/me/latest")
     public Result<TrustRequestVO> getMyLatestRequest(@AuthenticationPrincipal AuthenticatedUser currentUser) {
         Long userId = CurrentUserUtil.requireUserId(currentUser);
@@ -56,49 +56,49 @@ public class TrustRequestController {
     }
 
     @RequireAdmin
-    @Operation(summary = "???????????", description = "???????????????????")
+    @Operation(summary = "管理员分页查询好友申请", description = "仅管理员可查看好友申请列表")
     @GetMapping("/admin/trust-requests")
     public Result<PageResult<TrustRequestVO>> getAdminRequests(
-            @Parameter(description = "???? 1 ??", example = "1")
+            @Parameter(description = "页码，从 1 开始", example = "1")
             @RequestParam(defaultValue = "1") Integer page,
-            @Parameter(description = "????", example = "10")
+            @Parameter(description = "每页数量", example = "10")
             @RequestParam(defaultValue = "10") Integer size,
-            @Parameter(description = "?????0-??? 1-??? 2-???", example = "0")
+            @Parameter(description = "审核状态：0-待审核 1-已通过 2-已拒绝", example = "0")
             @RequestParam(required = false) Integer status,
-            @Parameter(description = "????????????????????", example = "chen")
+            @Parameter(description = "关键词，可按用户名、昵称或申请理由搜索", example = "chen")
             @RequestParam(required = false) String keyword) {
         return Result.success(userTrustRequestService.getAdminRequests(page, size, status, keyword));
     }
 
     @RequireAdmin
-    @Operation(summary = "?????????", description = "???????????????")
+    @Operation(summary = "管理员通过好友申请", description = "仅管理员可将待审核申请标记为通过")
     @PutMapping("/admin/trust-requests/{id}/approve")
     public Result<TrustRequestVO> approveRequest(
-            @Parameter(description = "???? ID", required = true, example = "1001")
+            @Parameter(description = "申请 ID", required = true, example = "1001")
             @PathVariable Long id,
             @RequestBody(required = false) ReviewTrustRequestDTO dto,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
         Long adminId = CurrentUserUtil.requireUserId(currentUser);
         String reviewNote = dto == null ? null : dto.getReviewNote();
-        return Result.success("????", userTrustRequestService.approveRequest(id, adminId, reviewNote));
+        return Result.success("审核通过", userTrustRequestService.approveRequest(id, adminId, reviewNote));
     }
 
     @RequireAdmin
-    @Operation(summary = "?????????", description = "????????????????")
+    @Operation(summary = "管理员拒绝好友申请", description = "仅管理员可将待审核申请标记为拒绝")
     @PutMapping("/admin/trust-requests/{id}/reject")
     public Result<TrustRequestVO> rejectRequest(
-            @Parameter(description = "???? ID", required = true, example = "1001")
+            @Parameter(description = "申请 ID", required = true, example = "1001")
             @PathVariable Long id,
             @RequestBody ReviewTrustRequestDTO dto,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
         Long adminId = CurrentUserUtil.requireUserId(currentUser);
-        return Result.success("?????", userTrustRequestService.rejectRequest(id, adminId, dto == null ? null : dto.getReviewNote()));
+        return Result.success("已拒绝申请", userTrustRequestService.rejectRequest(id, adminId, dto == null ? null : dto.getReviewNote()));
     }
 
-    @Operation(summary = "???????????", description = "??????????????????? HTML ???")
+    @Operation(summary = "邮件中直接通过好友申请", description = "通过邮件审批 token 完成审核，并返回 HTML 结果页")
     @GetMapping(value = "/trust-requests/email-approve", produces = MediaType.TEXT_HTML_VALUE)
     public ResponseEntity<byte[]> approveByEmail(
-            @Parameter(description = "??????", required = true)
+            @Parameter(description = "邮件审批 token", required = true)
             @RequestParam("token") String token) {
         String html = userTrustRequestService.approveByEmailToken(token);
         byte[] body = html.getBytes(StandardCharsets.UTF_8);

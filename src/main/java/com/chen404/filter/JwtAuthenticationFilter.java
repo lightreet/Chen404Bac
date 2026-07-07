@@ -61,7 +61,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 filterChain.doFilter(request, response);
                 return;
             }
-            writeUnauthorized(response, "????????");
+            writeUnauthorized(response, "未登录或登录已过期");
             return;
         }
 
@@ -70,7 +70,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             Long userId = jwtUtil.getUserIdFromToken(token);
             User user = userService.getCurrentUser(userId);
             if (user == null || user.getStatus() == null || user.getStatus() != USER_ENABLED_STATUS) {
-                writeUnauthorized(response, "??????????");
+                writeUnauthorized(response, "用户不存在或已被禁用");
                 return;
             }
 
@@ -90,7 +90,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 filterChain.doFilter(request, response);
                 return;
             }
-            writeUnauthorized(response, "Token??????");
+            writeUnauthorized(response, "Token 无效或已过期");
         }
     }
 

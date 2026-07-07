@@ -72,7 +72,7 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
     @Value("${spring.mail.username:}")
     private String mailUsername;
 
-    @Value("${app.frontend-base-url:http://localhost:5173}")
+    @Value("${app.frontend-base-url:http://localhost:20204}")
     private String frontendBaseUrl;
 
     @Value("${app.backend-base-url:http://localhost:10404/api}")
