@@ -4,12 +4,14 @@ import com.chen404.annotation.RequireAdmin;
 import com.chen404.converter.HomeViewConverter;
 import com.chen404.domain.Result;
 import com.chen404.domain.dto.BannerVO;
+import com.chen404.domain.dto.DevelopmentHistoryVO;
 import com.chen404.domain.dto.SiteConfigDTO;
 import com.chen404.domain.dto.SiteMemberDTO;
 import com.chen404.domain.dto.SiteOwnerDTO;
 import com.chen404.domain.entity.Banner;
 import com.chen404.domain.entity.User;
 import com.chen404.service.BannerService;
+import com.chen404.service.DevelopmentHistoryService;
 import com.chen404.service.SiteConfigService;
 import com.chen404.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -37,16 +39,19 @@ public class SiteController {
     private final SiteConfigService siteConfigService;
     private final UserService userService;
     private final HomeViewConverter homeViewConverter;
+    private final DevelopmentHistoryService developmentHistoryService;
 
     public SiteController(
             BannerService bannerService,
             SiteConfigService siteConfigService,
             UserService userService,
-            HomeViewConverter homeViewConverter) {
+            HomeViewConverter homeViewConverter,
+            DevelopmentHistoryService developmentHistoryService) {
         this.bannerService = bannerService;
         this.siteConfigService = siteConfigService;
         this.userService = userService;
         this.homeViewConverter = homeViewConverter;
+        this.developmentHistoryService = developmentHistoryService;
     }
 
     /**
@@ -84,6 +89,15 @@ public class SiteController {
         return Result.success(userService.listPublicUsers().stream()
                 .map(SiteController::toPublicMember)
                 .toList());
+    }
+
+    /**
+     * 获取站点开发历程。
+     */
+    @Operation(summary = "获取开发历程", description = "聚合站点前后端仓库的公开 GitHub 提交记录")
+    @GetMapping("/development-history")
+    public Result<DevelopmentHistoryVO> getDevelopmentHistory() {
+        return Result.success(developmentHistoryService.getDevelopmentHistory());
     }
 
     @Operation(summary = "获取站点成员详情", description = "按用户 ID 获取单个成员的公开资料")
