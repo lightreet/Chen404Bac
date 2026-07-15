@@ -4,6 +4,7 @@ import com.chen404.converter.HomeViewConverter;
 import com.chen404.domain.Result;
 import com.chen404.domain.dto.SiteConfigDTO;
 import com.chen404.service.BannerService;
+import com.chen404.service.DevelopmentHistoryService;
 import com.chen404.service.SiteConfigService;
 import com.chen404.service.UserService;
 import org.junit.jupiter.api.Test;
@@ -24,7 +25,13 @@ class SiteControllerConfigExposureTest {
         SiteConfigService siteConfigService = mock(SiteConfigService.class);
         UserService userService = mock(UserService.class);
         HomeViewConverter homeViewConverter = mock(HomeViewConverter.class);
-        SiteController controller = new SiteController(bannerService, siteConfigService, userService, homeViewConverter);
+        DevelopmentHistoryService developmentHistoryService = mock(DevelopmentHistoryService.class);
+        SiteController controller = new SiteController(
+                bannerService,
+                siteConfigService,
+                userService,
+                homeViewConverter,
+                developmentHistoryService);
 
         SiteConfigDTO config = new SiteConfigDTO();
         config.setHeroImages(new LinkedHashMap<>(Map.of("home", "/hero-home.png")));
