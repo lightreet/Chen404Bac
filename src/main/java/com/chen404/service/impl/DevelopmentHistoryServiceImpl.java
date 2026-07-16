@@ -3,11 +3,12 @@ package com.chen404.service.impl;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
-import com.chen404.config.GitHubDevelopmentProperties;
 import com.chen404.domain.dto.DevelopmentCommitVO;
 import com.chen404.domain.dto.DevelopmentHistoryVO;
 import com.chen404.domain.dto.DevelopmentRepositoryVO;
+import com.chen404.domain.dto.GitHubDevelopmentAdminConfigDTO;
 import com.chen404.service.DevelopmentHistoryService;
+import com.chen404.service.GitHubDevelopmentConfigService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -33,6 +34,7 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -60,49 +62,63 @@ public class DevelopmentHistoryServiceImpl implements DevelopmentHistoryService 
     private static final int SHORT_SHA_LENGTH = 7;
     private static final int FAILURE_CACHE_MINUTES = 5;
 
-    private final GitHubDevelopmentProperties properties;
+    private final GitHubDevelopmentConfigService configService;
     private final HttpClient httpClient;
     private final Object refreshLock = new Object();
 
     private volatile CacheEntry cacheEntry;
 
-    public DevelopmentHistoryServiceImpl(GitHubDevelopmentProperties properties) {
-        this.properties = properties;
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(resolveTimeoutSeconds()))
-                .build();
+    public DevelopmentHistoryServiceImpl(GitHubDevelopmentConfigService configService) {
+        this.configService = configService;
+        this.httpClient = HttpClient.newHttpClient();
     }
 
     @Override
     public DevelopmentHistoryVO getDevelopmentHistory() {
+        GitHubDevelopmentAdminConfigDTO settings = configService.getEffectiveConfig();
+        String configFingerprint = configFingerprint(settings);
         CacheEntry current = cacheEntry;
-        if (isFresh(current)) {
+        if (isFresh(current, configFingerprint)) {
             return current.data();
         }
 
         synchronized (refreshLock) {
             current = cacheEntry;
-            if (isFresh(current)) {
+            if (isFresh(current, configFingerprint)) {
                 return current.data();
             }
-            return refreshHistory(current);
+            CacheEntry previous = hasSameConfig(current, configFingerprint) ? current : null;
+            return refreshHistory(previous, settings, configFingerprint);
         }
     }
 
-    private DevelopmentHistoryVO refreshHistory(CacheEntry previous) {
+    @Override
+    public DevelopmentHistoryVO refreshDevelopmentHistory() {
+        GitHubDevelopmentAdminConfigDTO settings = configService.getEffectiveConfig();
+        String configFingerprint = configFingerprint(settings);
+        synchronized (refreshLock) {
+            CacheEntry previous = hasSameConfig(cacheEntry, configFingerprint) ? cacheEntry : null;
+            return refreshHistory(previous, settings, configFingerprint);
+        }
+    }
+
+    private DevelopmentHistoryVO refreshHistory(
+            CacheEntry previous,
+            GitHubDevelopmentAdminConfigDTO settings,
+            String configFingerprint) {
         List<DevelopmentCommitVO> commits = new ArrayList<>();
         List<DevelopmentRepositoryVO> repositories = new ArrayList<>();
         List<String> failedRepositories = new ArrayList<>();
 
-        for (String repository : normalizedRepositories()) {
+        for (String repository : normalizedRepositories(settings)) {
             try {
-                RepositoryFetchResult result = fetchRepository(repository);
+                RepositoryFetchResult result = fetchRepository(repository, settings);
                 commits.addAll(result.commits());
-                repositories.add(toRepositorySummary(repository, result));
+                repositories.add(toRepositorySummary(repository, result, settings));
             } catch (Exception e) {
                 failedRepositories.add(repository);
                 log.warn("[GITHUB_HISTORY_REPO_FAIL] owner={} repository={} message={}",
-                        properties.getOwner(), repository, e.getMessage());
+                        settings.getOwner(), repository, e.getMessage());
             }
         }
 
@@ -110,7 +126,10 @@ public class DevelopmentHistoryServiceImpl implements DevelopmentHistoryService 
             DevelopmentHistoryVO stale = copyHistory(previous.data());
             stale.setStale(true);
             stale.setNotice("GitHub 暂时无法同步，当前展示上次成功获取的记录");
-            cacheEntry = new CacheEntry(stale, Instant.now().plus(Duration.ofMinutes(FAILURE_CACHE_MINUTES)));
+            cacheEntry = new CacheEntry(
+                    stale,
+                    Instant.now().plus(Duration.ofMinutes(FAILURE_CACHE_MINUTES)),
+                    configFingerprint);
             return stale;
         }
 
@@ -125,24 +144,30 @@ public class DevelopmentHistoryServiceImpl implements DevelopmentHistoryService 
         history.setGeneratedAt(Instant.now());
         history.setAvailable(!commits.isEmpty());
         history.setStale(false);
-        history.setNotice(resolveNotice(failedRepositories, commits.isEmpty()));
+        history.setNotice(resolveNotice(failedRepositories, commits.isEmpty(), settings));
 
-        cacheEntry = new CacheEntry(history, Instant.now().plus(resolveCacheDuration()));
+        cacheEntry = new CacheEntry(
+                history,
+                Instant.now().plus(resolveCacheDuration(settings)),
+                configFingerprint);
         log.info("[GITHUB_HISTORY_REFRESH] owner={} repositories={} commits={} source={}",
-                properties.getOwner(), repositories.size(), commits.size(), summarizeSources(repositories));
+                settings.getOwner(), repositories.size(), commits.size(), summarizeSources(repositories));
         return history;
     }
 
-    private RepositoryFetchResult fetchRepository(String repository) throws Exception {
-        if (StringUtils.hasText(properties.getToken())) {
+    private RepositoryFetchResult fetchRepository(
+            String repository,
+            GitHubDevelopmentAdminConfigDTO settings) throws Exception {
+        if (StringUtils.hasText(settings.getToken())) {
             try {
-                return new RepositoryFetchResult(filterDisplayableCommits(fetchFromApi(repository)), SOURCE_API);
+                return new RepositoryFetchResult(
+                        filterDisplayableCommits(fetchFromApi(repository, settings)), SOURCE_API);
             } catch (Exception e) {
                 log.warn("[GITHUB_HISTORY_API_FALLBACK] owner={} repository={} message={}",
-                        properties.getOwner(), repository, e.getMessage());
+                        settings.getOwner(), repository, e.getMessage());
             }
         }
-        return new RepositoryFetchResult(filterDisplayableCommits(fetchFromAtom(repository)), SOURCE_ATOM);
+        return new RepositoryFetchResult(filterDisplayableCommits(fetchFromAtom(repository, settings)), SOURCE_ATOM);
     }
 
     private List<DevelopmentCommitVO> filterDisplayableCommits(List<DevelopmentCommitVO> commits) {
@@ -156,15 +181,17 @@ public class DevelopmentHistoryServiceImpl implements DevelopmentHistoryService 
                 && message.trim().toLowerCase(Locale.ROOT).startsWith("merge ");
     }
 
-    private List<DevelopmentCommitVO> fetchFromApi(String repository) throws Exception {
-        int limit = Math.max(MIN_API_LIMIT, Math.min(properties.getApiCommitLimit(), MAX_API_LIMIT));
-        String endpoint = normalizeBaseUrl(properties.getApiBaseUrl())
-                + "/repos/" + properties.getOwner() + "/" + repository
-                + "/commits?sha=" + encode(properties.getBranch()) + "&per_page=" + limit;
+    private List<DevelopmentCommitVO> fetchFromApi(
+            String repository,
+            GitHubDevelopmentAdminConfigDTO settings) throws Exception {
+        int limit = Math.max(MIN_API_LIMIT, Math.min(settings.getApiCommitLimit(), MAX_API_LIMIT));
+        String endpoint = normalizeBaseUrl(settings.getApiBaseUrl())
+                + "/repos/" + settings.getOwner() + "/" + repository
+                + "/commits?sha=" + encode(settings.getBranch()) + "&per_page=" + limit;
 
-        HttpRequest request = baseRequest(endpoint)
+        HttpRequest request = baseRequest(endpoint, settings)
                 .header("Accept", "application/vnd.github+json")
-                .header("Authorization", "Bearer " + properties.getToken().trim())
+                .header("Authorization", "Bearer " + settings.getToken().trim())
                 .header("X-GitHub-Api-Version", "2022-11-28")
                 .GET()
                 .build();
@@ -172,21 +199,23 @@ public class DevelopmentHistoryServiceImpl implements DevelopmentHistoryService 
         return parseApiCommits(repository, JSON.parseArray(body));
     }
 
-    private List<DevelopmentCommitVO> fetchFromAtom(String repository) throws Exception {
-        String endpoint = normalizeBaseUrl(properties.getWebBaseUrl())
-                + "/" + properties.getOwner() + "/" + repository
-                + "/commits/" + properties.getBranch() + ".atom";
-        HttpRequest request = baseRequest(endpoint)
+    private List<DevelopmentCommitVO> fetchFromAtom(
+            String repository,
+            GitHubDevelopmentAdminConfigDTO settings) throws Exception {
+        String endpoint = normalizeBaseUrl(settings.getWebBaseUrl())
+                + "/" + settings.getOwner() + "/" + repository
+                + "/commits/" + settings.getBranch() + ".atom";
+        HttpRequest request = baseRequest(endpoint, settings)
                 .header("Accept", "application/atom+xml")
                 .GET()
                 .build();
         return parseAtomCommits(repository, send(request));
     }
 
-    private HttpRequest.Builder baseRequest(String endpoint) {
+    private HttpRequest.Builder baseRequest(String endpoint, GitHubDevelopmentAdminConfigDTO settings) {
         return HttpRequest.newBuilder()
                 .uri(URI.create(endpoint))
-                .timeout(Duration.ofSeconds(resolveTimeoutSeconds()))
+                .timeout(Duration.ofSeconds(resolveTimeoutSeconds(settings)))
                 .header("User-Agent", USER_AGENT);
     }
 
@@ -266,13 +295,17 @@ public class DevelopmentHistoryServiceImpl implements DevelopmentHistoryService 
         return commit;
     }
 
-    private DevelopmentRepositoryVO toRepositorySummary(String repository, RepositoryFetchResult result) {
+    private DevelopmentRepositoryVO toRepositorySummary(
+            String repository,
+            RepositoryFetchResult result,
+            GitHubDevelopmentAdminConfigDTO settings) {
         DevelopmentRepositoryVO summary = new DevelopmentRepositoryVO();
         summary.setName(repository);
         summary.setLabel(resolveRepositoryLabel(repository));
         summary.setCommitCount(result.commits().size());
         summary.setSource(result.source());
-        summary.setUrl(normalizeBaseUrl(properties.getWebBaseUrl()) + "/" + properties.getOwner() + "/" + repository);
+        summary.setUrl(normalizeBaseUrl(settings.getWebBaseUrl())
+                + "/" + settings.getOwner() + "/" + repository);
         return summary;
     }
 
@@ -289,14 +322,17 @@ public class DevelopmentHistoryServiceImpl implements DevelopmentHistoryService 
         return contributors.size();
     }
 
-    private String resolveNotice(List<String> failedRepositories, boolean empty) {
+    private String resolveNotice(
+            List<String> failedRepositories,
+            boolean empty,
+            GitHubDevelopmentAdminConfigDTO settings) {
         if (empty) {
             return "GitHub 暂时无法同步，请稍后再试";
         }
         if (!failedRepositories.isEmpty()) {
             return "部分仓库暂时无法同步：" + String.join("、", failedRepositories);
         }
-        if (!StringUtils.hasText(properties.getToken())) {
+        if (!StringUtils.hasText(settings.getToken())) {
             return "当前使用 GitHub 公开提交源，配置 Token 后可展示更完整记录";
         }
         return null;
@@ -315,27 +351,44 @@ public class DevelopmentHistoryServiceImpl implements DevelopmentHistoryService 
         return copy;
     }
 
-    private List<String> normalizedRepositories() {
-        if (properties.getRepositories() == null) {
+    private List<String> normalizedRepositories(GitHubDevelopmentAdminConfigDTO settings) {
+        if (settings.getRepositories() == null) {
             return List.of();
         }
-        return properties.getRepositories().stream()
+        return settings.getRepositories().stream()
                 .filter(StringUtils::hasText)
                 .map(String::trim)
                 .distinct()
                 .toList();
     }
 
-    private boolean isFresh(CacheEntry entry) {
-        return entry != null && Instant.now().isBefore(entry.expiresAt());
+    private boolean isFresh(CacheEntry entry, String configFingerprint) {
+        return hasSameConfig(entry, configFingerprint) && Instant.now().isBefore(entry.expiresAt());
     }
 
-    private Duration resolveCacheDuration() {
-        return Duration.ofMinutes(Math.max(properties.getCacheMinutes(), MIN_CACHE_MINUTES));
+    private boolean hasSameConfig(CacheEntry entry, String configFingerprint) {
+        return entry != null && Objects.equals(entry.configFingerprint(), configFingerprint);
     }
 
-    private int resolveTimeoutSeconds() {
-        return Math.max(properties.getRequestTimeoutSeconds(), MIN_TIMEOUT_SECONDS);
+    private Duration resolveCacheDuration(GitHubDevelopmentAdminConfigDTO settings) {
+        return Duration.ofMinutes(Math.max(settings.getCacheMinutes(), MIN_CACHE_MINUTES));
+    }
+
+    private int resolveTimeoutSeconds(GitHubDevelopmentAdminConfigDTO settings) {
+        return Math.max(settings.getRequestTimeoutSeconds(), MIN_TIMEOUT_SECONDS);
+    }
+
+    private String configFingerprint(GitHubDevelopmentAdminConfigDTO settings) {
+        return Integer.toHexString(Objects.hash(
+                settings.getOwner(),
+                settings.getRepositories(),
+                settings.getBranch(),
+                settings.getToken(),
+                settings.getCacheMinutes(),
+                settings.getApiCommitLimit(),
+                settings.getRequestTimeoutSeconds(),
+                settings.getApiBaseUrl(),
+                settings.getWebBaseUrl()));
     }
 
     private String resolveRepositoryLabel(String repository) {
@@ -418,6 +471,6 @@ public class DevelopmentHistoryServiceImpl implements DevelopmentHistoryService 
     private record RepositoryFetchResult(List<DevelopmentCommitVO> commits, String source) {
     }
 
-    private record CacheEntry(DevelopmentHistoryVO data, Instant expiresAt) {
+    private record CacheEntry(DevelopmentHistoryVO data, Instant expiresAt, String configFingerprint) {
     }
 }
