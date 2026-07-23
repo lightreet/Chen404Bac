@@ -2,6 +2,7 @@ package com.chen404.controller;
 
 import com.chen404.annotation.RequireAdmin;
 import com.chen404.converter.TravelMemoryConverter;
+import com.chen404.domain.ApiErrorCode;
 import com.chen404.domain.Result;
 import com.chen404.domain.dto.CreateTravelMemoryCommand;
 import com.chen404.domain.dto.TravelMemoryLocationDetailVO;
@@ -60,7 +61,7 @@ public class TravelMemoryController {
         Long userId = CurrentUserUtil.getUserId(currentUser);
         TravelMemoryLocation location = travelMemoryService.getVisibleLocationDetail(id, userId);
         if (location == null) {
-            return Result.error(404, "旅行记忆地点不存在");
+            return Result.error(ApiErrorCode.NOT_FOUND, "旅行记忆地点不存在");
         }
         return Result.success(travelMemoryConverter.toDetailVO(location));
     }

@@ -2,6 +2,7 @@ package com.chen404.filter;
 
 import com.auth0.jwt.exceptions.JWTVerificationException;
 import com.chen404.config.PublicApiRequestMatcher;
+import com.chen404.domain.ApiErrorCode;
 import com.chen404.domain.Result;
 import com.chen404.domain.entity.User;
 import com.chen404.domain.enums.UserRoleEnum;
@@ -106,7 +107,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");
-        response.getWriter().write(objectMapper.writeValueAsString(Result.error(401, message)));
+        response.getWriter().write(objectMapper.writeValueAsString(Result.error(ApiErrorCode.UNAUTHORIZED, message)));
     }
 
     private String toRoleAuthority(String roleCode) {
