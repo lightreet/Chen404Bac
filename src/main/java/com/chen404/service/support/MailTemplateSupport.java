@@ -18,6 +18,8 @@ public class MailTemplateSupport {
 
     private static final String DEFAULT_SITE_NAME = "Chen404 Blog";
     private static final String DEFAULT_SITE_DESCRIPTION = "一个写下技术，也收藏温柔日常的小小角落";
+    private static final String BRAND_VISUAL_LOGO_TEMPLATE = "mail/fragment/brand-visual-logo.html";
+    private static final String BRAND_VISUAL_MONOGRAM_TEMPLATE = "mail/fragment/brand-visual-monogram.html";
 
     private final SiteConfigService siteConfigService;
     private final String frontendBaseUrl;
@@ -93,18 +95,12 @@ public class MailTemplateSupport {
     private String buildBrandVisual(SiteConfigDTO config, String safeSiteName) {
         String logoUrl = resolveAbsoluteLogoUrl(config);
         if (StringUtils.hasText(logoUrl)) {
-            return """
-                    <div style="width: 56px; height: 56px; border-radius: 18px; background: linear-gradient(145deg, rgba(255,255,255,0.96), rgba(255,247,251,0.98)); border: 1px solid rgba(233, 204, 220, 0.72); box-shadow: 0 12px 24px rgba(213, 143, 176, 0.12); display: inline-flex; align-items: center; justify-content: center;">
-                      <img src="%s" alt="%s" style="width: 34px; height: 34px; object-fit: contain; display: block;" />
-                    </div>
-                    """.formatted(safeAttribute(logoUrl), safeSiteName);
+            Map<String, String> variables = new LinkedHashMap<>();
+            variables.put("logoUrl", safeAttribute(logoUrl));
+            variables.put("siteName", safeSiteName);
+            return render(BRAND_VISUAL_LOGO_TEMPLATE, variables);
         }
-
-        return """
-                <div style="width: 56px; height: 56px; border-radius: 18px; background: linear-gradient(145deg, rgba(255,255,255,0.96), rgba(255,243,248,0.98)); border: 1px solid rgba(233, 204, 220, 0.72); box-shadow: 0 12px 24px rgba(213, 143, 176, 0.12); display: inline-flex; align-items: center; justify-content: center; color: #d85f8f; font-size: 15px; font-weight: 800; letter-spacing: 0.08em;">
-                  C404
-                </div>
-                """;
+        return render(BRAND_VISUAL_MONOGRAM_TEMPLATE, Map.of());
     }
 
     private String resolveAbsoluteLogoUrl(SiteConfigDTO config) {

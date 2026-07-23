@@ -1,6 +1,7 @@
 package com.chen404.controller;
 
 import com.chen404.converter.TagConverter;
+import com.chen404.domain.ApiErrorCode;
 import com.chen404.domain.Result;
 import com.chen404.domain.dto.TagVO;
 import com.chen404.domain.entity.Tag;
@@ -54,7 +55,7 @@ public class TagController {
             @Parameter(description = "标签 ID 或 slug", required = true) @PathVariable String idOrSlug) {
         Tag tag = tagService.getTagByIdOrSlug(idOrSlug);
         if (tag == null) {
-            return Result.error(404, "标签不存在");
+            return Result.error(ApiErrorCode.NOT_FOUND, "标签不存在");
         }
         return Result.success(tagConverter.toVO(tag));
     }

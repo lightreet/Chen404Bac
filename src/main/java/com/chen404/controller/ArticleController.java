@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.chen404.converter.ArticleCommandConverter;
 import com.chen404.converter.ArticleViewConverter;
 import com.chen404.domain.PageResult;
+import com.chen404.domain.ApiErrorCode;
 import com.chen404.domain.Result;
 import com.chen404.domain.dto.ArchiveYearVO;
 import com.chen404.domain.dto.ArticleDetailVO;
@@ -134,7 +135,7 @@ public class ArticleController {
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
         Article article = articleService.getArticleById(id, incrementView, CurrentUserUtil.getUserId(currentUser));
         if (article == null) {
-            return Result.error(404, "文章不存在");
+            return Result.error(ApiErrorCode.NOT_FOUND, "文章不存在");
         }
         return Result.success(articleViewConverter.toDetailVO(article));
     }
@@ -216,7 +217,7 @@ public class ArticleController {
             Article freshArticle = articleService.getArticleById(created.getId(), false, userId);
             return Result.success("创建成功", articleViewConverter.toDetailVO(freshArticle));
         } catch (RuntimeException e) {
-            return Result.error(400, e.getMessage());
+            return Result.error(ApiErrorCode.BAD_REQUEST, e.getMessage());
         }
     }
 
@@ -235,7 +236,7 @@ public class ArticleController {
         } catch (ForbiddenException | UnauthorizedException e) {
             throw e;
         } catch (RuntimeException e) {
-            return Result.error(400, e.getMessage());
+            return Result.error(ApiErrorCode.BAD_REQUEST, e.getMessage());
         }
     }
 
@@ -252,7 +253,7 @@ public class ArticleController {
         } catch (ForbiddenException | UnauthorizedException e) {
             throw e;
         } catch (RuntimeException e) {
-            return Result.error(400, e.getMessage());
+            return Result.error(ApiErrorCode.BAD_REQUEST, e.getMessage());
         }
     }
 

@@ -2,6 +2,7 @@ package com.chen404.controller;
 
 import com.chen404.annotation.RequireAdmin;
 import com.chen404.converter.HomeViewConverter;
+import com.chen404.domain.ApiErrorCode;
 import com.chen404.domain.Result;
 import com.chen404.domain.dto.BannerVO;
 import com.chen404.domain.dto.DevelopmentHistoryVO;
@@ -106,7 +107,7 @@ public class SiteController {
             @Parameter(description = "用户 ID", required = true) @PathVariable Long id) {
         User user = userService.getPublicUser(id);
         if (user == null) {
-            return Result.error(404, "用户不存在");
+            return Result.error(ApiErrorCode.NOT_FOUND, "用户不存在");
         }
         return Result.success(toPublicMember(user));
     }

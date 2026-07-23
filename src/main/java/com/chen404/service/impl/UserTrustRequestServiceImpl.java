@@ -55,9 +55,15 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
     private static final String MAIL_SUBJECT_PREFIX = "[Chen404] ";
     private static final String ADMIN_NOTIFICATION_TEMPLATE = "mail/trust-request-admin-notification.html";
     private static final String APPLICANT_RESULT_TEMPLATE = "mail/trust-request-applicant-result.html";
+    private static final String ATTACHMENT_ITEM_TEMPLATE = "mail/fragment/trust-attachment-item.html";
+    private static final String AVATAR_IMAGE_TEMPLATE = "mail/fragment/trust-avatar-image.html";
+    private static final String AVATAR_INITIAL_TEMPLATE = "mail/fragment/trust-avatar-initial.html";
+    private static final String REVIEW_RESULT_PAGE_TEMPLATE = "mail/fragment/trust-review-result-page.html";
     private static final String APPROVED_BY_MAIL_REVIEW_NOTE = "已通过邮件快速审批";
     private static final String DEFAULT_APPROVED_REVIEW_NOTE = "审核通过";
     private static final String DEFAULT_EMPTY_ATTACHMENT_HTML = "<p style=\"color: #6b7280;\">未上传附件</p>";
+    /** 附件列表外层包装；与上面的空态提示同为单行结构，保留在 Java 常量而不是单独模板文件。 */
+    private static final String ATTACHMENT_LIST_WRAPPER = "<ul style=\"padding-left: 0; margin: 0; list-style: none;\">%s</ul>";
     private static final String DEFAULT_EMPTY_CONTACT_EMAIL = "未填写";
     private static final String DEFAULT_EMPTY_REVIEW_NOTE = "管理员未填写额外说明";
     private static final DateTimeFormatter EMAIL_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
@@ -542,25 +548,15 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
         List<String> items = new ArrayList<>();
         for (int i = 0; i < attachments.size(); i++) {
             SysFile file = attachments.get(i);
-            String url = file.getFileUrl();
             String label = buildAttachmentLabel(file, i + 1);
             String originalName = StringUtils.hasText(file.getFileOriginalName()) ? file.getFileOriginalName() : label;
-            String fileMeta = buildAttachmentMeta(file);
-            items.add("""
-                    <li style="margin-bottom: 10px;">
-                      <div style="padding:12px 12px; border-radius:14px; background:rgba(255,243,248,0.76); border:1px solid rgba(245,155,188,0.16);">
-                        <a href="%s" style="display:inline-block; padding:7px 12px; border-radius:999px; background:#ffffff; color:#c55f8c; text-decoration:none; font-size:13px; font-weight:700; border:1px solid rgba(245,155,188,0.18);">打开附件</a>
-                        <div style="margin-top:8px; font-size:12px; line-height:1.7; color:#5f5367; word-break:break-all; overflow-wrap:anywhere; white-space:normal;">%s</div>
-                        <div style="margin-top:4px; font-size:11px; line-height:1.6; color:#8b7990;">%s</div>
-                      </div>
-                    </li>
-                    """.formatted(
-                    mailTemplateSupport.safeAttribute(url),
-                    mailTemplateSupport.safeText(originalName),
-                    mailTemplateSupport.safeText(fileMeta)
-            ));
+            items.add(mailTemplateSupport.render(ATTACHMENT_ITEM_TEMPLATE, Map.of(
+                    "attachmentUrl", mailTemplateSupport.safeAttribute(file.getFileUrl()),
+                    "attachmentName", mailTemplateSupport.safeText(originalName),
+                    "attachmentMeta", mailTemplateSupport.safeText(buildAttachmentMeta(file))
+            )));
         }
-        return "<ul style=\"padding-left: 0; margin: 0; list-style: none;\">" + String.join("", items) + "</ul>";
+        return ATTACHMENT_LIST_WRAPPER.formatted(String.join("", items));
     }
 
     private String buildAttachmentLabel(SysFile file, int index) {
@@ -609,19 +605,14 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
     private String buildApplicantAvatarVisual(User applicant, String applicantName) {
         String avatarUrl = resolveEmailImageUrl(applicant == null ? null : applicant.getAvatar());
         if (StringUtils.hasText(avatarUrl)) {
-            return """
-                    <div style="width: 76px; height: 76px; border-radius: 26px; padding: 4px; background: linear-gradient(135deg, rgba(216,102,146,0.82), rgba(238,186,208,0.62)); box-shadow: 0 14px 30px rgba(216,102,146,0.18);">
-                      <img src="%s" alt="%s" style="display:block; width:100%%; height:100%%; border-radius: 22px; object-fit: cover; background:#ffffff;" />
-                    </div>
-                    """.formatted(mailTemplateSupport.safeAttribute(avatarUrl), mailTemplateSupport.safeAttribute(applicantName));
+            return mailTemplateSupport.render(AVATAR_IMAGE_TEMPLATE, Map.of(
+                    "avatarUrl", mailTemplateSupport.safeAttribute(avatarUrl),
+                    "applicantName", mailTemplateSupport.safeAttribute(applicantName)
+            ));
         }
-
-        String initial = extractInitial(applicantName);
-        return """
-                <div style="width: 76px; height: 76px; border-radius: 26px; background: linear-gradient(135deg, rgba(216,102,146,0.90), rgba(240,182,208,0.72)); box-shadow: 0 14px 30px rgba(216,102,146,0.18); display:flex; align-items:center; justify-content:center; color:#ffffff; font-size:28px; font-weight:800;">
-                  %s
-                </div>
-                """.formatted(mailTemplateSupport.safeText(initial));
+        return mailTemplateSupport.render(AVATAR_INITIAL_TEMPLATE, Map.of(
+                "avatarInitial", mailTemplateSupport.safeText(extractInitial(applicantName))
+        ));
     }
 
     private String resolveEmailImageUrl(String rawUrl) {
@@ -643,53 +634,18 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
         return text.substring(0, 1).toUpperCase();
     }
 
+    /**
+     * 邮件审批链接点击后返回的浏览器结果页；页面骨架在模板中维护，Java 只负责变量组装。
+     */
     private String buildResultHtml(String title, String message, boolean success) {
-        String badgeColor = success ? "#16a34a" : "#dc2626";
         Map<String, String> brandVariables = mailTemplateSupport.buildBrandVariables();
-        String siteName = brandVariables.getOrDefault("siteName", "Chen404 Blog");
-        String siteDescription = brandVariables.getOrDefault("siteDescription", "一个写下技术，也收藏温柔日常的小小角落");
-        String brandVisual = brandVariables.getOrDefault("brandVisual", "");
-        return """
-                <!DOCTYPE html>
-                <html lang="zh-CN">
-                <head>
-                  <meta charset="UTF-8" />
-                  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-                  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-                  <title>%s</title>
-                </head>
-                <body style="margin:0; font-family:'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; background: radial-gradient(circle at top, #fff9fb 0%%, #fcfbfd 42%%, #f6f5fb 100%%); padding: 24px; color: #1f2937;">
-                  <div style="max-width: 560px; margin: 0 auto;">
-                    <div style="margin-bottom: 18px;">
-                      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%%" style="border-collapse:collapse;">
-                        <tr>
-                          <td style="width:64px; vertical-align:middle; padding-right:12px;">%s</td>
-                          <td style="vertical-align:middle; text-align:left;">
-                            <div style="font-size:18px; line-height:1.25; color:#5b475c; font-weight:800;">%s</div>
-                            <div style="margin-top:4px; font-size:12px; line-height:1.7; color:#9a8899;">%s</div>
-                          </td>
-                        </tr>
-                      </table>
-                      <div style="margin-top:14px; height:1px; background:linear-gradient(90deg, rgba(227,198,215,0), rgba(227,198,215,0.92) 20%%, rgba(227,198,215,0.92) 80%%, rgba(227,198,215,0));"></div>
-                    </div>
-                    <div style="background:#ffffff; border:1px solid rgba(224,197,212,0.36); border-radius:24px; padding:32px 24px; box-shadow:0 16px 42px rgba(102,83,112,0.08); text-align: center;">
-                      <div style="display: inline-block; min-width: 92px; padding: 7px 16px; border-radius: 999px; background: %s; color: #ffffff; font-size: 13px; font-weight: 700;">%s</div>
-                      <h2 style="margin: 18px 0 10px; font-size: 28px; line-height: 1.25; color: #241b2f;">%s</h2>
-                      <p style="margin: 0; line-height: 1.85; color: #64576b; font-size: 15px;">%s</p>
-                    </div>
-                  </div>
-                </body>
-                </html>
-                """.formatted(
-                mailTemplateSupport.safeAttribute(title),
-                brandVisual,
-                siteName,
-                siteDescription,
-                badgeColor,
-                success ? "Success" : "Failed",
-                mailTemplateSupport.safeText(title),
-                mailTemplateSupport.safeText(message)
-        );
+        Map<String, String> variables = new LinkedHashMap<>(brandVariables);
+        variables.put("pageTitle", mailTemplateSupport.safeAttribute(title));
+        variables.put("badgeColor", success ? "#16a34a" : "#dc2626");
+        variables.put("badgeText", success ? "Success" : "Failed");
+        variables.put("resultTitle", mailTemplateSupport.safeText(title));
+        variables.put("resultMessage", mailTemplateSupport.safeText(message));
+        return mailTemplateSupport.render(REVIEW_RESULT_PAGE_TEMPLATE, variables);
     }
 
     private String joinUrl(String baseUrl, String path) {

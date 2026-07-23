@@ -2,6 +2,7 @@ package com.chen404.controller;
 
 import com.chen404.annotation.RequireAdmin;
 import com.chen404.converter.UserConverter;
+import com.chen404.domain.ApiErrorCode;
 import com.chen404.domain.Result;
 import com.chen404.domain.dto.UpdateTrustLevelDTO;
 import com.chen404.domain.dto.UserProfileVO;
@@ -34,13 +35,13 @@ public class AdminUserController {
     @PutMapping("/{id}/trust-level")
     public Result<UserProfileVO> updateTrustLevel(@PathVariable Long id, @RequestBody UpdateTrustLevelDTO dto) {
         if (dto == null || dto.getTrustLevel() == null) {
-            return Result.error(400, "trustLevel 不能为空");
+            return Result.error(ApiErrorCode.BAD_REQUEST, "trustLevel 不能为空");
         }
         try {
             User updated = userService.updateTrustLevel(id, dto.getTrustLevel());
             return Result.success("更新成功", userConverter.toVO(updated));
         } catch (RuntimeException e) {
-            return Result.error(400, e.getMessage());
+            return Result.error(ApiErrorCode.BAD_REQUEST, e.getMessage());
         }
     }
 }
