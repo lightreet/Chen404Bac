@@ -1,7 +1,6 @@
 package com.chen404.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.chen404.annotation.RequireAdmin;
 import com.chen404.converter.CommentConverter;
 import com.chen404.converter.HomeViewConverter;
 import com.chen404.domain.PageResult;
@@ -10,7 +9,6 @@ import com.chen404.domain.dto.CommentLikeResult;
 import com.chen404.domain.dto.CommentVO;
 import com.chen404.domain.dto.CreateCommentDTO;
 import com.chen404.domain.dto.RecentCommentVO;
-import com.chen404.domain.dto.ReviewCommentDTO;
 import com.chen404.domain.entity.Article;
 import com.chen404.domain.entity.Comment;
 import com.chen404.security.AuthenticatedUser;
@@ -26,7 +24,6 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -39,7 +36,10 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-@Tag(name = "评论", description = "评论列表、发表、删除、点赞与管理员审核")
+/**
+ * 公共评论与留言板接口。
+ */
+@Tag(name = "评论", description = "评论列表、发表、删除与点赞")
 @RestController
 public class CommentController {
 
@@ -138,16 +138,6 @@ public class CommentController {
                 WebRequestUtil.getClientIp(request)
         );
         return Result.success(result);
-    }
-
-    @RequireAdmin
-    @Operation(summary = "审核评论", description = "仅管理员")
-    @PutMapping("/admin/comments/{id}/review")
-    public Result<CommentVO> reviewComment(
-            @PathVariable Long id,
-            @RequestBody ReviewCommentDTO dto) {
-        Comment comment = commentService.reviewComment(id, dto.getStatus());
-        return Result.success(commentConverter.toVO(comment));
     }
 
     private List<RecentCommentVO> toRecentCommentVOList(List<Comment> comments) {
