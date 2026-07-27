@@ -13,5 +13,7 @@ class ControllerRouteConsistencyTest {
                 CategoryController.class.getAnnotation(RequestMapping.class).value());
         assertArrayEquals(new String[]{"/admin/categories"},
                 AdminCategoryController.class.getAnnotation(RequestMapping.class).value());
+        assertArrayEquals(new String[]{"/admin/comments"},
+                AdminCommentController.class.getAnnotation(RequestMapping.class).value());
     }
 }
