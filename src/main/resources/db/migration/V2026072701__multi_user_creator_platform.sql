@@ -12,11 +12,37 @@ WHERE `updated_by` IS NULL;
 
 ALTER TABLE `travel_memory_location`
   MODIFY COLUMN `created_by` BIGINT NOT NULL COMMENT '创建人',
-  MODIFY COLUMN `updated_by` BIGINT NOT NULL COMMENT '最后更新人',
-  ADD KEY `idx_travel_memory_creator_status` (`created_by`, `status`, `update_time`, `id`);
+  MODIFY COLUMN `updated_by` BIGINT NOT NULL COMMENT '最后更新人';
 
-ALTER TABLE `music_track`
-  ADD COLUMN `contributor_id` BIGINT NULL COMMENT '曲目贡献者' AFTER `id`;
+SET @creator_status_index_ddl = IF(
+  EXISTS (
+    SELECT 1
+    FROM `information_schema`.`statistics`
+    WHERE `table_schema` = DATABASE()
+      AND `table_name` = 'travel_memory_location'
+      AND `index_name` = 'idx_travel_memory_creator_status'
+  ),
+  'SELECT 1',
+  'ALTER TABLE `travel_memory_location` ADD KEY `idx_travel_memory_creator_status` (`created_by`, `status`, `update_time`, `id`)'
+);
+PREPARE creator_status_index_statement FROM @creator_status_index_ddl;
+EXECUTE creator_status_index_statement;
+DEALLOCATE PREPARE creator_status_index_statement;
+
+SET @contributor_column_ddl = IF(
+  EXISTS (
+    SELECT 1
+    FROM `information_schema`.`columns`
+    WHERE `table_schema` = DATABASE()
+      AND `table_name` = 'music_track'
+      AND `column_name` = 'contributor_id'
+  ),
+  'SELECT 1',
+  'ALTER TABLE `music_track` ADD COLUMN `contributor_id` BIGINT NULL COMMENT ''曲目贡献者'' AFTER `id`'
+);
+PREPARE contributor_column_statement FROM @contributor_column_ddl;
+EXECUTE contributor_column_statement;
+DEALLOCATE PREPARE contributor_column_statement;
 
 UPDATE `music_track` `track`
 LEFT JOIN `sys_file` `audio_file`
@@ -27,11 +53,11 @@ LEFT JOIN `sys_file` `cover_file`
  AND `cover_file`.`deleted` = 0
 LEFT JOIN `sys_file` `audio_url_file`
   ON `track`.`audio_file_id` IS NULL
- AND `audio_url_file`.`file_url` = `track`.`audio_url`
+ AND BINARY `audio_url_file`.`file_url` = BINARY `track`.`audio_url`
  AND `audio_url_file`.`deleted` = 0
 LEFT JOIN `sys_file` `cover_url_file`
   ON `track`.`cover_file_id` IS NULL
- AND `cover_url_file`.`file_url` = `track`.`cover_url`
+ AND BINARY `cover_url_file`.`file_url` = BINARY `track`.`cover_url`
  AND `cover_url_file`.`deleted` = 0
 SET `track`.`contributor_id` = COALESCE(
   `audio_file`.`user_id`,
@@ -43,8 +69,22 @@ SET `track`.`contributor_id` = COALESCE(
 WHERE `track`.`contributor_id` IS NULL;
 
 ALTER TABLE `music_track`
-  MODIFY COLUMN `contributor_id` BIGINT NOT NULL COMMENT '曲目贡献者',
-  ADD KEY `idx_music_track_contributor_status` (`contributor_id`, `status`, `update_time`, `id`);
+  MODIFY COLUMN `contributor_id` BIGINT NOT NULL COMMENT '曲目贡献者';
+
+SET @contributor_status_index_ddl = IF(
+  EXISTS (
+    SELECT 1
+    FROM `information_schema`.`statistics`
+    WHERE `table_schema` = DATABASE()
+      AND `table_name` = 'music_track'
+      AND `index_name` = 'idx_music_track_contributor_status'
+  ),
+  'SELECT 1',
+  'ALTER TABLE `music_track` ADD KEY `idx_music_track_contributor_status` (`contributor_id`, `status`, `update_time`, `id`)'
+);
+PREPARE contributor_status_index_statement FROM @contributor_status_index_ddl;
+EXECUTE contributor_status_index_statement;
+DEALLOCATE PREPARE contributor_status_index_statement;
 
 CREATE TABLE IF NOT EXISTS `admin_notification` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '消息 ID',

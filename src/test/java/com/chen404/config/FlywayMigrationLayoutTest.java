@@ -17,6 +17,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class FlywayMigrationLayoutTest {
 
     private static final Path MIGRATION_DIR = Path.of("src", "main", "resources", "db", "migration");
+    private static final Path MULTI_USER_MIGRATION = MIGRATION_DIR.resolve(
+            "V2026072701__multi_user_creator_platform.sql");
 
     private static final List<String> EXPECTED_MIGRATIONS = List.of(
             "V2026032601__baseline_schema.sql",
@@ -51,5 +53,17 @@ class FlywayMigrationLayoutTest {
                 .collect(Collectors.toList());
 
         assertEquals(EXPECTED_MIGRATIONS, migrationFiles, "Flyway 迁移文件顺序或命名不符合预期");
+    }
+
+    @Test
+    void shouldKeepLegacyMusicUrlBackfillIndependentOfColumnCollation() throws IOException {
+        String migrationSql = Files.readString(MULTI_USER_MIGRATION);
+
+        assertTrue(migrationSql.contains(
+                        "BINARY `audio_url_file`.`file_url` = BINARY `track`.`audio_url`"),
+                "音乐音频 URL 回填必须使用二进制比较，避免不同 utf8mb4 排序规则导致迁移失败");
+        assertTrue(migrationSql.contains(
+                        "BINARY `cover_url_file`.`file_url` = BINARY `track`.`cover_url`"),
+                "音乐封面 URL 回填必须使用二进制比较，避免不同 utf8mb4 排序规则导致迁移失败");
     }
 }
