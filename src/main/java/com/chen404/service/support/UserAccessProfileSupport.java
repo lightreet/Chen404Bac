@@ -1,6 +1,8 @@
 package com.chen404.service.support;
 
+import com.chen404.config.MultiUserFeatureProperties;
 import com.chen404.domain.enums.UserRoleEnum;
+import com.chen404.domain.enums.UserCapabilityEnum;
 import com.chen404.domain.enums.UserTrustLevelEnum;
 import com.chen404.domain.entity.Role;
 import com.chen404.domain.entity.SysFile;
@@ -29,6 +31,9 @@ public class UserAccessProfileSupport {
     @Autowired
     private SysFileMapper sysFileMapper;
 
+    @Autowired
+    private MultiUserFeatureProperties multiUserFeatureProperties;
+
     /**
      * 根据用户 ID 加载用户并补齐权限相关信息。
      */
@@ -54,6 +59,9 @@ public class UserAccessProfileSupport {
             user.setTrustLevel(UserTrustLevelEnum.NORMAL.getLevel());
         }
         applyIdentityLabels(user);
+        user.setCapabilities(multiUserFeatureProperties.filterEnabledCapabilities(
+                UserCapabilityEnum.resolveCodes(user)
+        ));
         return user;
     }
 

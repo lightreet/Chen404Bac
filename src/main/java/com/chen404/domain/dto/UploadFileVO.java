@@ -1,5 +1,7 @@
 package com.chen404.domain.dto;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
@@ -11,6 +13,7 @@ import java.time.LocalDateTime;
 public class UploadFileVO {
 
     @Schema(description = "文件记录 ID", example = "1")
+    @JsonSerialize(using = ToStringSerializer.class)
     private Long id;
 
     @Schema(description = "文件访问地址", example = "https://cdn.example.com/upload/demo.png")

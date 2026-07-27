@@ -5,20 +5,33 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.chen404.domain.dto.MusicPlaylistTracksCommand;
 import com.chen404.domain.dto.MusicPlaylistUpsertCommand;
 import com.chen404.domain.dto.MusicPlaylistVO;
+import com.chen404.domain.dto.ArticleAuthorVO;
 import com.chen404.domain.dto.MusicTrackUpsertCommand;
 import com.chen404.domain.dto.MusicTrackVO;
+import com.chen404.domain.enums.AdminNotificationEventTypeEnum;
+import com.chen404.domain.enums.AdminNotificationResourceTypeEnum;
 import com.chen404.domain.entity.MusicPlaylist;
 import com.chen404.domain.entity.MusicPlaylistTrack;
 import com.chen404.domain.entity.MusicTrack;
 import com.chen404.domain.entity.SysFile;
+import com.chen404.domain.entity.User;
+import com.chen404.domain.event.AdminContentEvent;
 import com.chen404.exception.BadRequestException;
+import com.chen404.exception.ForbiddenException;
 import com.chen404.exception.ResourceNotFoundException;
 import com.chen404.mapper.MusicPlaylistMapper;
 import com.chen404.mapper.MusicPlaylistTrackMapper;
 import com.chen404.mapper.MusicTrackMapper;
+import com.chen404.mapper.UserMapper;
+import com.chen404.service.AccessService;
+import com.chen404.service.AdminContentEventPublisher;
 import com.chen404.service.FileReferenceService;
+import com.chen404.service.FileClaim;
 import com.chen404.service.MusicRadioService;
+import com.chen404.service.ProtectedFileAccessService;
 import com.chen404.service.SysFileService;
+import com.chen404.service.support.UserAccessProfileSupport;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -50,36 +63,67 @@ public class MusicRadioServiceImpl implements MusicRadioService {
     private final MusicPlaylistTrackMapper musicPlaylistTrackMapper;
     private final SysFileService sysFileService;
     private final FileReferenceService fileReferenceService;
+    private final AccessService accessService;
+    private final UserMapper userMapper;
+    private final UserAccessProfileSupport userAccessProfileSupport;
+    private final AdminContentEventPublisher adminContentEventPublisher;
+
+    @Autowired
+    private ProtectedFileAccessService protectedFileAccessService;
 
     public MusicRadioServiceImpl(
             MusicTrackMapper musicTrackMapper,
             MusicPlaylistMapper musicPlaylistMapper,
             MusicPlaylistTrackMapper musicPlaylistTrackMapper,
             SysFileService sysFileService,
-            FileReferenceService fileReferenceService) {
+            FileReferenceService fileReferenceService,
+            AccessService accessService,
+            UserMapper userMapper,
+            UserAccessProfileSupport userAccessProfileSupport,
+            AdminContentEventPublisher adminContentEventPublisher) {
         this.musicTrackMapper = musicTrackMapper;
         this.musicPlaylistMapper = musicPlaylistMapper;
         this.musicPlaylistTrackMapper = musicPlaylistTrackMapper;
         this.sysFileService = sysFileService;
         this.fileReferenceService = fileReferenceService;
+        this.accessService = accessService;
+        this.userMapper = userMapper;
+        this.userAccessProfileSupport = userAccessProfileSupport;
+        this.adminContentEventPublisher = adminContentEventPublisher;
     }
 
     @Override
-    public List<MusicTrackVO> listPublicTracks() {
+    public List<MusicTrackVO> listPublicTracks(Long viewerId) {
         LambdaQueryWrapper<MusicTrack> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(MusicTrack::getStatus, MusicTrack.STATUS_PUBLISHED)
                 .orderByDesc(MusicTrack::getCreateTime)
                 .orderByDesc(MusicTrack::getId);
-        return musicTrackMapper.selectList(wrapper).stream().map(this::toTrackVO).toList();
+        return toTrackVOList(musicTrackMapper.selectList(wrapper), viewerId);
     }
 
     @Override
-    public MusicTrackVO getPublicTrack(Long id) {
+    public MusicTrackVO getPublicTrack(Long id, Long viewerId) {
         MusicTrack track = musicTrackMapper.selectById(id);
         if (track == null || !MusicTrack.STATUS_PUBLISHED.equals(track.getStatus())) {
             throw new ResourceNotFoundException("音乐不存在");
         }
-        return toTrackVO(track);
+        return toTrackVOList(List.of(track), viewerId).get(0);
+    }
+
+    @Override
+    public List<MusicTrackVO> listMyTracks(Long userId) {
+        ensureCanCreateMusic(userId);
+        LambdaQueryWrapper<MusicTrack> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(MusicTrack::getContributorId, userId)
+                .orderByDesc(MusicTrack::getUpdateTime)
+                .orderByDesc(MusicTrack::getId);
+        return toTrackVOList(musicTrackMapper.selectList(wrapper), userId);
+    }
+
+    @Override
+    public MusicTrackVO getManageableTrack(Long id, Long userId) {
+        MusicTrack track = requireManageableTrack(id, userId);
+        return toTrackVOList(List.of(track), userId).get(0);
     }
 
     @Override
@@ -127,49 +171,64 @@ public class MusicRadioServiceImpl implements MusicRadioService {
     public List<MusicTrackVO> listAdminTracks() {
         LambdaQueryWrapper<MusicTrack> wrapper = new LambdaQueryWrapper<>();
         wrapper.orderByDesc(MusicTrack::getCreateTime).orderByDesc(MusicTrack::getId);
-        return musicTrackMapper.selectList(wrapper).stream().map(this::toTrackVO).toList();
+        return toTrackVOList(musicTrackMapper.selectList(wrapper), null);
     }
 
     @Override
     public MusicTrackVO getAdminTrack(Long id) {
-        return toTrackVO(requireTrack(id));
+        return toTrackVOList(List.of(requireTrack(id)), null).get(0);
     }
 
     @Override
     @Transactional
-    public MusicTrackVO createTrack(MusicTrackUpsertCommand command) {
+    public MusicTrackVO createTrack(MusicTrackUpsertCommand command, Long operatorId) {
+        ensureCanCreateMusic(operatorId);
+        validateTrackFileOwnership(command, operatorId);
         MusicTrack track = toTrack(command);
+        track.setContributorId(operatorId);
         musicTrackMapper.insert(track);
-        convertTrackFilesToPermanent(track.getId(), track);
+        claimTrackFiles(track.getId(), track, operatorId);
         syncTrackFileReferences(track.getId(), track);
-        return toTrackVO(musicTrackMapper.selectById(track.getId()));
+        publishTrackCreatedEvent(track);
+        return toTrackVOList(List.of(musicTrackMapper.selectById(track.getId())), operatorId).get(0);
     }
 
     @Override
     @Transactional
-    public MusicTrackVO updateTrack(Long id, MusicTrackUpsertCommand command) {
-        requireTrack(id);
+    public MusicTrackVO updateTrack(Long id, MusicTrackUpsertCommand command, Long operatorId) {
+        MusicTrack existing = requireManageableTrack(id, operatorId);
+        validateTrackFileOwnership(command, operatorId);
         MusicTrack track = toTrack(command);
         track.setId(id);
+        track.setContributorId(existing.getContributorId());
         musicTrackMapper.updateById(track);
-        convertTrackFilesToPermanent(id, track);
+        claimTrackFiles(id, track, operatorId);
         syncTrackFileReferences(id, track);
-        return toTrackVO(musicTrackMapper.selectById(id));
+        if (!MusicTrack.STATUS_PUBLISHED.equals(existing.getStatus())
+                && MusicTrack.STATUS_PUBLISHED.equals(track.getStatus())) {
+            publishTrackPublishedEvent(track);
+        }
+        return toTrackVOList(List.of(musicTrackMapper.selectById(id)), operatorId).get(0);
     }
 
     @Override
     @Transactional
-    public MusicTrackVO updateTrackStatus(Long id, String status) {
-        MusicTrack track = requireTrack(id);
+    public MusicTrackVO updateTrackStatus(Long id, String status, Long operatorId) {
+        MusicTrack track = requireManageableTrack(id, operatorId);
+        String previousStatus = track.getStatus();
         track.setStatus(normalizeStatus(status));
         musicTrackMapper.updateById(track);
-        return toTrackVO(musicTrackMapper.selectById(id));
+        if (!MusicTrack.STATUS_PUBLISHED.equals(previousStatus)
+                && MusicTrack.STATUS_PUBLISHED.equals(track.getStatus())) {
+            publishTrackPublishedEvent(track);
+        }
+        return toTrackVOList(List.of(musicTrackMapper.selectById(id)), operatorId).get(0);
     }
 
     @Override
     @Transactional
-    public void deleteTrack(Long id) {
-        requireTrack(id);
+    public void deleteTrack(Long id, Long operatorId) {
+        requireManageableTrack(id, operatorId);
         // 删除歌曲时先解除所有分类归属，避免分类关系阻塞歌曲本体删除。
         LambdaQueryWrapper<MusicPlaylistTrack> deleteWrapper = new LambdaQueryWrapper<>();
         deleteWrapper.eq(MusicPlaylistTrack::getTrackId, id);
@@ -312,15 +371,40 @@ public class MusicRadioServiceImpl implements MusicRadioService {
         for (MusicPlaylistTrack link : links) {
             MusicTrack track = trackMap.get(link.getTrackId());
             if (track != null) {
-                result.add(toTrackVO(track));
+                result.add(toTrackVOList(List.of(track), null).get(0));
             }
         }
         return result;
     }
 
-    private MusicTrackVO toTrackVO(MusicTrack track) {
+    private List<MusicTrackVO> toTrackVOList(List<MusicTrack> tracks, Long viewerId) {
+        if (tracks == null || tracks.isEmpty()) {
+            return List.of();
+        }
+        List<Long> contributorIds = tracks.stream()
+                .map(MusicTrack::getContributorId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<Long, User> contributorMap = contributorIds.isEmpty()
+                ? Map.of()
+                : userMapper.selectBatchIds(contributorIds).stream()
+                        .map(userAccessProfileSupport::enrichUserProfile)
+                        .collect(Collectors.toMap(User::getId, Function.identity()));
+        return tracks.stream()
+                .map(track -> toTrackVO(
+                        track,
+                        track.getContributorId() == null ? null : contributorMap.get(track.getContributorId()),
+                        viewerId
+                ))
+                .toList();
+    }
+
+    private MusicTrackVO toTrackVO(MusicTrack track, User contributor, Long viewerId) {
         MusicTrackVO vo = new MusicTrackVO();
         vo.setId(track.getId());
+        vo.setContributorId(track.getContributorId());
+        vo.setContributor(toContributorVO(contributor));
         vo.setTitle(track.getTitle());
         vo.setArtist(track.getArtist());
         vo.setAlbum(track.getAlbum());
@@ -329,9 +413,17 @@ public class MusicRadioServiceImpl implements MusicRadioService {
         vo.setGenre(track.getGenre());
         vo.setTags(parseTags(track.getTags()));
         vo.setAudioFileId(track.getAudioFileId());
-        vo.setAudioUrl(track.getAudioUrl());
+        vo.setAudioUrl(protectedFileAccessService.issueUrlForReference(
+                track.getAudioUrl(),
+                SysFile.RefType.MUSIC_AUDIO,
+                track.getId()
+        ));
         vo.setCoverFileId(track.getCoverFileId());
-        vo.setCoverUrl(track.getCoverUrl());
+        vo.setCoverUrl(protectedFileAccessService.issueUrlForReference(
+                track.getCoverUrl(),
+                SysFile.RefType.MUSIC_COVER,
+                track.getId()
+        ));
         vo.setLyricType(track.getLyricType());
         vo.setLyrics(track.getLyrics());
         vo.setLyricSource(track.getLyricSource());
@@ -339,8 +431,24 @@ public class MusicRadioServiceImpl implements MusicRadioService {
         vo.setMoodText(track.getMoodText());
         vo.setStatus(track.getStatus());
         vo.setSortOrder(track.getSortOrder());
+        boolean manageable = accessService.canManageMusicTrack(viewerId, track);
+        vo.setCanEdit(manageable);
+        vo.setCanDelete(manageable);
         vo.setCreateTime(track.getCreateTime());
         vo.setUpdateTime(track.getUpdateTime());
+        return vo;
+    }
+
+    private ArticleAuthorVO toContributorVO(User contributor) {
+        if (contributor == null) {
+            return null;
+        }
+        ArticleAuthorVO vo = new ArticleAuthorVO();
+        vo.setId(contributor.getId());
+        vo.setUsername(contributor.getUsername());
+        vo.setNickname(contributor.getNickname());
+        vo.setAvatar(contributor.getAvatar());
+        vo.setBio(contributor.getBio());
         return vo;
     }
 
@@ -356,9 +464,9 @@ public class MusicRadioServiceImpl implements MusicRadioService {
         track.setGenre(trim(command.getGenre()));
         track.setTags(joinTags(command.getTags()));
         track.setAudioFileId(command.getAudioFileId());
-        track.setAudioUrl(trim(command.getAudioUrl()));
+        track.setAudioUrl(protectedFileAccessService.normalizeUrl(trim(command.getAudioUrl())));
         track.setCoverFileId(command.getCoverFileId());
-        track.setCoverUrl(trim(command.getCoverUrl()));
+        track.setCoverUrl(protectedFileAccessService.normalizeUrl(trim(command.getCoverUrl())));
         track.setLyricType(lyricType);
         track.setLyrics(command.getLyrics());
         track.setLyricSource(trim(command.getLyricSource()));
@@ -369,15 +477,90 @@ public class MusicRadioServiceImpl implements MusicRadioService {
         return track;
     }
 
-    private void convertTrackFilesToPermanent(Long trackId, MusicTrack track) {
+    private void ensureCanCreateMusic(Long operatorId) {
+        if (!accessService.canCreateMusicTrack(operatorId)) {
+            throw new ForbiddenException("仅知友或管理员可上传音乐");
+        }
+    }
+
+    private MusicTrack requireManageableTrack(Long id, Long operatorId) {
+        MusicTrack track = requireTrack(id);
+        if (!accessService.canManageMusicTrack(operatorId, track)) {
+            throw new ForbiddenException("只能管理自己贡献的音乐");
+        }
+        return track;
+    }
+
+    private void validateTrackFileOwnership(MusicTrackUpsertCommand command, Long operatorId) {
+        User operator = accessService.getUserOrNull(operatorId);
+        boolean admin = accessService.isAdmin(operator);
+        validateOwnedFile(command.getAudioFileId(), command.getAudioUrl(), operatorId, admin, SysFile.RefType.MUSIC_AUDIO);
+        validateOwnedFile(command.getCoverFileId(), command.getCoverUrl(), operatorId, admin, SysFile.RefType.MUSIC_COVER);
+    }
+
+    private void validateOwnedFile(
+            Long fileId,
+            String fileUrl,
+            Long operatorId,
+            boolean admin,
+            String expectedRefType) {
+        SysFile file = fileId == null ? null : sysFileService.getById(fileId);
+        if (file == null && StringUtils.hasText(fileUrl)) {
+            file = sysFileService.findByFileUrl(fileUrl.trim());
+        }
+        if (file == null) {
+            return;
+        }
+        if (!admin && !Objects.equals(file.getUserId(), operatorId)) {
+            throw new ForbiddenException("只能使用自己上传的音乐文件");
+        }
+        if (StringUtils.hasText(file.getRefType()) && !Objects.equals(file.getRefType(), expectedRefType)) {
+            throw new BadRequestException("音乐文件类型不匹配");
+        }
+    }
+
+    private void publishTrackCreatedEvent(MusicTrack track) {
+        AdminNotificationEventTypeEnum eventType = MusicTrack.STATUS_PUBLISHED.equals(track.getStatus())
+                ? AdminNotificationEventTypeEnum.MUSIC_TRACK_PUBLISHED
+                : AdminNotificationEventTypeEnum.MUSIC_TRACK_CREATED;
+        adminContentEventPublisher.publish(new AdminContentEvent(
+                eventType,
+                track.getContributorId(),
+                AdminNotificationResourceTypeEnum.MUSIC_TRACK,
+                track.getId(),
+                track.getTitle()
+        ));
+    }
+
+    private void publishTrackPublishedEvent(MusicTrack track) {
+        adminContentEventPublisher.publish(new AdminContentEvent(
+                AdminNotificationEventTypeEnum.MUSIC_TRACK_PUBLISHED,
+                track.getContributorId(),
+                AdminNotificationResourceTypeEnum.MUSIC_TRACK,
+                track.getId(),
+                track.getTitle()
+        ));
+    }
+
+    private void claimTrackFiles(Long trackId, MusicTrack track, Long operatorId) {
         if (trackId == null || track == null) {
             return;
         }
         if (StringUtils.hasText(track.getAudioUrl())) {
-            sysFileService.convertToPermanent(List.of(track.getAudioUrl()), SysFile.RefType.MUSIC_AUDIO, trackId);
+            sysFileService.claimPermanentFiles(
+                    operatorId,
+                    List.of(FileClaim.byIdAndUrl(track.getAudioFileId(), track.getAudioUrl())),
+                    SysFile.RefType.MUSIC_AUDIO,
+                    trackId
+            );
         }
         if (StringUtils.hasText(track.getCoverUrl())) {
-            sysFileService.convertToPermanent(List.of(track.getCoverUrl()), SysFile.RefType.MUSIC_COVER, trackId);
+            sysFileService.claimPermanentFiles(
+                    operatorId,
+                    List.of(FileClaim.byIdAndUrl(track.getCoverFileId(), track.getCoverUrl())),
+                    SysFile.RefType.MUSIC_COVER,
+                    trackId
+            );
         }
     }
 

@@ -11,6 +11,8 @@ import com.chen404.domain.dto.MusicTrackUpsertCommand;
 import com.chen404.domain.dto.MusicTrackVO;
 import com.chen404.service.MusicTrackAiSuggestService;
 import com.chen404.service.MusicRadioService;
+import com.chen404.security.AuthenticatedUser;
+import com.chen404.util.CurrentUserUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -24,6 +26,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 import java.util.List;
 
@@ -44,14 +47,73 @@ public class MusicRadioController {
 
     @Operation(summary = "获取公开音乐列表")
     @GetMapping("/music/tracks")
-    public Result<List<MusicTrackVO>> listPublicTracks() {
-        return Result.success(musicRadioService.listPublicTracks());
+    public Result<List<MusicTrackVO>> listPublicTracks(
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        return Result.success(musicRadioService.listPublicTracks(CurrentUserUtil.getUserId(currentUser)));
     }
 
     @Operation(summary = "获取公开音乐详情")
     @GetMapping("/music/tracks/{id}")
-    public Result<MusicTrackVO> getPublicTrack(@PathVariable Long id) {
-        return Result.success(musicRadioService.getPublicTrack(id));
+    public Result<MusicTrackVO> getPublicTrack(
+            @PathVariable Long id,
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        return Result.success(musicRadioService.getPublicTrack(id, CurrentUserUtil.getUserId(currentUser)));
+    }
+
+    @Operation(summary = "获取我贡献的音乐")
+    @GetMapping("/music/tracks/mine")
+    public Result<List<MusicTrackVO>> listMyTracks(
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
+        return Result.success(musicRadioService.listMyTracks(userId));
+    }
+
+    @Operation(summary = "获取我可管理的音乐详情")
+    @GetMapping("/music/tracks/mine/{id}")
+    public Result<MusicTrackVO> getMyTrack(
+            @PathVariable Long id,
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
+        return Result.success(musicRadioService.getManageableTrack(id, userId));
+    }
+
+    @Operation(summary = "新增音乐", description = "知友或管理员可直接保存草稿或发布")
+    @PostMapping("/music/tracks")
+    public Result<MusicTrackVO> createMyTrack(
+            @Valid @RequestBody MusicTrackUpsertCommand command,
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
+        return Result.success("创建成功", musicRadioService.createTrack(command, userId));
+    }
+
+    @Operation(summary = "更新音乐", description = "资源所有者或管理员可更新")
+    @PutMapping("/music/tracks/{id}")
+    public Result<MusicTrackVO> updateMyTrack(
+            @PathVariable Long id,
+            @Valid @RequestBody MusicTrackUpsertCommand command,
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
+        return Result.success("更新成功", musicRadioService.updateTrack(id, command, userId));
+    }
+
+    @Operation(summary = "更新音乐状态", description = "资源所有者或管理员可直接切换草稿、发布和归档状态")
+    @PatchMapping("/music/tracks/{id}/status")
+    public Result<MusicTrackVO> updateMyTrackStatus(
+            @PathVariable Long id,
+            @RequestParam String status,
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
+        return Result.success("状态已更新", musicRadioService.updateTrackStatus(id, status, userId));
+    }
+
+    @Operation(summary = "删除音乐", description = "资源所有者或管理员可删除")
+    @DeleteMapping("/music/tracks/{id}")
+    public Result<Void> deleteMyTrack(
+            @PathVariable Long id,
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
+        musicRadioService.deleteTrack(id, userId);
+        return Result.success("删除成功");
     }
 
     @Operation(summary = "获取公开分类列表")
@@ -96,8 +158,11 @@ public class MusicRadioController {
     @RequireAdmin
     @Operation(summary = "新增音乐")
     @PostMapping("/admin/music/tracks")
-    public Result<MusicTrackVO> createTrack(@Valid @RequestBody MusicTrackUpsertCommand command) {
-        return Result.success("创建成功", musicRadioService.createTrack(command));
+    public Result<MusicTrackVO> createTrack(
+            @Valid @RequestBody MusicTrackUpsertCommand command,
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        Long adminId = CurrentUserUtil.requireUserId(currentUser);
+        return Result.success("创建成功", musicRadioService.createTrack(command, adminId));
     }
 
     @RequireAdmin
@@ -106,8 +171,10 @@ public class MusicRadioController {
     public Result<MusicTrackVO> updateTrack(
             @Parameter(description = "音乐 ID", required = true)
             @PathVariable Long id,
-            @Valid @RequestBody MusicTrackUpsertCommand command) {
-        return Result.success("更新成功", musicRadioService.updateTrack(id, command));
+            @Valid @RequestBody MusicTrackUpsertCommand command,
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        Long adminId = CurrentUserUtil.requireUserId(currentUser);
+        return Result.success("更新成功", musicRadioService.updateTrack(id, command, adminId));
     }
 
     @RequireAdmin
@@ -115,15 +182,20 @@ public class MusicRadioController {
     @PatchMapping("/admin/music/tracks/{id}/status")
     public Result<MusicTrackVO> updateTrackStatus(
             @PathVariable Long id,
-            @RequestParam String status) {
-        return Result.success("状态已更新", musicRadioService.updateTrackStatus(id, status));
+            @RequestParam String status,
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        Long adminId = CurrentUserUtil.requireUserId(currentUser);
+        return Result.success("状态已更新", musicRadioService.updateTrackStatus(id, status, adminId));
     }
 
     @RequireAdmin
     @Operation(summary = "删除音乐")
     @DeleteMapping("/admin/music/tracks/{id}")
-    public Result<Void> deleteTrack(@PathVariable Long id) {
-        musicRadioService.deleteTrack(id);
+    public Result<Void> deleteTrack(
+            @PathVariable Long id,
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        Long adminId = CurrentUserUtil.requireUserId(currentUser);
+        musicRadioService.deleteTrack(id, adminId);
         return Result.success("删除成功", null);
     }
 

@@ -11,6 +11,8 @@ import java.util.List;
 public class MusicTrackVO {
 
     private Long id;
+    private Long contributorId;
+    private ArticleAuthorVO contributor;
     private String title;
     private String artist;
     private String album;
@@ -29,6 +31,8 @@ public class MusicTrackVO {
     private String moodText;
     private String status;
     private Integer sortOrder;
+    private Boolean canEdit;
+    private Boolean canDelete;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }

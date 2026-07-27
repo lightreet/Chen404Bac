@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
 
@@ -47,9 +48,33 @@ public class TravelMemoryController {
     @Operation(summary = "获取当前用户可见的旅行记忆地点列表", description = "游客可查看公开地点，知友与管理员可查看知友可见地点")
     @GetMapping("/travel-memories")
     public Result<List<TravelMemoryLocationListItemVO>> listVisibleMemories(
+            @RequestParam(required = false) Long creatorId,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
         Long userId = CurrentUserUtil.getUserId(currentUser);
-        return Result.success(travelMemoryConverter.toListItemVOList(travelMemoryService.listVisibleLocations(userId)));
+        return Result.success(travelMemoryConverter.toListItemVOList(
+                travelMemoryService.listVisibleLocations(userId, creatorId)
+        ));
+    }
+
+    @Operation(summary = "获取我的旅行记忆地点", description = "知友查看自己创建的全部旅行地点")
+    @GetMapping("/travel-memories/mine")
+    public Result<List<TravelMemoryLocationDetailVO>> listMyMemories(
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
+        return Result.success(travelMemoryService.listMyLocations(userId).stream()
+                .map(travelMemoryConverter::toDetailVO)
+                .toList());
+    }
+
+    @Operation(summary = "获取我的旅行记忆地点详情", description = "资源所有者或管理员可访问")
+    @GetMapping("/travel-memories/mine/{id}")
+    public Result<TravelMemoryLocationDetailVO> getMyMemoryDetail(
+            @PathVariable Long id,
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
+        return Result.success(travelMemoryConverter.toDetailVO(
+                travelMemoryService.getManageableLocationDetail(id, userId)
+        ));
     }
 
     @Operation(summary = "获取旅行记忆地点详情", description = "游客可查看公开地点详情，知友与管理员可查看知友可见地点详情")
@@ -69,9 +94,11 @@ public class TravelMemoryController {
     @RequireAdmin
     @Operation(summary = "获取后台旅行记忆地点列表", description = "仅管理员可访问")
     @GetMapping("/admin/travel-memories")
-    public Result<List<TravelMemoryLocationDetailVO>> listAdminMemories() {
+    public Result<List<TravelMemoryLocationDetailVO>> listAdminMemories(
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        Long adminId = CurrentUserUtil.requireUserId(currentUser);
         return Result.success(
-                travelMemoryService.listAdminLocations().stream()
+                travelMemoryService.listAdminLocations(adminId).stream()
                         .map(travelMemoryConverter::toDetailVO)
                         .toList()
         );
@@ -133,6 +160,48 @@ public class TravelMemoryController {
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
         Long adminId = CurrentUserUtil.requireUserId(currentUser);
         travelMemoryService.deleteLocation(id, adminId);
+        return Result.success("删除成功");
+    }
+
+    @Operation(summary = "创建旅行记忆地点", description = "知友或管理员可创建")
+    @PostMapping("/travel-memories")
+    public Result<TravelMemoryLocationDetailVO> createMyTravelMemory(
+            @Valid @RequestBody CreateTravelMemoryCommand command,
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
+        TravelMemoryLocation created = travelMemoryService.createLocation(
+                travelMemoryConverter.toEntity(command),
+                travelMemoryConverter.toStopEntityList(command.getStops()),
+                travelMemoryConverter.toEntryEntityList(command.getEntries()),
+                userId
+        );
+        return Result.success("创建成功", travelMemoryConverter.toDetailVO(created));
+    }
+
+    @Operation(summary = "更新旅行记忆地点", description = "资源所有者或管理员可更新")
+    @PutMapping("/travel-memories/{id}")
+    public Result<TravelMemoryLocationDetailVO> updateMyTravelMemory(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateTravelMemoryCommand command,
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
+        TravelMemoryLocation updated = travelMemoryService.updateLocation(
+                id,
+                travelMemoryConverter.toEntity(command),
+                travelMemoryConverter.toStopEntityList(command.getStops()),
+                travelMemoryConverter.toEntryEntityList(command.getEntries()),
+                userId
+        );
+        return Result.success("更新成功", travelMemoryConverter.toDetailVO(updated));
+    }
+
+    @Operation(summary = "删除旅行记忆地点", description = "资源所有者或管理员可删除")
+    @DeleteMapping("/travel-memories/{id}")
+    public Result<Void> deleteMyTravelMemory(
+            @PathVariable Long id,
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
+        travelMemoryService.deleteLocation(id, userId);
         return Result.success("删除成功");
     }
 }

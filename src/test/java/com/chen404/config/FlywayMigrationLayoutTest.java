@@ -35,7 +35,9 @@ class FlywayMigrationLayoutTest {
             "V2026052701__create_music_radio_tables.sql",
             "V2026060501__add_travel_memory_stop_groups.sql",
             "V2026061202__normalize_legacy_icon_names.sql",
-            "V2026062201__add_travel_memory_visibility.sql"
+            "V2026062201__add_travel_memory_visibility.sql",
+            "V2026072701__multi_user_creator_platform.sql",
+            "V2026072702__harden_multi_user_security.sql"
     );
 
     @Test

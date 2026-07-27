@@ -18,7 +18,7 @@ public interface MusicRadioService {
      *
      * @return 已公开歌曲
      */
-    List<MusicTrackVO> listPublicTracks();
+    List<MusicTrackVO> listPublicTracks(Long viewerId);
 
     /**
      * 获取公开歌曲详情。
@@ -26,7 +26,17 @@ public interface MusicRadioService {
      * @param id 歌曲 ID
      * @return 歌曲详情
      */
-    MusicTrackVO getPublicTrack(Long id);
+    MusicTrackVO getPublicTrack(Long id, Long viewerId);
+
+    /**
+     * 获取当前用户贡献的全部歌曲。
+     */
+    List<MusicTrackVO> listMyTracks(Long userId);
+
+    /**
+     * 获取当前用户可管理的歌曲详情。
+     */
+    MusicTrackVO getManageableTrack(Long id, Long userId);
 
     /**
      * 获取公开分类列表。
@@ -71,7 +81,7 @@ public interface MusicRadioService {
      * @param command 歌曲命令
      * @return 新增后的歌曲
      */
-    MusicTrackVO createTrack(MusicTrackUpsertCommand command);
+    MusicTrackVO createTrack(MusicTrackUpsertCommand command, Long operatorId);
 
     /**
      * 更新歌曲。
@@ -80,7 +90,7 @@ public interface MusicRadioService {
      * @param command 歌曲命令
      * @return 更新后的歌曲
      */
-    MusicTrackVO updateTrack(Long id, MusicTrackUpsertCommand command);
+    MusicTrackVO updateTrack(Long id, MusicTrackUpsertCommand command, Long operatorId);
 
     /**
      * 更新歌曲状态。
@@ -89,14 +99,14 @@ public interface MusicRadioService {
      * @param status 目标状态
      * @return 更新后的歌曲
      */
-    MusicTrackVO updateTrackStatus(Long id, String status);
+    MusicTrackVO updateTrackStatus(Long id, String status, Long operatorId);
 
     /**
      * 删除歌曲。
      *
      * @param id 歌曲 ID
      */
-    void deleteTrack(Long id);
+    void deleteTrack(Long id, Long operatorId);
 
     /**
      * 获取管理员分类列表。

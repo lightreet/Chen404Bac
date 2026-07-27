@@ -1,6 +1,7 @@
 package com.chen404.converter;
 
 import com.chen404.domain.dto.CreateTravelMemoryCommand;
+import com.chen404.domain.dto.ArticleAuthorVO;
 import com.chen404.domain.dto.TravelMemoryEntryUpsertCommand;
 import com.chen404.domain.dto.TravelMemoryEntryVO;
 import com.chen404.domain.dto.TravelMemoryLocationDetailVO;
@@ -11,6 +12,7 @@ import com.chen404.domain.dto.UpdateTravelMemoryCommand;
 import com.chen404.domain.entity.TravelMemoryEntry;
 import com.chen404.domain.entity.TravelMemoryLocation;
 import com.chen404.domain.entity.TravelMemoryStop;
+import com.chen404.domain.entity.User;
 import org.mapstruct.AfterMapping;
 import org.mapstruct.BeanMapping;
 import org.mapstruct.Mapper;
@@ -24,6 +26,14 @@ import java.util.List;
  */
 @Mapper(componentModel = "spring")
 public interface TravelMemoryConverter {
+
+    @BeanMapping(ignoreByDefault = true)
+    @Mapping(target = "id", source = "id")
+    @Mapping(target = "username", source = "username")
+    @Mapping(target = "nickname", source = "nickname")
+    @Mapping(target = "avatar", source = "avatar")
+    @Mapping(target = "bio", source = "bio")
+    ArticleAuthorVO toCreatorVO(User user);
 
     @BeanMapping(ignoreByDefault = true)
     @Mapping(target = "title", source = "title")
@@ -143,6 +153,9 @@ public interface TravelMemoryConverter {
     @Mapping(target = "visitedEndAt", source = "visitedEndAt")
     @Mapping(target = "entryCount", source = "entryCount")
     @Mapping(target = "visibility", source = "visibility")
+    @Mapping(target = "creator", source = "creator")
+    @Mapping(target = "canEdit", source = "canEdit")
+    @Mapping(target = "canDelete", source = "canDelete")
     TravelMemoryLocationListItemVO toListItemVO(TravelMemoryLocation location);
 
     List<TravelMemoryLocationListItemVO> toListItemVOList(List<TravelMemoryLocation> locations);
@@ -164,6 +177,9 @@ public interface TravelMemoryConverter {
     @Mapping(target = "entryCount", source = "entryCount")
     @Mapping(target = "createTime", source = "createTime")
     @Mapping(target = "updateTime", source = "updateTime")
+    @Mapping(target = "creator", source = "creator")
+    @Mapping(target = "canEdit", source = "canEdit")
+    @Mapping(target = "canDelete", source = "canDelete")
     @Mapping(target = "entries", ignore = true)
     @Mapping(target = "stops", ignore = true)
     TravelMemoryLocationDetailVO toDetailVO(TravelMemoryLocation location);

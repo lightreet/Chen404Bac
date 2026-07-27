@@ -31,8 +31,13 @@ public class MinioStorageServiceImpl implements FileStorageService {
 
     @Override
     public String uploadFile(MultipartFile file, String objectName) {
+        return uploadFile(file, minioConfig.getBucketName(), objectName);
+    }
+
+    @Override
+    public String uploadFile(MultipartFile file, String bucketName, String objectName) {
         try (InputStream inputStream = file.getInputStream()) {
-            return uploadFile(inputStream, objectName, file.getContentType(), file.getSize());
+            return uploadFile(inputStream, bucketName, objectName, file.getContentType(), file.getSize());
         } catch (IOException e) {
             log.error("读取文件流失败", e);
             throw new RuntimeException("读取文件流失败");
@@ -41,21 +46,30 @@ public class MinioStorageServiceImpl implements FileStorageService {
 
     @Override
     public String uploadFile(InputStream inputStream, String objectName, String contentType, long size) {
+        return uploadFile(inputStream, minioConfig.getBucketName(), objectName, contentType, size);
+    }
+
+    @Override
+    public String uploadFile(
+            InputStream inputStream,
+            String bucketName,
+            String objectName,
+            String contentType,
+            long size) {
         try {
-            // 确保存储桶存在
-            ensureBucketExists();
+            ensureBucketExists(bucketName, minioConfig.getBucketName().equals(bucketName));
 
             // 上传文件
             minioClient.putObject(
                     PutObjectArgs.builder()
-                            .bucket(minioConfig.getBucketName())
+                            .bucket(bucketName)
                             .object(objectName)
                             .stream(inputStream, size, -1)
                             .contentType(contentType != null ? contentType : "application/octet-stream")
                             .build()
             );
 
-            String fileUrl = minioConfig.getFileUrl(objectName);
+            String fileUrl = minioConfig.getFileUrl(bucketName, objectName);
             log.info("文件上传成功: {}", fileUrl);
             return fileUrl;
 
@@ -67,10 +81,15 @@ public class MinioStorageServiceImpl implements FileStorageService {
 
     @Override
     public boolean deleteFile(String objectName) {
+        return deleteFile(minioConfig.getBucketName(), objectName);
+    }
+
+    @Override
+    public boolean deleteFile(String bucketName, String objectName) {
         try {
             minioClient.removeObject(
                     RemoveObjectArgs.builder()
-                            .bucket(minioConfig.getBucketName())
+                            .bucket(bucketName)
                             .object(objectName)
                             .build()
             );
@@ -88,11 +107,39 @@ public class MinioStorageServiceImpl implements FileStorageService {
     }
 
     @Override
+    public String getFileUrl(String bucketName, String objectName) {
+        return minioConfig.getFileUrl(bucketName, objectName);
+    }
+
+    @Override
+    public String getPresignedGetUrl(String bucketName, String objectName, int expiresMinutes) {
+        try {
+            ensureBucketExists(bucketName, minioConfig.getBucketName().equals(bucketName));
+            return minioClient.getPresignedObjectUrl(
+                    GetPresignedObjectUrlArgs.builder()
+                            .bucket(bucketName)
+                            .object(objectName)
+                            .method(Method.GET)
+                            .expiry(expiresMinutes, TimeUnit.MINUTES)
+                            .build()
+            );
+        } catch (Exception e) {
+            log.error("获取文件下载链接失败: bucket={}, object={}", bucketName, objectName, e);
+            throw new RuntimeException("获取文件下载链接失败");
+        }
+    }
+
+    @Override
     public boolean exists(String objectName) {
+        return exists(minioConfig.getBucketName(), objectName);
+    }
+
+    @Override
+    public boolean exists(String bucketName, String objectName) {
         try {
             minioClient.statObject(
                     StatObjectArgs.builder()
-                            .bucket(minioConfig.getBucketName())
+                            .bucket(bucketName)
                             .object(objectName)
                             .build()
             );
@@ -111,7 +158,7 @@ public class MinioStorageServiceImpl implements FileStorageService {
      */
     public String getPresignedUploadUrl(String objectName, int expires) {
         try {
-            ensureBucketExists();
+            ensureBucketExists(minioConfig.getBucketName(), true);
             return minioClient.getPresignedObjectUrl(
                     GetPresignedObjectUrlArgs.builder()
                             .bucket(minioConfig.getBucketName())
@@ -129,8 +176,7 @@ public class MinioStorageServiceImpl implements FileStorageService {
     /**
      * 确保存储桶存在
      */
-    private void ensureBucketExists() throws ServerException, InsufficientDataException, ErrorResponseException, IOException, NoSuchAlgorithmException, InvalidKeyException, InvalidResponseException, XmlParserException, InternalException {
-        String bucketName = minioConfig.getBucketName();
+    private void ensureBucketExists(String bucketName, boolean publicReadable) throws ServerException, InsufficientDataException, ErrorResponseException, IOException, NoSuchAlgorithmException, InvalidKeyException, InvalidResponseException, XmlParserException, InternalException {
         boolean exists = minioClient.bucketExists(
                 BucketExistsArgs.builder()
                         .bucket(bucketName)
@@ -143,9 +189,17 @@ public class MinioStorageServiceImpl implements FileStorageService {
                             .build()
             );
             log.info("创建存储桶: {}", bucketName);
+        }
 
-            // 设置存储桶为公共可读（仅用于公开文件）
-            // 注意：生产环境建议根据需求设置更精细的权限
+        if (!publicReadable) {
+            minioClient.deleteBucketPolicy(
+                    DeleteBucketPolicyArgs.builder()
+                            .bucket(bucketName)
+                            .build()
+            );
+            return;
+        }
+        if (!exists) {
             String policy = "{\n" +
                     "    \"Version\": \"2012-10-17\",\n" +
                     "    \"Statement\": [\n" +

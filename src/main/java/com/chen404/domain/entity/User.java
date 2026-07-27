@@ -7,6 +7,7 @@ import lombok.Data;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 用户实体
@@ -77,6 +78,16 @@ public class User implements Serializable {
     private Integer trustLevel;
 
     /**
+     * 是否在站点成员列表公开展示：0-隐藏 1-公开。
+     */
+    private Integer profileVisibility;
+
+    /**
+     * 是否在公开资料中展示邮箱：0-隐藏 1-公开。
+     */
+    private Integer emailPublic;
+
+    /**
      * 邮箱是否验证：0-否 1-是
      */
     private Integer emailVerified;
@@ -134,4 +145,10 @@ public class User implements Serializable {
 
     @TableField(exist = false)
     private String memberLabel;
+
+    /**
+     * 当前用户由角色和信任级别派生出的业务能力。
+     */
+    @TableField(exist = false)
+    private List<String> capabilities;
 }

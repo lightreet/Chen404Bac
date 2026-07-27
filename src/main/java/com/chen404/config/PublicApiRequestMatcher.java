@@ -49,10 +49,14 @@ public class PublicApiRequestMatcher implements RequestMatcher {
         }
 
         if (path.equals("/music") || path.startsWith("/music/")) {
-            return "GET".equalsIgnoreCase(method);
+            return isPublicMusicRequest(path, method);
         }
 
         if (path.equals("/travel-memories") || path.startsWith("/travel-memories/")) {
+            return isPublicTravelMemoryRequest(path, method);
+        }
+
+        if (path.matches("/files/\\d+")) {
             return "GET".equalsIgnoreCase(method);
         }
 
@@ -100,6 +104,22 @@ public class PublicApiRequestMatcher implements RequestMatcher {
             return path.equals("/comments") || path.matches("/comments/[^/]+/like");
         }
         return "DELETE".equalsIgnoreCase(method) && path.matches("/comments/[^/]+");
+    }
+
+    private boolean isPublicMusicRequest(String path, String method) {
+        if (!"GET".equalsIgnoreCase(method)) {
+            return false;
+        }
+        return !path.equals("/music/tracks/mine")
+                && !path.matches("/music/tracks/mine/[^/]+");
+    }
+
+    private boolean isPublicTravelMemoryRequest(String path, String method) {
+        if (!"GET".equalsIgnoreCase(method)) {
+            return false;
+        }
+        return !path.equals("/travel-memories/mine")
+                && !path.matches("/travel-memories/mine/[^/]+");
     }
 
     private boolean isSwaggerPath(String path) {

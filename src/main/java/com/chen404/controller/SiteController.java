@@ -1,6 +1,7 @@
 package com.chen404.controller;
 
 import com.chen404.annotation.RequireAdmin;
+import com.chen404.config.SiteOwnerProperties;
 import com.chen404.converter.HomeViewConverter;
 import com.chen404.domain.ApiErrorCode;
 import com.chen404.domain.Result;
@@ -41,18 +42,21 @@ public class SiteController {
     private final UserService userService;
     private final HomeViewConverter homeViewConverter;
     private final DevelopmentHistoryService developmentHistoryService;
+    private final SiteOwnerProperties siteOwnerProperties;
 
     public SiteController(
             BannerService bannerService,
             SiteConfigService siteConfigService,
             UserService userService,
             HomeViewConverter homeViewConverter,
-            DevelopmentHistoryService developmentHistoryService) {
+            DevelopmentHistoryService developmentHistoryService,
+            SiteOwnerProperties siteOwnerProperties) {
         this.bannerService = bannerService;
         this.siteConfigService = siteConfigService;
         this.userService = userService;
         this.homeViewConverter = homeViewConverter;
         this.developmentHistoryService = developmentHistoryService;
+        this.siteOwnerProperties = siteOwnerProperties;
     }
 
     /**
@@ -81,7 +85,7 @@ public class SiteController {
     @Operation(summary = "获取站长公开资料", description = "返回站长的公开展示信息")
     @GetMapping("/owner")
     public Result<SiteOwnerDTO> getSiteOwner() {
-        return Result.success(toPublicOwner(userService.getCurrentUser(1L)));
+        return Result.success(toPublicOwner(userService.getCurrentUser(siteOwnerProperties.getSiteOwnerUserId())));
     }
 
     @Operation(summary = "获取站点成员列表", description = "返回可公开展示的站点成员列表")
@@ -150,7 +154,9 @@ public class SiteController {
         owner.setId(source.getId());
         owner.setUsername(source.getUsername());
         owner.setNickname(source.getNickname());
-        owner.setEmail(source.getEmail());
+        if (Integer.valueOf(1).equals(source.getEmailPublic())) {
+            owner.setEmail(source.getEmail());
+        }
         owner.setAvatar(source.getAvatar());
         owner.setBio(source.getBio());
         owner.setMemberLabel(source.getMemberLabel());
@@ -165,7 +171,9 @@ public class SiteController {
         member.setId(source.getId());
         member.setUsername(source.getUsername());
         member.setNickname(source.getNickname());
-        member.setEmail(source.getEmail());
+        if (Integer.valueOf(1).equals(source.getEmailPublic())) {
+            member.setEmail(source.getEmail());
+        }
         member.setAvatar(source.getAvatar());
         member.setBio(source.getBio());
         member.setTrustLevel(source.getTrustLevel());

@@ -11,11 +11,15 @@ import java.util.List;
  */
 public interface TravelMemoryService {
 
-    List<TravelMemoryLocation> listVisibleLocations(Long userId);
+    List<TravelMemoryLocation> listVisibleLocations(Long userId, Long creatorId);
+
+    List<TravelMemoryLocation> listMyLocations(Long userId);
 
     TravelMemoryLocation getVisibleLocationDetail(Long id, Long userId);
 
-    List<TravelMemoryLocation> listAdminLocations();
+    TravelMemoryLocation getManageableLocationDetail(Long id, Long userId);
+
+    List<TravelMemoryLocation> listAdminLocations(Long adminId);
 
     TravelMemoryLocation getAdminLocationDetail(Long id, Long adminId);
 
@@ -23,14 +27,14 @@ public interface TravelMemoryService {
             TravelMemoryLocation location,
             List<TravelMemoryStop> stops,
             List<TravelMemoryEntry> legacyEntries,
-            Long adminId);
+            Long operatorId);
 
     TravelMemoryLocation updateLocation(
             Long id,
             TravelMemoryLocation location,
             List<TravelMemoryStop> stops,
             List<TravelMemoryEntry> legacyEntries,
-            Long adminId);
+            Long operatorId);
 
-    void deleteLocation(Long id, Long adminId);
+    void deleteLocation(Long id, Long operatorId);
 }

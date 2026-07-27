@@ -12,14 +12,19 @@ import com.chen404.exception.ResourceNotFoundException;
 import com.chen404.mapper.TravelMemoryEntryMapper;
 import com.chen404.mapper.TravelMemoryLocationMapper;
 import com.chen404.mapper.TravelMemoryStopMapper;
+import com.chen404.mapper.UserMapper;
 import com.chen404.service.AccessService;
+import com.chen404.service.AdminContentEventPublisher;
 import com.chen404.service.FileReferenceService;
+import com.chen404.service.ProtectedFileAccessService;
 import com.chen404.service.SysFileService;
+import com.chen404.service.support.UserAccessProfileSupport;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -54,12 +59,16 @@ class TravelMemoryServiceImplTest {
                 entryMapper,
                 accessService,
                 sysFileService,
-                fileReferenceService);
+                fileReferenceService,
+                mock(UserMapper.class),
+                mock(UserAccessProfileSupport.class),
+                mock(AdminContentEventPublisher.class));
+        configureProtectedFileAccess(service);
 
         when(accessService.canViewTravelMemory(1L)).thenReturn(true);
         when(locationMapper.selectList(any())).thenReturn(List.of());
 
-        service.listVisibleLocations(1L);
+        service.listVisibleLocations(1L, null);
 
         ArgumentCaptor<LambdaQueryWrapper<TravelMemoryLocation>> captor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
         verify(locationMapper).selectList(captor.capture());
@@ -85,12 +94,16 @@ class TravelMemoryServiceImplTest {
                 entryMapper,
                 accessService,
                 sysFileService,
-                fileReferenceService);
+                fileReferenceService,
+                mock(UserMapper.class),
+                mock(UserAccessProfileSupport.class),
+                mock(AdminContentEventPublisher.class));
+        configureProtectedFileAccess(service);
 
         when(accessService.canViewTravelMemory(null)).thenReturn(true);
         when(locationMapper.selectList(any())).thenReturn(List.of());
 
-        service.listVisibleLocations(null);
+        service.listVisibleLocations(null, null);
 
         ArgumentCaptor<LambdaQueryWrapper<TravelMemoryLocation>> captor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
         verify(locationMapper).selectList(captor.capture());
@@ -114,7 +127,10 @@ class TravelMemoryServiceImplTest {
                 entryMapper,
                 accessService,
                 sysFileService,
-                fileReferenceService);
+                fileReferenceService,
+                mock(UserMapper.class),
+                mock(UserAccessProfileSupport.class),
+                mock(AdminContentEventPublisher.class));
 
         TravelMemoryLocation location = buildLocation(7L, "知友地点", LocalDateTime.of(2026, 5, 10, 10, 0));
         location.setVisibility(2);
@@ -138,12 +154,17 @@ class TravelMemoryServiceImplTest {
                 entryMapper,
                 accessService,
                 sysFileService,
-                fileReferenceService);
+                fileReferenceService,
+                mock(UserMapper.class),
+                mock(UserAccessProfileSupport.class),
+                mock(AdminContentEventPublisher.class));
+        configureProtectedFileAccess(service);
 
         TravelMemoryLocation location = buildLocation(7L, "知友地点", LocalDateTime.of(2026, 5, 10, 10, 0));
         location.setVisibility(2);
         User viewer = new User();
         when(accessService.canViewTravelMemory(2L)).thenReturn(true);
+        when(accessService.canViewTravelMemory(2L, location)).thenReturn(true);
         when(accessService.getUserOrNull(2L)).thenReturn(viewer);
         when(accessService.isFriend(viewer)).thenReturn(true);
         when(locationMapper.selectById(7L)).thenReturn(location);
@@ -170,9 +191,13 @@ class TravelMemoryServiceImplTest {
                 entryMapper,
                 accessService,
                 sysFileService,
-                fileReferenceService);
+                fileReferenceService,
+                mock(UserMapper.class),
+                mock(UserAccessProfileSupport.class),
+                mock(AdminContentEventPublisher.class));
+        configureProtectedFileAccess(service);
 
-        when(accessService.canManageTravelMemory(1L)).thenReturn(true);
+        when(accessService.canManageTravelMemory(eq(1L), any(TravelMemoryLocation.class))).thenReturn(true);
 
         TravelMemoryLocation existing = buildLocation(7L, "旧地点", LocalDateTime.of(2026, 5, 10, 10, 0));
         TravelMemoryLocation updated = buildLocation(7L, "新地点", LocalDateTime.of(2026, 5, 11, 10, 0));
@@ -238,9 +263,12 @@ class TravelMemoryServiceImplTest {
                 entryMapper,
                 accessService,
                 sysFileService,
-                fileReferenceService);
+                fileReferenceService,
+                mock(UserMapper.class),
+                mock(UserAccessProfileSupport.class),
+                mock(AdminContentEventPublisher.class));
 
-        when(accessService.canManageTravelMemory(1L)).thenReturn(true);
+        when(accessService.canManageTravelMemory(eq(1L), any(TravelMemoryLocation.class))).thenReturn(true);
         when(locationMapper.selectById(99L)).thenReturn(null);
 
         TravelMemoryLocation commandLocation = buildLocation(null, "新地点", LocalDateTime.of(2026, 5, 11, 10, 0));
@@ -264,9 +292,12 @@ class TravelMemoryServiceImplTest {
                 entryMapper,
                 accessService,
                 sysFileService,
-                fileReferenceService);
+                fileReferenceService,
+                mock(UserMapper.class),
+                mock(UserAccessProfileSupport.class),
+                mock(AdminContentEventPublisher.class));
 
-        when(accessService.canManageTravelMemory(1L)).thenReturn(true);
+        when(accessService.canCreateTravelMemory(1L)).thenReturn(true);
 
         TravelMemoryLocation commandLocation = buildLocation(null, "空照片地点", LocalDateTime.of(2026, 5, 11, 10, 0));
 
@@ -308,5 +339,14 @@ class TravelMemoryServiceImplTest {
         }
         MapperBuilderAssistant assistant = new MapperBuilderAssistant(new MybatisConfiguration(), "");
         TableInfoHelper.initTableInfo(assistant, entityClass);
+    }
+
+    private void configureProtectedFileAccess(TravelMemoryServiceImpl service) {
+        ProtectedFileAccessService protectedFileAccessService = mock(ProtectedFileAccessService.class);
+        when(protectedFileAccessService.normalizeUrl(any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(protectedFileAccessService.issueUrlForReference(any(), any(), any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        ReflectionTestUtils.setField(service, "protectedFileAccessService", protectedFileAccessService);
     }
 }

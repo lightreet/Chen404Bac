@@ -13,6 +13,7 @@ import com.chen404.exception.ForbiddenException;
 import com.chen404.exception.UnauthorizedException;
 import com.chen404.security.AuthenticatedUser;
 import com.chen404.service.SysFileService;
+import com.chen404.service.AccessService;
 import com.chen404.service.TravelMemoryImageMetadataService;
 import com.chen404.util.CurrentUserUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -114,15 +115,18 @@ public class UploadController {
     private final SiteRuntimeProperties siteRuntimeProperties;
     private final TravelMemoryImageMetadataService travelMemoryImageMetadataService;
     private final Executor uploadTaskExecutor;
+    private final AccessService accessService;
 
     public UploadController(
             SysFileService sysFileService,
             SiteRuntimeProperties siteRuntimeProperties,
             TravelMemoryImageMetadataService travelMemoryImageMetadataService,
+            AccessService accessService,
             @Qualifier(UploadTaskConfig.UPLOAD_TASK_EXECUTOR) Executor uploadTaskExecutor) {
         this.sysFileService = sysFileService;
         this.siteRuntimeProperties = siteRuntimeProperties;
         this.travelMemoryImageMetadataService = travelMemoryImageMetadataService;
+        this.accessService = accessService;
         this.uploadTaskExecutor = uploadTaskExecutor;
     }
 
@@ -133,6 +137,7 @@ public class UploadController {
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
 
         Long userId = CurrentUserUtil.requireUserId(currentUser);
+        ensureArticleCreator(userId);
         MultipartFile file = form.getFile();
         Result<UploadFileVO> validateResult = validateImage(file, resolveImageMaxSize(), resolveAllowedImageTypes());
         if (validateResult != null) {
@@ -149,6 +154,7 @@ public class UploadController {
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
 
         Long userId = CurrentUserUtil.requireUserId(currentUser);
+        ensureArticleCreator(userId);
         MultipartFile[] files = form.getFiles();
 
         if (files == null || files.length == 0) {
@@ -202,6 +208,7 @@ public class UploadController {
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
 
         Long userId = CurrentUserUtil.requireUserId(currentUser);
+        ensureArticleCreator(userId);
         MultipartFile file = form.getFile();
         Result<UploadFileVO> validateResult = validateImage(file, resolveImageMaxSize(), resolveAllowedImageTypes());
         if (validateResult != null) {
@@ -228,14 +235,14 @@ public class UploadController {
         return executeUpload(file, userId, SysFile.RefType.SITE_ASSET, "SITE_ASSET_UPLOAD");
     }
 
-    @RequireAdmin
-    @Operation(summary = "上传音乐音频", description = "音乐馆歌曲音频上传，仅管理员可用")
+    @Operation(summary = "上传音乐音频", description = "知友或管理员上传音乐馆歌曲音频")
     @PostMapping(value = "/music-audio", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Result<UploadFileVO> uploadMusicAudio(
             @ModelAttribute SingleFileUploadDTO form,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
 
         Long userId = CurrentUserUtil.requireUserId(currentUser);
+        ensureMusicCreator(userId);
         MultipartFile file = form.getFile();
         Result<UploadFileVO> validateResult = validateMusicAudioFile(file);
         if (validateResult != null) {
@@ -245,14 +252,14 @@ public class UploadController {
         return executeUpload(file, userId, SysFile.RefType.MUSIC_AUDIO, "MUSIC_AUDIO_UPLOAD");
     }
 
-    @RequireAdmin
-    @Operation(summary = "上传音乐封面", description = "音乐馆歌曲封面上传，仅管理员可用")
+    @Operation(summary = "上传音乐封面", description = "知友或管理员上传音乐馆歌曲封面")
     @PostMapping(value = "/music-cover", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Result<UploadFileVO> uploadMusicCover(
             @ModelAttribute SingleFileUploadDTO form,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
 
         Long userId = CurrentUserUtil.requireUserId(currentUser);
+        ensureMusicCreator(userId);
         MultipartFile file = form.getFile();
         Result<UploadFileVO> validateResult = validateImage(file, MAX_COVER_SIZE, resolveAllowedImageTypes());
         if (validateResult != null) {
@@ -299,14 +306,14 @@ public class UploadController {
         return executeUpload(file, userId, SysFile.RefType.TRUST_REQUEST_ATTACHMENT, "TRUST_ATTACHMENT_UPLOAD");
     }
 
-    @RequireAdmin
-    @Operation(summary = "上传旅行纪念图片", description = "仅管理员可用，上传后尝试解析 EXIF 经纬度与拍摄时间")
+    @Operation(summary = "上传旅行纪念图片", description = "知友或管理员可用，上传后尝试解析 EXIF 经纬度与拍摄时间")
     @PostMapping(value = "/travel-memory-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Result<UploadFileVO> uploadTravelMemoryImage(
             @ModelAttribute SingleFileUploadDTO form,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
 
         Long userId = CurrentUserUtil.requireUserId(currentUser);
+        ensureTravelCreator(userId);
         MultipartFile file = form.getFile();
         Result<UploadFileVO> validateResult = validateImage(file, resolveImageMaxSize(), resolveAllowedImageTypes());
         if (validateResult != null) {
@@ -329,6 +336,24 @@ public class UploadController {
             log.error("[TRAVEL_MEMORY_IMAGE_UPLOAD_FAIL] userId={} fileName={} message={}",
                     userId, file == null ? null : file.getOriginalFilename(), e.getMessage(), e);
             return Result.error(ApiErrorCode.INTERNAL_SERVER_ERROR, MSG_UPLOAD_RETRY);
+        }
+    }
+
+    private void ensureArticleCreator(Long userId) {
+        if (!accessService.canCreateArticle(userId)) {
+            throw new ForbiddenException("仅知友或管理员可上传文章资源");
+        }
+    }
+
+    private void ensureTravelCreator(Long userId) {
+        if (!accessService.canCreateTravelMemory(userId)) {
+            throw new ForbiddenException("仅知友或管理员可上传旅行图片");
+        }
+    }
+
+    private void ensureMusicCreator(Long userId) {
+        if (!accessService.canCreateMusicTrack(userId)) {
+            throw new ForbiddenException("仅知友或管理员可上传音乐资源");
         }
     }
 

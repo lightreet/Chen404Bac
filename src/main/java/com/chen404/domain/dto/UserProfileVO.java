@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 用户资料视图对象。
@@ -36,6 +37,12 @@ public class UserProfileVO {
     @Schema(description = "个人简介", example = "专注于后端开发与系统设计")
     private String bio;
 
+    @Schema(description = "是否公开展示成员资料", example = "true")
+    private Boolean profileVisible;
+
+    @Schema(description = "是否在公开资料中展示邮箱", example = "false")
+    private Boolean emailPublic;
+
     @Schema(description = "用户状态：0-禁用 1-启用", example = "1")
     private Integer status;
 
@@ -56,6 +63,9 @@ public class UserProfileVO {
 
     @Schema(description = "成员标签", example = "站点成员")
     private String memberLabel;
+
+    @Schema(description = "当前用户业务能力编码")
+    private List<String> capabilities;
 
     @Schema(description = "创建时间")
     private LocalDateTime createTime;

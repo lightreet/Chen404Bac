@@ -1,12 +1,16 @@
 package com.chen404.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.chen404.config.MinioConfig;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.exception.ForbiddenException;
+import com.chen404.exception.BadRequestException;
 import com.chen404.mapper.SysFileMapper;
 import com.chen404.service.AccessService;
+import com.chen404.service.FileClaim;
 import com.chen404.service.FileStorageService;
 import com.chen404.service.ImageProcessingService;
+import com.chen404.service.ManagedFileUrlCodec;
 import com.chen404.service.ProcessedImage;
 import com.chen404.service.SysFileService;
 import lombok.extern.slf4j.Slf4j;
@@ -21,7 +25,10 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -42,6 +49,12 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
 
     @Autowired
     private ImageProcessingService imageProcessingService;
+
+    @Autowired
+    private ManagedFileUrlCodec managedFileUrlCodec;
+
+    @Autowired
+    private MinioConfig minioConfig;
 
     // 临时文件过期时间（小时）
     private static final int TEMP_FILE_EXPIRE_HOURS = 24;
@@ -82,6 +95,10 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
         final long fileSize;
         final String contentType;
         final String storedFileName;
+        boolean protectedStorage = isProtectedRefType(refType);
+        String bucketName = protectedStorage
+                ? minioConfig.getProtectedBucketName()
+                : minioConfig.getBucketName();
 
         if (processed.isPresent()) {
             ProcessedImage p = processed.get();
@@ -90,6 +107,7 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
             objectName = generateObjectName(prefix, storedFileName);
             fileUrl = fileStorageService.uploadFile(
                     new ByteArrayInputStream(payload),
+                    bucketName,
                     objectName,
                     p.contentType(),
                     payload.length
@@ -99,7 +117,7 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
         } else {
             storedFileName = originalFilename;
             objectName = generateObjectName(prefix, originalFilename);
-            fileUrl = fileStorageService.uploadFile(file, objectName);
+            fileUrl = fileStorageService.uploadFile(file, bucketName, objectName);
             fileSize = file.getSize();
             contentType = file.getContentType();
         }
@@ -108,6 +126,10 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
         sysFile.setFileName(storedFileName);
         sysFile.setFileOriginalName(originalFilename);
         sysFile.setObjectName(objectName);
+        sysFile.setStorageScope(protectedStorage
+                ? SysFile.StorageScope.PROTECTED
+                : SysFile.StorageScope.PUBLIC);
+        sysFile.setBucketName(bucketName);
         sysFile.setFilePath(objectName);
         sysFile.setFileUrl(fileUrl);
         sysFile.setFileSize(fileSize);
@@ -118,6 +140,11 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
         sysFile.setExpireTime(LocalDateTime.now().plusHours(TEMP_FILE_EXPIRE_HOURS));
 
         save(sysFile);
+        if (protectedStorage) {
+            sysFile.setFileUrl(managedFileUrlCodec.stableUrl(sysFile.getId()));
+            updateById(sysFile);
+            sysFile.setFileUrl(managedFileUrlCodec.ticketedUrl(sysFile.getId()));
+        }
         log.info("用户 {} 上传临时文件成功: {}", userId, fileUrl);
 
         return sysFile;
@@ -125,40 +152,49 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
 
     @Override
     @Transactional
-    public void convertToPermanent(List<String> fileUrls, String refType, Long refId) {
-        if (fileUrls == null || fileUrls.isEmpty()) {
+    public void claimPermanentFiles(
+            Long operatorId,
+            List<FileClaim> claims,
+            String expectedRefType,
+            Long refId) {
+        if (operatorId == null || refId == null || !StringUtils.hasText(expectedRefType)) {
+            throw new BadRequestException("文件认领参数不完整");
+        }
+        if (claims == null || claims.isEmpty()) {
             return;
         }
 
-        // 过滤掉空字符串和null
-        List<String> validUrls = fileUrls.stream()
-                .filter(url -> url != null && !url.trim().isEmpty())
-                .distinct()
-                .collect(Collectors.toList());
-
-        if (validUrls.isEmpty()) {
-            return;
-        }
-
-        // 批量更新为永久状态
-        for (String url : validUrls) {
-            SysFile file = baseMapper.selectByUrl(url);
+        Map<Long, SysFile> filesById = new LinkedHashMap<>();
+        for (FileClaim claim : claims) {
+            SysFile file = resolveClaimedFile(claim);
             if (file != null) {
-                file.setStatus(SysFile.Status.PERMANENT);
-                file.setRefType(refType);
-                file.setRefId(refId);
-                file.setExpireTime(null);
-                updateById(file);
+                filesById.putIfAbsent(file.getId(), file);
             }
         }
 
-        log.info("文章 {} 的 {} 个文件已转为永久状态", refId, validUrls.size());
+        for (SysFile file : filesById.values()) {
+            validateFileClaim(file, operatorId, expectedRefType, refId);
+            if (isClaimedBySameBusiness(file, expectedRefType, refId)) {
+                continue;
+            }
+            file.setStatus(SysFile.Status.PERMANENT);
+            file.setRefType(expectedRefType);
+            file.setRefId(refId);
+            file.setExpireTime(null);
+            updateById(file);
+        }
+
+        log.info("[FILE_CLAIM_OK] operatorId={} refType={} refId={} fileCount={}",
+                operatorId,
+                expectedRefType,
+                refId,
+                filesById.size());
     }
 
     @Override
     @Transactional
     public boolean deleteByUrl(String fileUrl, Long userId) {
-        SysFile file = baseMapper.selectByUrl(fileUrl);
+        SysFile file = resolveByManagedUrlOrStoredUrl(fileUrl);
         if (file == null) {
             log.warn("删除文件失败，文件记录不存在: {}", fileUrl);
             return false;
@@ -169,7 +205,7 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
         }
 
         // 删除存储中的文件
-        boolean deleted = fileStorageService.deleteFile(file.getObjectName());
+        boolean deleted = fileStorageService.deleteFile(resolveBucketName(file), file.getObjectName());
         if (deleted) {
             // 标记为已删除
             file.setStatus(SysFile.Status.DELETED);
@@ -189,7 +225,7 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
         for (SysFile file : expiredFiles) {
             try {
                 // 删除存储中的文件
-                boolean deleted = fileStorageService.deleteFile(file.getObjectName());
+                boolean deleted = fileStorageService.deleteFile(resolveBucketName(file), file.getObjectName());
                 if (deleted) {
                     // 逻辑删除记录
                     removeById(file.getId());
@@ -258,7 +294,7 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
         for (SysFile file : unusedFiles) {
             try {
                 // 删除存储中的文件
-                boolean deleted = fileStorageService.deleteFile(file.getObjectName());
+                boolean deleted = fileStorageService.deleteFile(resolveBucketName(file), file.getObjectName());
                 if (deleted) {
                     // 逻辑删除记录
                     removeById(file.getId());
@@ -311,7 +347,7 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
         if (userId == null || !StringUtils.hasText(avatarUrl)) {
             return null;
         }
-        SysFile file = baseMapper.selectByUrl(avatarUrl.trim());
+        SysFile file = resolveByManagedUrlOrStoredUrl(avatarUrl);
         if (file == null || !userId.equals(file.getUserId())) {
             return null;
         }
@@ -326,7 +362,7 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
         if (!StringUtils.hasText(fileUrl)) {
             return null;
         }
-        return baseMapper.selectByUrl(fileUrl.trim());
+        return resolveByManagedUrlOrStoredUrl(fileUrl);
     }
 
     @Override
@@ -334,7 +370,7 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
         if (articleId == null || !StringUtils.hasText(coverImageUrl)) {
             return null;
         }
-        SysFile file = baseMapper.selectByUrl(coverImageUrl.trim());
+        SysFile file = resolveByManagedUrlOrStoredUrl(coverImageUrl);
         if (file == null || file.getId() == null) {
             return null;
         }
@@ -345,6 +381,93 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
             return null;
         }
         return file.getId();
+    }
+
+    /**
+     * URL-only claims are retained for article and travel compatibility. Unknown URLs are treated as
+     * external resources; managed file URLs always resolve to a sys_file row and enter strict checks.
+     */
+    private SysFile resolveClaimedFile(FileClaim claim) {
+        if (claim == null) {
+            return null;
+        }
+        SysFile fileById = claim.fileId() == null ? null : getById(claim.fileId());
+        SysFile fileByUrl = resolveByManagedUrlOrStoredUrl(claim.fileUrl());
+
+        if (claim.fileId() != null && fileById == null) {
+            throw new BadRequestException("文件不存在或已删除");
+        }
+        if (fileById != null
+                && StringUtils.hasText(claim.fileUrl())
+                && (fileByUrl == null || !Objects.equals(fileById.getId(), fileByUrl.getId()))) {
+            throw new BadRequestException("文件 ID 与 URL 不匹配");
+        }
+        return fileById != null ? fileById : fileByUrl;
+    }
+
+    private void validateFileClaim(
+            SysFile file,
+            Long operatorId,
+            String expectedRefType,
+            Long refId) {
+        if (file.getId() == null || SysFile.Status.DELETED.equals(file.getStatus())) {
+            throw new BadRequestException("文件不存在或已删除");
+        }
+        if (!Objects.equals(file.getRefType(), expectedRefType)) {
+            throw new BadRequestException("文件类型与目标业务不匹配");
+        }
+        if (isClaimedBySameBusiness(file, expectedRefType, refId)) {
+            return;
+        }
+        if (!SysFile.Status.TEMP.equals(file.getStatus())) {
+            throw new BadRequestException("文件已被其他业务占用");
+        }
+        if (file.getExpireTime() != null && !file.getExpireTime().isAfter(LocalDateTime.now())) {
+            throw new BadRequestException("临时文件已过期，请重新上传");
+        }
+        if (!Objects.equals(file.getUserId(), operatorId)) {
+            log.warn("[FILE_CLAIM_DENIED] operatorId={} fileId={} ownerId={} refType={} refId={}",
+                    operatorId,
+                    file.getId(),
+                    file.getUserId(),
+                    expectedRefType,
+                    refId);
+            throw new ForbiddenException("只能使用自己上传的文件");
+        }
+        if (file.getRefId() != null) {
+            throw new BadRequestException("文件已被其他业务占用");
+        }
+    }
+
+    private boolean isClaimedBySameBusiness(SysFile file, String refType, Long refId) {
+        return SysFile.Status.PERMANENT.equals(file.getStatus())
+                && Objects.equals(file.getRefType(), refType)
+                && Objects.equals(file.getRefId(), refId);
+    }
+
+    private SysFile resolveByManagedUrlOrStoredUrl(String fileUrl) {
+        if (!StringUtils.hasText(fileUrl)) {
+            return null;
+        }
+        Long managedFileId = managedFileUrlCodec.resolveFileId(fileUrl);
+        return managedFileId == null
+                ? baseMapper.selectByUrl(fileUrl.trim())
+                : getById(managedFileId);
+    }
+
+    private String resolveBucketName(SysFile file) {
+        return StringUtils.hasText(file.getBucketName())
+                ? file.getBucketName()
+                : minioConfig.getBucketName();
+    }
+
+    private boolean isProtectedRefType(String refType) {
+        return SysFile.RefType.ARTICLE_CONTENT.equals(refType)
+                || SysFile.RefType.ARTICLE_COVER.equals(refType)
+                || SysFile.RefType.TRAVEL_MEMORY_IMAGE.equals(refType)
+                || SysFile.RefType.MUSIC_AUDIO.equals(refType)
+                || SysFile.RefType.MUSIC_COVER.equals(refType)
+                || SysFile.RefType.TRUST_REQUEST_ATTACHMENT.equals(refType);
     }
 
     private static String replaceExtension(String originalName, String newExtension) {

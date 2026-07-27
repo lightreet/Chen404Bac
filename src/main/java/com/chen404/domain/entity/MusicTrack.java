@@ -26,6 +26,8 @@ public class MusicTrack implements Serializable {
     @TableId(type = IdType.AUTO)
     private Long id;
 
+    private Long contributorId;
+
     private String title;
 
     private String artist;
@@ -70,4 +72,13 @@ public class MusicTrack implements Serializable {
 
     @TableLogic
     private Integer deleted;
+
+    @TableField(exist = false)
+    private User contributor;
+
+    @TableField(exist = false)
+    private Boolean canEdit;
+
+    @TableField(exist = false)
+    private Boolean canDelete;
 }

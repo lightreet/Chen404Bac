@@ -10,12 +10,18 @@ import com.chen404.domain.dto.TrustRequestAttachmentVO;
 import com.chen404.domain.dto.TrustRequestVO;
 import com.chen404.domain.enums.UserRoleEnum;
 import com.chen404.domain.enums.UserTrustLevelEnum;
+import com.chen404.domain.enums.AdminNotificationEventTypeEnum;
+import com.chen404.domain.enums.AdminNotificationResourceTypeEnum;
+import com.chen404.domain.event.AdminContentEvent;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.entity.User;
 import com.chen404.domain.entity.UserTrustRequest;
 import com.chen404.mapper.UserTrustRequestMapper;
 import com.chen404.service.EmailService;
+import com.chen404.service.AdminContentEventPublisher;
 import com.chen404.service.FileReferenceService;
+import com.chen404.service.FileClaim;
+import com.chen404.service.ProtectedFileAccessService;
 import com.chen404.service.SysFileService;
 import com.chen404.service.UserService;
 import com.chen404.service.UserTrustRequestService;
@@ -74,6 +80,8 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
     private final SysFileService sysFileService;
     private final EmailService emailService;
     private final FileReferenceService fileReferenceService;
+    private final AdminContentEventPublisher adminContentEventPublisher;
+    private final ProtectedFileAccessService protectedFileAccessService;
 
     @Value("${spring.mail.username:}")
     private String mailUsername;
@@ -90,7 +98,9 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
             UserService userService,
             SysFileService sysFileService,
             EmailService emailService,
-            FileReferenceService fileReferenceService
+            FileReferenceService fileReferenceService,
+            AdminContentEventPublisher adminContentEventPublisher,
+            ProtectedFileAccessService protectedFileAccessService
     ) {
         this.trustRequestConverter = trustRequestConverter;
         this.mailTemplateSupport = mailTemplateSupport;
@@ -98,6 +108,8 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
         this.sysFileService = sysFileService;
         this.emailService = emailService;
         this.fileReferenceService = fileReferenceService;
+        this.adminContentEventPublisher = adminContentEventPublisher;
+        this.protectedFileAccessService = protectedFileAccessService;
     }
 
     @Override
@@ -142,7 +154,12 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
         save(request);
 
         if (!attachmentUrls.isEmpty()) {
-            sysFileService.convertToPermanent(attachmentUrls, SysFile.RefType.TRUST_REQUEST_ATTACHMENT, request.getId());
+            sysFileService.claimPermanentFiles(
+                    userId,
+                    attachmentUrls.stream().map(FileClaim::byUrl).toList(),
+                    SysFile.RefType.TRUST_REQUEST_ATTACHMENT,
+                    request.getId()
+            );
         }
         fileReferenceService.syncTrustRequestAttachmentReferences(request.getId(), attachmentUrls);
 
@@ -153,6 +170,13 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
             log.warn("发送好友申请通知邮件失败，请求ID={}", request.getId(), e);
         }
 
+        adminContentEventPublisher.publish(new AdminContentEvent(
+                AdminNotificationEventTypeEnum.TRUST_REQUEST_CREATED,
+                userId,
+                AdminNotificationResourceTypeEnum.TRUST_REQUEST,
+                request.getId(),
+                "知友申请"
+        ));
         return buildTrustRequestVO(request, currentUser, null, attachments);
     }
 
@@ -356,6 +380,7 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
         List<String> normalized = attachmentUrls.stream()
                 .filter(StringUtils::hasText)
                 .map(String::trim)
+                .map(protectedFileAccessService::normalizeUrl)
                 .distinct()
                 .toList();
 
@@ -463,6 +488,13 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
         List<TrustRequestAttachmentVO> attachmentVOs = attachments == null || attachments.isEmpty()
                 ? List.of()
                 : trustRequestConverter.toAttachmentVOList(attachments);
+        for (TrustRequestAttachmentVO attachment : attachmentVOs) {
+            attachment.setFileUrl(protectedFileAccessService.issueUrlForReference(
+                    attachment.getFileUrl(),
+                    SysFile.RefType.TRUST_REQUEST_ATTACHMENT,
+                    request.getId()
+            ));
+        }
         vo.setAttachments(attachmentVOs);
         return vo;
     }
@@ -551,7 +583,13 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
             String label = buildAttachmentLabel(file, i + 1);
             String originalName = StringUtils.hasText(file.getFileOriginalName()) ? file.getFileOriginalName() : label;
             items.add(mailTemplateSupport.render(ATTACHMENT_ITEM_TEMPLATE, Map.of(
-                    "attachmentUrl", mailTemplateSupport.safeAttribute(file.getFileUrl()),
+                    "attachmentUrl", mailTemplateSupport.safeAttribute(
+                            protectedFileAccessService.issueUrlForReference(
+                                    file.getFileUrl(),
+                                    SysFile.RefType.TRUST_REQUEST_ATTACHMENT,
+                                    file.getRefId()
+                            )
+                    ),
                     "attachmentName", mailTemplateSupport.safeText(originalName),
                     "attachmentMeta", mailTemplateSupport.safeText(buildAttachmentMeta(file))
             )));

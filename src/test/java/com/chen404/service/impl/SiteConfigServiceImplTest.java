@@ -13,7 +13,6 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -25,7 +24,6 @@ class SiteConfigServiceImplTest {
         SysFileService sysFileService = mock(SysFileService.class);
         FileReferenceService fileReferenceService = mock(FileReferenceService.class);
         when(siteConfigMapper.selectAllConfigs()).thenReturn(List.of());
-        doNothing().when(sysFileService).convertToPermanent(org.mockito.ArgumentMatchers.anyList(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong());
 
         SiteConfigServiceImpl service = new SiteConfigServiceImpl(new ObjectMapper(), siteConfigMapper, sysFileService, fileReferenceService);
         SiteConfigDTO patch = new SiteConfigDTO();
@@ -48,7 +46,6 @@ class SiteConfigServiceImplTest {
         SysFileService sysFileService = mock(SysFileService.class);
         FileReferenceService fileReferenceService = mock(FileReferenceService.class);
         when(siteConfigMapper.selectAllConfigs()).thenReturn(List.of());
-        doNothing().when(sysFileService).convertToPermanent(org.mockito.ArgumentMatchers.anyList(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong());
 
         SiteConfigServiceImpl service = new SiteConfigServiceImpl(new ObjectMapper(), siteConfigMapper, sysFileService, fileReferenceService);
         SiteConfigDTO patch = new SiteConfigDTO();

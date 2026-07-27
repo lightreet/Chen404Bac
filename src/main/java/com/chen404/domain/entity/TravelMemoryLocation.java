@@ -70,4 +70,13 @@ public class TravelMemoryLocation implements Serializable {
 
     @TableField(exist = false)
     private List<TravelMemoryStop> stops;
+
+    @TableField(exist = false)
+    private User creator;
+
+    @TableField(exist = false)
+    private Boolean canEdit;
+
+    @TableField(exist = false)
+    private Boolean canDelete;
 }

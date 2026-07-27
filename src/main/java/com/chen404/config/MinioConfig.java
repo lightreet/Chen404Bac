@@ -36,6 +36,11 @@ public class MinioConfig {
     private String bucketName = "chen404";
 
     /**
+     * 需要经过业务鉴权才能读取的文件存储桶。
+     */
+    private String protectedBucketName = "chen404-protected";
+
+    /**
      * 外部访问URL（如果通过CDN或域名访问）
      * 为空则使用 endpoint
      */
@@ -54,8 +59,12 @@ public class MinioConfig {
      * 获取文件访问URL
      */
     public String getFileUrl(String objectName) {
+        return getFileUrl(bucketName, objectName);
+    }
+
+    public String getFileUrl(String targetBucketName, String objectName) {
         String baseUrl = StringUtils.hasText(externalUrl) ? externalUrl : endpoint;
-        return baseUrl + "/" + bucketName + "/" + objectName;
+        return baseUrl + "/" + targetBucketName + "/" + objectName;
     }
 
     private void validateRequiredConfig() {
@@ -70,6 +79,9 @@ public class MinioConfig {
         }
         if (!StringUtils.hasText(bucketName)) {
             throw new IllegalStateException("MinIO bucketName 未配置");
+        }
+        if (!StringUtils.hasText(protectedBucketName)) {
+            throw new IllegalStateException("MinIO protectedBucketName 未配置");
         }
     }
 }

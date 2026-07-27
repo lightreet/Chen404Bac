@@ -7,6 +7,9 @@ import com.chen404.domain.entity.TravelMemoryEntry;
 import com.chen404.domain.entity.TravelMemoryLocation;
 import com.chen404.domain.entity.TravelMemoryStop;
 import com.chen404.domain.entity.User;
+import com.chen404.domain.enums.AdminNotificationEventTypeEnum;
+import com.chen404.domain.enums.AdminNotificationResourceTypeEnum;
+import com.chen404.domain.event.AdminContentEvent;
 import com.chen404.domain.enums.TravelMemoryGeoSourceEnum;
 import com.chen404.domain.enums.TravelMemoryStatusEnum;
 import com.chen404.domain.enums.TravelMemoryVisibilityEnum;
@@ -16,11 +19,17 @@ import com.chen404.exception.ResourceNotFoundException;
 import com.chen404.mapper.TravelMemoryEntryMapper;
 import com.chen404.mapper.TravelMemoryLocationMapper;
 import com.chen404.mapper.TravelMemoryStopMapper;
+import com.chen404.mapper.UserMapper;
 import com.chen404.service.AccessService;
+import com.chen404.service.AdminContentEventPublisher;
 import com.chen404.service.FileReferenceService;
+import com.chen404.service.FileClaim;
+import com.chen404.service.ProtectedFileAccessService;
 import com.chen404.service.SysFileService;
 import com.chen404.service.TravelMemoryService;
+import com.chen404.service.support.UserAccessProfileSupport;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -36,6 +45,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -60,6 +70,12 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
     private final AccessService accessService;
     private final SysFileService sysFileService;
     private final FileReferenceService fileReferenceService;
+    private final UserMapper userMapper;
+    private final UserAccessProfileSupport userAccessProfileSupport;
+    private final AdminContentEventPublisher adminContentEventPublisher;
+
+    @Autowired
+    private ProtectedFileAccessService protectedFileAccessService;
 
     public TravelMemoryServiceImpl(
             TravelMemoryLocationMapper travelMemoryLocationMapper,
@@ -67,20 +83,38 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
             TravelMemoryEntryMapper travelMemoryEntryMapper,
             AccessService accessService,
             SysFileService sysFileService,
-            FileReferenceService fileReferenceService) {
+            FileReferenceService fileReferenceService,
+            UserMapper userMapper,
+            UserAccessProfileSupport userAccessProfileSupport,
+            AdminContentEventPublisher adminContentEventPublisher) {
         this.travelMemoryLocationMapper = travelMemoryLocationMapper;
         this.travelMemoryStopMapper = travelMemoryStopMapper;
         this.travelMemoryEntryMapper = travelMemoryEntryMapper;
         this.accessService = accessService;
         this.sysFileService = sysFileService;
         this.fileReferenceService = fileReferenceService;
+        this.userMapper = userMapper;
+        this.userAccessProfileSupport = userAccessProfileSupport;
+        this.adminContentEventPublisher = adminContentEventPublisher;
     }
 
     @Override
-    public List<TravelMemoryLocation> listVisibleLocations(Long userId) {
+    public List<TravelMemoryLocation> listVisibleLocations(Long userId, Long creatorId) {
         ensureCanView(userId);
-        List<TravelMemoryLocation> locations = queryVisibleLocations(userId);
-        attachStructuredChildren(locations);
+        List<TravelMemoryLocation> locations = queryVisibleLocations(userId, creatorId);
+        prepareLocations(locations, userId);
+        return locations;
+    }
+
+    @Override
+    public List<TravelMemoryLocation> listMyLocations(Long userId) {
+        ensureCanCreate(userId);
+        LambdaQueryWrapper<TravelMemoryLocation> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(TravelMemoryLocation::getCreatedBy, userId)
+                .orderByDesc(TravelMemoryLocation::getUpdateTime)
+                .orderByDesc(TravelMemoryLocation::getId);
+        List<TravelMemoryLocation> locations = travelMemoryLocationMapper.selectList(wrapper);
+        prepareLocations(locations, userId);
         return locations;
     }
 
@@ -89,25 +123,35 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
         ensureCanView(userId);
         TravelMemoryLocation location = travelMemoryLocationMapper.selectById(id);
         if (location == null
-                || !Objects.equals(location.getStatus(), STATUS_VISIBLE)
-                || !canViewLocation(userId, location)) {
+                || !accessService.canViewTravelMemory(userId, location)) {
             return null;
         }
-        attachStructuredChildren(List.of(location));
+        prepareLocations(List.of(location), userId);
         return location;
     }
 
     @Override
-    public List<TravelMemoryLocation> listAdminLocations() {
+    public TravelMemoryLocation getManageableLocationDetail(Long id, Long userId) {
+        TravelMemoryLocation location = getLocationOrThrow(id, userId);
+        ensureCanManage(userId, location);
+        prepareLocations(List.of(location), userId);
+        return location;
+    }
+
+    @Override
+    public List<TravelMemoryLocation> listAdminLocations(Long adminId) {
+        ensureAdmin(adminId);
         List<TravelMemoryLocation> locations = queryLocations(false);
-        attachStructuredChildren(locations);
+        prepareLocations(locations, adminId);
         return locations;
     }
 
     @Override
     public TravelMemoryLocation getAdminLocationDetail(Long id, Long adminId) {
-        ensureCanManage(adminId);
-        return getAdminLocationOrThrow(id, adminId);
+        ensureAdmin(adminId);
+        TravelMemoryLocation location = getLocationOrThrow(id, adminId);
+        prepareLocations(List.of(location), adminId);
+        return location;
     }
 
     @Override
@@ -116,24 +160,31 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
             TravelMemoryLocation location,
             List<TravelMemoryStop> stops,
             List<TravelMemoryEntry> legacyEntries,
-            Long adminId) {
-        ensureCanManage(adminId);
-        TravelMemoryLocation normalizedLocation = normalizeLocation(location, stops, legacyEntries, adminId, null);
+            Long operatorId) {
+        ensureCanCreate(operatorId);
+        TravelMemoryLocation normalizedLocation = normalizeLocation(location, stops, legacyEntries, operatorId, null);
         travelMemoryLocationMapper.insert(normalizedLocation);
 
         saveStops(normalizedLocation.getId(), normalizedLocation.getStops());
-        convertEntryImagesToPermanent(normalizedLocation.getEntries(), normalizedLocation.getId());
+        claimEntryImages(normalizedLocation.getEntries(), normalizedLocation.getId(), operatorId);
         fileReferenceService.syncTravelMemoryReferences(
                 normalizedLocation.getId(),
                 normalizedLocation.getCoverImage(),
                 normalizedLocation.getEntries()
         );
-        log.info("[TRAVEL_MEMORY_CREATE] adminId={} locationId={} stopCount={} entryCount={}",
-                adminId,
+        adminContentEventPublisher.publish(new AdminContentEvent(
+                AdminNotificationEventTypeEnum.TRAVEL_MEMORY_CREATED,
+                operatorId,
+                AdminNotificationResourceTypeEnum.TRAVEL_MEMORY,
+                normalizedLocation.getId(),
+                normalizedLocation.getTitle()
+        ));
+        log.info("[TRAVEL_MEMORY_CREATE] operatorId={} locationId={} stopCount={} entryCount={}",
+                operatorId,
                 normalizedLocation.getId(),
                 normalizedLocation.getStops().size(),
                 normalizedLocation.getEntries().size());
-        return getAdminLocationOrThrow(normalizedLocation.getId(), adminId);
+        return getManageableLocationDetail(normalizedLocation.getId(), operatorId);
     }
 
     @Override
@@ -143,12 +194,12 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
             TravelMemoryLocation location,
             List<TravelMemoryStop> stops,
             List<TravelMemoryEntry> legacyEntries,
-            Long adminId) {
-        ensureCanManage(adminId);
-        TravelMemoryLocation existing = getAdminLocationOrThrow(id, adminId);
+            Long operatorId) {
+        TravelMemoryLocation existing = getLocationOrThrow(id, operatorId);
+        ensureCanManage(operatorId, existing);
 
         List<TravelMemoryEntry> oldEntries = listEntriesByLocationIds(List.of(id)).getOrDefault(id, List.of());
-        TravelMemoryLocation normalizedLocation = normalizeLocation(location, stops, legacyEntries, adminId, existing);
+        TravelMemoryLocation normalizedLocation = normalizeLocation(location, stops, legacyEntries, operatorId, existing);
         Set<String> newUrls = normalizedLocation.getEntries().stream()
                 .map(TravelMemoryEntry::getImageUrl)
                 .filter(StringUtils::hasText)
@@ -164,22 +215,22 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
                 oldEntries.stream().map(TravelMemoryEntry::getId).filter(Objects::nonNull).toList()
         );
         replaceStops(id, normalizedLocation.getStops());
-        convertEntryImagesToPermanent(normalizedLocation.getEntries(), id);
+        claimEntryImages(normalizedLocation.getEntries(), id, operatorId);
         fileReferenceService.syncTravelMemoryReferences(id, normalizedLocation.getCoverImage(), normalizedLocation.getEntries());
-        scheduleRemovedEntryImagesCleanup(oldEntries, newUrls, adminId);
-        log.info("[TRAVEL_MEMORY_UPDATE] adminId={} locationId={} stopCount={} entryCount={}",
-                adminId,
+        scheduleRemovedEntryImagesCleanup(oldEntries, newUrls, operatorId);
+        log.info("[TRAVEL_MEMORY_UPDATE] operatorId={} locationId={} stopCount={} entryCount={}",
+                operatorId,
                 id,
                 normalizedLocation.getStops().size(),
                 normalizedLocation.getEntries().size());
-        return getAdminLocationOrThrow(id, adminId);
+        return getManageableLocationDetail(id, operatorId);
     }
 
     @Override
     @Transactional
-    public void deleteLocation(Long id, Long adminId) {
-        ensureCanManage(adminId);
-        getAdminLocationOrThrow(id, adminId);
+    public void deleteLocation(Long id, Long operatorId) {
+        TravelMemoryLocation location = getLocationOrThrow(id, operatorId);
+        ensureCanManage(operatorId, location);
 
         List<TravelMemoryEntry> entries = listEntriesByLocationIds(List.of(id)).getOrDefault(id, List.of());
 
@@ -204,8 +255,8 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
                 entries.stream().map(TravelMemoryEntry::getId).filter(Objects::nonNull).toList()
         );
         travelMemoryLocationMapper.deleteById(id);
-        scheduleRemovedEntryImagesCleanup(entries, Set.of(), adminId);
-        log.info("[TRAVEL_MEMORY_DELETE] adminId={} locationId={}", adminId, id);
+        scheduleRemovedEntryImagesCleanup(entries, Set.of(), operatorId);
+        log.info("[TRAVEL_MEMORY_DELETE] operatorId={} locationId={}", operatorId, id);
     }
 
     private void ensureCanView(Long userId) {
@@ -214,9 +265,21 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
         }
     }
 
-    private void ensureCanManage(Long userId) {
-        if (!accessService.canManageTravelMemory(userId)) {
-            throw new ForbiddenException("仅管理员可管理旅行记忆地图");
+    private void ensureCanCreate(Long userId) {
+        if (!accessService.canCreateTravelMemory(userId)) {
+            throw new ForbiddenException("仅知友或管理员可创建旅行记忆地点");
+        }
+    }
+
+    private void ensureCanManage(Long userId, TravelMemoryLocation location) {
+        if (!accessService.canManageTravelMemory(userId, location)) {
+            throw new ForbiddenException("只能管理自己创建的旅行记忆地点");
+        }
+    }
+
+    private void ensureAdmin(Long userId) {
+        if (!accessService.isAdmin(accessService.getUserOrNull(userId))) {
+            throw new ForbiddenException("仅管理员可查看全部旅行记忆地点");
         }
     }
 
@@ -231,10 +294,13 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
         return travelMemoryLocationMapper.selectList(wrapper);
     }
 
-    private List<TravelMemoryLocation> queryVisibleLocations(Long userId) {
+    private List<TravelMemoryLocation> queryVisibleLocations(Long userId, Long creatorId) {
         LambdaQueryWrapper<TravelMemoryLocation> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(TravelMemoryLocation::getStatus, STATUS_VISIBLE);
         appendVisibilityCondition(wrapper, userId);
+        if (creatorId != null) {
+            wrapper.eq(TravelMemoryLocation::getCreatedBy, creatorId);
+        }
         wrapper.orderByAsc(TravelMemoryLocation::getSortOrder)
                 .orderByDesc(TravelMemoryLocation::getVisitedAt)
                 .orderByDesc(TravelMemoryLocation::getId);
@@ -247,14 +313,6 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
             return;
         }
         wrapper.eq(TravelMemoryLocation::getVisibility, VISIBILITY_PUBLIC);
-    }
-
-    private boolean canViewLocation(Long userId, TravelMemoryLocation location) {
-        TravelMemoryVisibilityEnum visibility = TravelMemoryVisibilityEnum.fromValue(location.getVisibility());
-        if (visibility == TravelMemoryVisibilityEnum.PUBLIC) {
-            return true;
-        }
-        return visibility == TravelMemoryVisibilityEnum.FRIEND && canViewFriendVisibility(userId);
     }
 
     private boolean canViewFriendVisibility(Long userId) {
@@ -320,6 +378,33 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
             if (!StringUtils.hasText(location.getCoverImage())) {
                 location.setCoverImage(resolveLocationCoverImage(flattenedEntries));
             }
+        }
+    }
+
+    private void prepareLocations(List<TravelMemoryLocation> locations, Long viewerId) {
+        attachStructuredChildren(locations);
+        attachCreatorsAndPermissions(locations, viewerId);
+        issueTravelMemoryFileUrls(locations);
+    }
+
+    private void attachCreatorsAndPermissions(List<TravelMemoryLocation> locations, Long viewerId) {
+        if (locations == null || locations.isEmpty()) {
+            return;
+        }
+        Set<Long> creatorIds = locations.stream()
+                .map(TravelMemoryLocation::getCreatedBy)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, User> creatorMap = creatorIds.isEmpty()
+                ? Map.of()
+                : userMapper.selectBatchIds(creatorIds).stream()
+                        .map(userAccessProfileSupport::enrichUserProfile)
+                        .collect(Collectors.toMap(User::getId, Function.identity()));
+        for (TravelMemoryLocation location : locations) {
+            location.setCreator(location.getCreatedBy() == null ? null : creatorMap.get(location.getCreatedBy()));
+            boolean manageable = accessService.canManageTravelMemory(viewerId, location);
+            location.setCanEdit(manageable);
+            location.setCanDelete(manageable);
         }
     }
 
@@ -482,7 +567,7 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
             if (entry == null || !StringUtils.hasText(entry.getImageUrl())) {
                 continue;
             }
-            entry.setImageUrl(entry.getImageUrl().trim());
+            entry.setImageUrl(protectedFileAccessService.normalizeUrl(entry.getImageUrl().trim()));
             entry.setRemark(trimToEmpty(entry.getRemark()));
             entry.setThanksNote(trimToEmpty(entry.getThanksNote()));
             entry.setDisplayOrder(entry.getDisplayOrder() == null ? index : entry.getDisplayOrder());
@@ -497,6 +582,39 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
             throw new BadRequestException(segmentScopedMessage ? "每个片段至少需要保留一张照片" : "至少需要保留一张照片");
         }
         return normalized;
+    }
+
+    private void issueTravelMemoryFileUrls(List<TravelMemoryLocation> locations) {
+        if (locations == null || locations.isEmpty()) {
+            return;
+        }
+        for (TravelMemoryLocation location : locations) {
+            Long locationId = location.getId();
+            if (location.getEntries() != null) {
+                for (TravelMemoryEntry entry : location.getEntries()) {
+                    entry.setImageUrl(issueTravelMemoryFileUrl(entry.getImageUrl(), locationId));
+                }
+            }
+            if (location.getStops() != null) {
+                for (TravelMemoryStop stop : location.getStops()) {
+                    stop.setCoverImage(issueTravelMemoryFileUrl(stop.getCoverImage(), locationId));
+                    if (stop.getEntries() != null) {
+                        for (TravelMemoryEntry entry : stop.getEntries()) {
+                            entry.setImageUrl(issueTravelMemoryFileUrl(entry.getImageUrl(), locationId));
+                        }
+                    }
+                }
+            }
+            location.setCoverImage(issueTravelMemoryFileUrl(location.getCoverImage(), locationId));
+        }
+    }
+
+    private String issueTravelMemoryFileUrl(String fileUrl, Long locationId) {
+        return protectedFileAccessService.issueUrlForReference(
+                fileUrl,
+                SysFile.RefType.TRAVEL_MEMORY_IMAGE,
+                locationId
+        );
     }
 
     private void normalizeStopCover(List<TravelMemoryEntry> entries) {
@@ -626,13 +744,20 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
         saveStops(locationId, stops);
     }
 
-    private void convertEntryImagesToPermanent(List<TravelMemoryEntry> entries, Long locationId) {
-        List<String> urls = entries.stream()
+    private void claimEntryImages(List<TravelMemoryEntry> entries, Long locationId, Long operatorId) {
+        List<FileClaim> claims = entries.stream()
                 .map(TravelMemoryEntry::getImageUrl)
                 .filter(StringUtils::hasText)
                 .map(String::trim)
+                .distinct()
+                .map(FileClaim::byUrl)
                 .toList();
-        sysFileService.convertToPermanent(urls, SysFile.RefType.TRAVEL_MEMORY_IMAGE, locationId);
+        sysFileService.claimPermanentFiles(
+                operatorId,
+                claims,
+                SysFile.RefType.TRAVEL_MEMORY_IMAGE,
+                locationId
+        );
     }
 
     private void scheduleRemovedEntryImagesCleanup(List<TravelMemoryEntry> oldEntries, Set<String> newUrls, Long adminId) {
@@ -680,10 +805,10 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
         return location;
     }
 
-    private TravelMemoryLocation getAdminLocationOrThrow(Long id, Long adminId) {
+    private TravelMemoryLocation getLocationOrThrow(Long id, Long operatorId) {
         TravelMemoryLocation location = loadLocationDetail(id);
         if (location == null) {
-            log.warn("[TRAVEL_MEMORY_NOT_FOUND] adminId={} locationId={}", adminId, id);
+            log.warn("[TRAVEL_MEMORY_NOT_FOUND] operatorId={} locationId={}", operatorId, id);
             throw new ResourceNotFoundException("旅行记忆地点不存在");
         }
         return location;

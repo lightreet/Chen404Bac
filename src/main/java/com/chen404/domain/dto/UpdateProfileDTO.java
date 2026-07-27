@@ -24,4 +24,10 @@ public class UpdateProfileDTO {
     @Schema(description = "个人介绍，最多 160 个字符", example = "热爱写作、旅行和技术分享。")
     @Size(max = 160, message = "个人介绍长度不能超过 160 个字符")
     private String bio;
+
+    @Schema(description = "是否公开展示成员资料", example = "true")
+    private Boolean profileVisible;
+
+    @Schema(description = "是否在公开资料中展示邮箱", example = "false")
+    private Boolean emailPublic;
 }

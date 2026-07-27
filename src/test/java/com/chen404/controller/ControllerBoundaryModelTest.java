@@ -89,13 +89,20 @@ class ControllerBoundaryModelTest {
 
     @Test
     void travelMemoryControllerShouldUseCommandsAndVosAtBoundary() throws Exception {
-        Method listMethod = TravelMemoryController.class.getMethod("listVisibleMemories", AuthenticatedUser.class);
+        Method listMethod = TravelMemoryController.class.getMethod(
+                "listVisibleMemories",
+                Long.class,
+                AuthenticatedUser.class
+        );
         assertReturnTypeContains(listMethod, TravelMemoryLocationListItemVO.class.getName());
 
         Method detailMethod = TravelMemoryController.class.getMethod("getVisibleMemoryDetail", Long.class, AuthenticatedUser.class);
         assertReturnTypeContains(detailMethod, Result.class.getName() + "<com.chen404.domain.dto.TravelMemoryLocationDetailVO>");
 
-        Method adminListMethod = TravelMemoryController.class.getMethod("listAdminMemories");
+        Method adminListMethod = TravelMemoryController.class.getMethod(
+                "listAdminMemories",
+                AuthenticatedUser.class
+        );
         assertReturnTypeContains(adminListMethod, TravelMemoryLocationDetailVO.class.getName());
 
         Method adminDetailMethod = TravelMemoryController.class.getMethod(

@@ -17,6 +17,7 @@ import com.chen404.mapper.RoleMapper;
 import com.chen404.mapper.UserMapper;
 import com.chen404.mapper.UserRoleMapper;
 import com.chen404.service.EmailService;
+import com.chen404.service.FileClaim;
 import com.chen404.service.FileReferenceService;
 import com.chen404.service.SysFileService;
 import com.chen404.service.UserService;
@@ -261,6 +262,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         User user = lambdaQuery()
                 .eq(User::getId, userId)
                 .eq(User::getStatus, 1)
+                .eq(User::getProfileVisibility, 1)
                 .one();
         if (user == null) {
             return null;
@@ -272,6 +274,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     public List<User> listPublicUsers() {
         return lambdaQuery()
                 .eq(User::getStatus, 1)
+                .eq(User::getProfileVisibility, 1)
                 .orderByDesc(User::getTrustLevel)
                 .orderByAsc(User::getCreateTime)
                 .list()
@@ -293,10 +296,24 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setNickname(dto.getNickname());
         user.setAvatar(newAvatar);
         user.setBio(StringUtils.hasText(dto.getBio()) ? dto.getBio().trim() : null);
+        if (dto.getProfileVisible() != null) {
+            user.setProfileVisibility(Boolean.TRUE.equals(dto.getProfileVisible()) ? 1 : 0);
+        }
+        if (dto.getEmailPublic() != null) {
+            user.setEmailPublic(Boolean.TRUE.equals(dto.getEmailPublic()) ? 1 : 0);
+        }
+        if (!Integer.valueOf(1).equals(user.getProfileVisibility())) {
+            user.setEmailPublic(0);
+        }
 
         if (!Objects.equals(oldAvatar, newAvatar)) {
             if (StringUtils.hasText(newAvatar)) {
-                sysFileService.convertToPermanent(List.of(newAvatar), SysFile.RefType.AVATAR, userId);
+                sysFileService.claimPermanentFiles(
+                        userId,
+                        List.of(FileClaim.byUrl(newAvatar)),
+                        SysFile.RefType.AVATAR,
+                        userId
+                );
                 SysFile f = sysFileService.findByFileUrl(newAvatar);
                 if (f != null && Objects.equals(f.getUserId(), userId)
                         && SysFile.RefType.AVATAR.equals(f.getRefType())) {

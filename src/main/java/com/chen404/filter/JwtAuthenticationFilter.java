@@ -17,11 +17,16 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
@@ -80,7 +85,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(
                     principal,
                     token,
-                    AuthorityUtils.createAuthorityList(toRoleAuthority(user.getRoleCode()))
+                    buildAuthorities(user)
             );
             authenticationToken.setDetails(decoded);
             SecurityContextHolder.getContext().setAuthentication(authenticationToken);
@@ -113,5 +118,26 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private String toRoleAuthority(String roleCode) {
         UserRoleEnum role = UserRoleEnum.fromRoleCode(roleCode);
         return "ROLE_" + role.name();
+    }
+
+    private List<GrantedAuthority> buildAuthorities(User user) {
+        List<GrantedAuthority> authorities = new ArrayList<>(
+                AuthorityUtils.createAuthorityList(toRoleAuthority(user.getRoleCode()))
+        );
+        if (user.getCapabilities() == null) {
+            return authorities;
+        }
+        user.getCapabilities().stream()
+                .map(this::toCapabilityAuthority)
+                .map(SimpleGrantedAuthority::new)
+                .forEach(authorities::add);
+        return authorities;
+    }
+
+    private String toCapabilityAuthority(String capabilityCode) {
+        return "CAP_" + capabilityCode
+                .replace(':', '_')
+                .replace('-', '_')
+                .toUpperCase(Locale.ROOT);
     }
 }

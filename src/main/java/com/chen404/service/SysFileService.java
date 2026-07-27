@@ -22,13 +22,22 @@ public interface SysFileService extends IService<SysFile> {
     SysFile uploadTempFile(MultipartFile file, Long userId, String refType);
 
     /**
-     * 将临时文件转为永久文件（文章发布时调用）
+     * 将操作者拥有的临时文件认领到指定业务。
      *
-     * @param fileUrls 文件URL列表
-     * @param refType  引用类型
-     * @param refId    引用ID
+     * <p>认领会校验文件状态、有效期、上传者、引用类型和既有业务归属；
+     * 已经属于同一业务的文件按幂等成功处理。</p>
+     *
+     * @param operatorId 操作者用户 ID
+     * @param claims 文件 ID / URL 凭证
+     * @param expectedRefType 上传时声明的文件类型
+     * @param refId 目标业务 ID
      */
-    void convertToPermanent(List<String> fileUrls, String refType, Long refId);
+    void claimPermanentFiles(
+            Long operatorId,
+            List<FileClaim> claims,
+            String expectedRefType,
+            Long refId
+    );
 
     /**
      * 根据URL删除文件

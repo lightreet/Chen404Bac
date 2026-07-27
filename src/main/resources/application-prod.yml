@@ -56,6 +56,7 @@ minio:
   access-key: ${MINIO_ACCESS_KEY}
   secret-key: ${MINIO_SECRET_KEY}
   bucket-name: ${MINIO_BUCKET_NAME:chen404}
+  protected-bucket-name: ${MINIO_PROTECTED_BUCKET_NAME:chen404-protected}
   external-url: ${MINIO_EXTERNAL_URL:}
 
 jwt:
@@ -68,6 +69,12 @@ app:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS}
   frontend-base-url: ${APP_FRONTEND_BASE_URL}
   backend-base-url: ${APP_BACKEND_BASE_URL}
+  multi-user:
+    article-creation-enabled: ${MULTI_USER_ARTICLE_CREATION_ENABLED:false}
+    travel-creation-enabled: ${MULTI_USER_TRAVEL_CREATION_ENABLED:false}
+    music-creation-enabled: ${MULTI_USER_MUSIC_CREATION_ENABLED:false}
+  admin-notification:
+    enabled: ${ADMIN_NOTIFICATION_ENABLED:false}
 
 logging:
   level:

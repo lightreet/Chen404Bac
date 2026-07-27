@@ -18,6 +18,8 @@ public interface FileStorageService {
      */
     String uploadFile(MultipartFile file, String objectName);
 
+    String uploadFile(MultipartFile file, String bucketName, String objectName);
+
     /**
      * 上传文件
      *
@@ -29,6 +31,14 @@ public interface FileStorageService {
      */
     String uploadFile(InputStream inputStream, String objectName, String contentType, long size);
 
+    String uploadFile(
+            InputStream inputStream,
+            String bucketName,
+            String objectName,
+            String contentType,
+            long size
+    );
+
     /**
      * 删除文件
      *
@@ -36,6 +46,8 @@ public interface FileStorageService {
      * @return 是否成功
      */
     boolean deleteFile(String objectName);
+
+    boolean deleteFile(String bucketName, String objectName);
 
     /**
      * 获取文件访问URL
@@ -45,6 +57,13 @@ public interface FileStorageService {
      */
     String getFileUrl(String objectName);
 
+    String getFileUrl(String bucketName, String objectName);
+
+    /**
+     * 生成短时有效的下载地址，主要用于受保护存储桶。
+     */
+    String getPresignedGetUrl(String bucketName, String objectName, int expiresMinutes);
+
     /**
      * 检查文件是否存在
      *
@@ -52,4 +71,6 @@ public interface FileStorageService {
      * @return 是否存在
      */
     boolean exists(String objectName);
+
+    boolean exists(String bucketName, String objectName);
 }

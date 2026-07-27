@@ -7,6 +7,8 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.chen404.domain.enums.ArticleCommentPolicyEnum;
 import com.chen404.domain.enums.ArticleStatusEnum;
 import com.chen404.domain.enums.ArticleVisibilityEnum;
+import com.chen404.domain.enums.AdminNotificationEventTypeEnum;
+import com.chen404.domain.enums.AdminNotificationResourceTypeEnum;
 import com.chen404.domain.dto.ArchiveArticleItem;
 import com.chen404.domain.dto.ArchiveMonthVO;
 import com.chen404.domain.dto.ArchiveYearVO;
@@ -20,6 +22,7 @@ import com.chen404.domain.entity.Tag;
 import com.chen404.domain.entity.User;
 import com.chen404.domain.entity.UserArticleFavorite;
 import com.chen404.domain.entity.UserArticleLike;
+import com.chen404.domain.event.AdminContentEvent;
 import com.chen404.exception.ForbiddenException;
 import com.chen404.exception.TooManyRequestsException;
 import com.chen404.exception.UnauthorizedException;
@@ -31,7 +34,10 @@ import com.chen404.mapper.UserArticleFavoriteMapper;
 import com.chen404.mapper.UserArticleLikeMapper;
 import com.chen404.mapper.UserMapper;
 import com.chen404.service.AccessService;
+import com.chen404.service.AdminContentEventPublisher;
 import com.chen404.service.FileReferenceService;
+import com.chen404.service.FileClaim;
+import com.chen404.service.ProtectedFileAccessService;
 import com.chen404.service.ArticleKnowledgeService;
 import com.chen404.service.ArticleService;
 import com.chen404.service.SysFileService;
@@ -83,6 +89,9 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     private SysFileService sysFileService;
 
     @Autowired
+    private ProtectedFileAccessService protectedFileAccessService;
+
+    @Autowired
     private TagService tagService;
 
     @Autowired
@@ -105,6 +114,9 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
     @Autowired
     private FileReferenceService fileReferenceService;
+
+    @Autowired
+    private AdminContentEventPublisher adminContentEventPublisher;
 
     @Override
     public Page<Article> getArticlePage(Integer page, Integer size, Integer status, Long categoryId, Long tagId, Long authorId, String keyword, Long requesterId) {
@@ -178,6 +190,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
         // 填充关联数据
         fillArticleRelations(article);
+        issueArticleFileUrls(article, true);
         accessService.fillArticlePermissions(article, requesterId);
         fillArticleInteractionFlags(article, requesterId);
 
@@ -245,8 +258,8 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         if (operator == null) {
             throw new UnauthorizedException();
         }
-        if (!accessService.isAdmin(operator)) {
-            throw new ForbiddenException("仅管理员可创建文章");
+        if (!accessService.canCreateArticle(article.getAuthorId())) {
+            throw new ForbiddenException("仅知友或管理员可创建文章");
         }
 
         // 设置默认值
@@ -268,10 +281,11 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         if (article.getCommentPolicy() == null) {
             article.setCommentPolicy(ArticleCommentPolicyEnum.REGISTERED.getValue());
         }
-        if (operator == null || !accessService.isAdmin(operator)) {
+        if (!accessService.canCurateArticle(article.getAuthorId())) {
             article.setIsTop(0);
             article.setIsRecommend(0);
         }
+        normalizeArticleFileUrls(article);
 
         // 如果是发布状态，设置发布时间
         if (ArticleStatusEnum.is(article.getStatus(), ArticleStatusEnum.PUBLISHED) && article.getPublishTime() == null) {
@@ -298,12 +312,13 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         }
 
         // 将文章中引用的文件转为永久状态
-        convertArticleFilesToPermanent(article);
+        claimArticleFiles(article, article.getAuthorId());
 
         persistCoverFileId(article.getId(), article.getCoverImage());
         fileReferenceService.syncArticleReferences(article.getId(), article.getContent(), article.getCoverImage());
         articleKnowledgeService.syncArticleChunks(article.getId());
 
+        publishArticleCreatedEvent(article);
         return article;
     }
 
@@ -318,8 +333,8 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         if (operator == null) {
             throw new UnauthorizedException();
         }
-        if (!accessService.isAdmin(operator)) {
-            throw new ForbiddenException("仅管理员可修改文章");
+        if (!accessService.canManageArticle(operatorId, existing)) {
+            throw new ForbiddenException("只能修改自己创建的文章");
         }
 
         article.setId(id);
@@ -338,15 +353,18 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                     ? ArticleCommentPolicyEnum.REGISTERED.getValue()
                     : existing.getCommentPolicy());
         }
-        if (operator == null || !accessService.isAdmin(operator)) {
+        if (!accessService.canCurateArticle(operatorId)) {
             article.setIsTop(existing.getIsTop());
             article.setIsRecommend(existing.getIsRecommend());
         }
+        normalizeArticleFileUrls(article);
 
         // 如果从草稿变为发布，设置发布时间
         if (ArticleStatusEnum.is(existing.getStatus(), ArticleStatusEnum.DRAFT)
                 && ArticleStatusEnum.is(article.getStatus(), ArticleStatusEnum.PUBLISHED)) {
-            article.setPublishTime(LocalDateTime.now());
+            article.setPublishTime(existing.getPublishTime() == null
+                    ? LocalDateTime.now()
+                    : existing.getPublishTime());
         }
 
         // 自动生成摘要
@@ -377,12 +395,16 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         sysFileService.cleanUnusedFiles(id, article.getContent(), article.getCoverImage());
 
         // 将新引用的文件转为永久状态
-        convertArticleFilesToPermanent(article);
+        claimArticleFiles(article, operatorId);
 
         persistCoverFileId(id, article.getCoverImage());
         fileReferenceService.syncArticleReferences(id, article.getContent(), article.getCoverImage());
         articleKnowledgeService.syncArticleChunks(id);
 
+        if (!ArticleStatusEnum.is(existing.getStatus(), ArticleStatusEnum.PUBLISHED)
+                && ArticleStatusEnum.is(article.getStatus(), ArticleStatusEnum.PUBLISHED)) {
+            publishArticlePublishedEvent(article);
+        }
         return getArticleById(id, false, operatorId);
     }
 
@@ -397,8 +419,8 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         if (operator == null) {
             throw new UnauthorizedException();
         }
-        if (!accessService.isAdmin(operator)) {
-            throw new ForbiddenException("仅管理员可删除文章");
+        if (!accessService.canManageArticle(operatorId, article)) {
+            throw new ForbiddenException("只能删除自己创建的文章");
         }
 
         fileReferenceService.removeByOwner(
@@ -420,6 +442,32 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
             categoryMapper.updateArticleCount(article.getCategoryId());
         }
         articleKnowledgeService.removeArticleChunks(id);
+    }
+
+    private void publishArticleCreatedEvent(Article article) {
+        AdminNotificationEventTypeEnum eventType = ArticleStatusEnum.is(
+                article.getStatus(),
+                ArticleStatusEnum.PUBLISHED
+        )
+                ? AdminNotificationEventTypeEnum.ARTICLE_PUBLISHED
+                : AdminNotificationEventTypeEnum.ARTICLE_CREATED;
+        adminContentEventPublisher.publish(new AdminContentEvent(
+                eventType,
+                article.getAuthorId(),
+                AdminNotificationResourceTypeEnum.ARTICLE,
+                article.getId(),
+                article.getTitle()
+        ));
+    }
+
+    private void publishArticlePublishedEvent(Article article) {
+        adminContentEventPublisher.publish(new AdminContentEvent(
+                AdminNotificationEventTypeEnum.ARTICLE_PUBLISHED,
+                article.getAuthorId(),
+                AdminNotificationResourceTypeEnum.ARTICLE,
+                article.getId(),
+                article.getTitle()
+        ));
     }
 
     @Override
@@ -745,42 +793,57 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     /**
      * 将文章引用的所有文件转为永久状态
      */
-    private void convertArticleFilesToPermanent(Article article) {
+    private void claimArticleFiles(Article article, Long operatorId) {
         if (article == null) {
             return;
         }
 
-        // 收集所有引用的文件URL
-        List<String> fileUrls = new ArrayList<>();
-
-        // 提取内容中的图片URL
+        List<String> contentUrls = new ArrayList<>();
         if (StringUtils.hasText(article.getContent())) {
-            fileUrls.addAll(sysFileService.extractImageUrlsFromContent(article.getContent()));
+            contentUrls.addAll(sysFileService.extractImageUrlsFromContent(article.getContent()));
         }
-
-        // 添加封面URL
+        if (!contentUrls.isEmpty()) {
+            sysFileService.claimPermanentFiles(
+                    operatorId,
+                    contentUrls.stream().distinct().map(FileClaim::byUrl).toList(),
+                    SysFile.RefType.ARTICLE_CONTENT,
+                    article.getId()
+            );
+        }
         if (StringUtils.hasText(article.getCoverImage())) {
-            fileUrls.add(article.getCoverImage());
+            sysFileService.claimPermanentFiles(
+                    operatorId,
+                    List.of(FileClaim.byUrl(article.getCoverImage())),
+                    SysFile.RefType.ARTICLE_COVER,
+                    article.getId()
+            );
         }
+    }
 
-        // 去重并转为永久状态
-        if (!fileUrls.isEmpty()) {
-            List<String> uniqueUrls = fileUrls.stream()
-                    .distinct()
-                    .collect(Collectors.toList());
-
-            // 内容图片
-            sysFileService.convertToPermanent(uniqueUrls, com.chen404.domain.entity.SysFile.RefType.ARTICLE_CONTENT, article.getId());
-
-            // 封面单独标记
-            if (StringUtils.hasText(article.getCoverImage())) {
-                sysFileService.convertToPermanent(
-                        List.of(article.getCoverImage()),
-                        com.chen404.domain.entity.SysFile.RefType.ARTICLE_COVER,
-                        article.getId()
-                );
-            }
+    private void normalizeArticleFileUrls(Article article) {
+        if (article == null) {
+            return;
         }
+        article.setContent(protectedFileAccessService.normalizeContent(article.getContent()));
+        article.setCoverImage(protectedFileAccessService.normalizeUrl(article.getCoverImage()));
+    }
+
+    private void issueArticleFileUrls(Article article, boolean includeContent) {
+        if (article == null || article.getId() == null) {
+            return;
+        }
+        if (includeContent) {
+            article.setContent(protectedFileAccessService.issueContentUrls(
+                    article.getContent(),
+                    SysFile.RefType.ARTICLE_CONTENT,
+                    article.getId()
+            ));
+        }
+        article.setCoverImage(protectedFileAccessService.issueUrlForReference(
+                article.getCoverImage(),
+                SysFile.RefType.ARTICLE_COVER,
+                article.getId()
+        ));
     }
 
     private void assertAnonymousArticleLikeAllowed(Long articleId, String clientIp) {
@@ -949,6 +1012,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                     article.setCoverImage(coverUrl);
                 }
             }
+            issueArticleFileUrls(article, false);
         }
     }
 

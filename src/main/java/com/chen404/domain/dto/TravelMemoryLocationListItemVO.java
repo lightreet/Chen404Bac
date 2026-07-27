@@ -48,4 +48,13 @@ public class TravelMemoryLocationListItemVO {
 
     @Schema(description = "可见性：0-公开 2-知友可见", example = "0")
     private Integer visibility;
+
+    @Schema(description = "地点创建者摘要")
+    private ArticleAuthorVO creator;
+
+    @Schema(description = "当前用户是否可编辑")
+    private Boolean canEdit;
+
+    @Schema(description = "当前用户是否可删除")
+    private Boolean canDelete;
 }

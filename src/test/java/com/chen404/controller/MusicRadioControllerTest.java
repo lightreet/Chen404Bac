@@ -7,6 +7,7 @@ import com.chen404.domain.dto.MusicPlaylistVO;
 import com.chen404.domain.dto.MusicTrackVO;
 import com.chen404.service.MusicRadioService;
 import com.chen404.service.MusicTrackAiSuggestService;
+import com.chen404.security.AuthenticatedUser;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -24,12 +25,12 @@ class MusicRadioControllerTest {
         MusicTrackAiSuggestService suggestService = mock(MusicTrackAiSuggestService.class);
         MusicRadioController controller = new MusicRadioController(service, suggestService);
         List<MusicTrackVO> tracks = List.of(new MusicTrackVO());
-        when(service.listPublicTracks()).thenReturn(tracks);
+        when(service.listPublicTracks(null)).thenReturn(tracks);
 
-        Result<List<MusicTrackVO>> result = controller.listPublicTracks();
+        Result<List<MusicTrackVO>> result = controller.listPublicTracks(null);
 
         assertSame(tracks, result.getData());
-        verify(service).listPublicTracks();
+        verify(service).listPublicTracks(null);
     }
 
     @Test
@@ -66,9 +67,10 @@ class MusicRadioControllerTest {
         MusicTrackAiSuggestService suggestService = mock(MusicTrackAiSuggestService.class);
         MusicRadioController controller = new MusicRadioController(service, suggestService);
 
-        controller.deleteTrack(9L);
+        AuthenticatedUser admin = new AuthenticatedUser(1L, "admin", "admin");
+        controller.deleteTrack(9L, admin);
 
-        verify(service).deleteTrack(9L);
+        verify(service).deleteTrack(9L, 1L);
     }
 
     @Test

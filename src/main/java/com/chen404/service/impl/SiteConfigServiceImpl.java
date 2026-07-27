@@ -5,8 +5,10 @@ import com.chen404.domain.entity.SiteConfig;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.mapper.SiteConfigMapper;
 import com.chen404.service.FileReferenceService;
+import com.chen404.service.FileClaim;
 import com.chen404.service.SiteConfigService;
 import com.chen404.service.SysFileService;
+import com.chen404.util.CurrentUserUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -199,10 +201,12 @@ public class SiteConfigServiceImpl implements SiteConfigService {
         if (heroImages == null || heroImages.isEmpty()) {
             return;
         }
-        sysFileService.convertToPermanent(
+        sysFileService.claimPermanentFiles(
+                CurrentUserUtil.getCurrentUserId(),
                 heroImages.values().stream()
                         .filter(StringUtils::hasText)
                         .map(String::trim)
+                        .map(FileClaim::byUrl)
                         .toList(),
                 SysFile.RefType.SITE_HERO,
                 SITE_CONFIG_REF_ID
@@ -210,10 +214,12 @@ public class SiteConfigServiceImpl implements SiteConfigService {
     }
 
     private void persistSiteAssets(SiteConfigDTO config) {
-        sysFileService.convertToPermanent(
+        sysFileService.claimPermanentFiles(
+                CurrentUserUtil.getCurrentUserId(),
                 List.of(config.getSiteLogo(), config.getSiteFavicon()).stream()
                         .filter(StringUtils::hasText)
                         .map(String::trim)
+                        .map(FileClaim::byUrl)
                         .toList(),
                 SysFile.RefType.SITE_ASSET,
                 SITE_CONFIG_REF_ID

@@ -67,4 +67,13 @@ public class TravelMemoryLocationDetailVO {
 
     @Schema(description = "更新时间")
     private LocalDateTime updateTime;
+
+    @Schema(description = "地点创建者摘要")
+    private ArticleAuthorVO creator;
+
+    @Schema(description = "当前用户是否可编辑")
+    private Boolean canEdit;
+
+    @Schema(description = "当前用户是否可删除")
+    private Boolean canDelete;
 }

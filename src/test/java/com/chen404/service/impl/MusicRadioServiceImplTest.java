@@ -14,11 +14,18 @@ import com.chen404.exception.BadRequestException;
 import com.chen404.mapper.MusicPlaylistMapper;
 import com.chen404.mapper.MusicPlaylistTrackMapper;
 import com.chen404.mapper.MusicTrackMapper;
+import com.chen404.mapper.UserMapper;
+import com.chen404.service.AccessService;
+import com.chen404.service.AdminContentEventPublisher;
 import com.chen404.service.FileReferenceService;
+import com.chen404.service.FileClaim;
+import com.chen404.service.ProtectedFileAccessService;
 import com.chen404.service.SysFileService;
+import com.chen404.service.support.UserAccessProfileSupport;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 
@@ -46,7 +53,7 @@ class MusicRadioServiceImplTest {
 
         when(trackMapper.selectList(any())).thenReturn(List.of(buildTrack(1L, "春日来信", "published", "夜读,日系")));
 
-        List<MusicTrackVO> tracks = service.listPublicTracks();
+        List<MusicTrackVO> tracks = service.listPublicTracks(null);
 
         assertEquals(1, tracks.size());
         assertEquals("春日来信", tracks.get(0).getTitle());
@@ -156,14 +163,16 @@ class MusicRadioServiceImplTest {
         });
         when(trackMapper.selectById(42L)).thenReturn(buildTrack(42L, "Night Walk", MusicTrack.STATUS_DRAFT, "radio"));
 
-        service.createTrack(command);
+        service.createTrack(command, 1L);
 
-        verify(sysFileService).convertToPermanent(
-                eq(List.of("https://cdn.example.com/audio/temp.mp3")),
+        verify(sysFileService).claimPermanentFiles(
+                eq(1L),
+                eq(List.of(FileClaim.byIdAndUrl(null, "https://cdn.example.com/audio/temp.mp3"))),
                 eq(SysFile.RefType.MUSIC_AUDIO),
                 eq(42L));
-        verify(sysFileService).convertToPermanent(
-                eq(List.of("https://cdn.example.com/cover/temp.webp")),
+        verify(sysFileService).claimPermanentFiles(
+                eq(1L),
+                eq(List.of(FileClaim.byIdAndUrl(null, "https://cdn.example.com/cover/temp.webp"))),
                 eq(SysFile.RefType.MUSIC_COVER),
                 eq(42L));
     }
@@ -203,14 +212,16 @@ class MusicRadioServiceImplTest {
 
         when(trackMapper.selectById(7L)).thenReturn(existing);
 
-        service.updateTrack(7L, command);
+        service.updateTrack(7L, command, 1L);
 
-        verify(sysFileService).convertToPermanent(
-                eq(List.of("https://cdn.example.com/audio/new-temp.mp3")),
+        verify(sysFileService).claimPermanentFiles(
+                eq(1L),
+                eq(List.of(FileClaim.byIdAndUrl(null, "https://cdn.example.com/audio/new-temp.mp3"))),
                 eq(SysFile.RefType.MUSIC_AUDIO),
                 eq(7L));
-        verify(sysFileService).convertToPermanent(
-                eq(List.of("https://cdn.example.com/cover/new-temp.webp")),
+        verify(sysFileService).claimPermanentFiles(
+                eq(1L),
+                eq(List.of(FileClaim.byIdAndUrl(null, "https://cdn.example.com/cover/new-temp.webp"))),
                 eq(SysFile.RefType.MUSIC_COVER),
                 eq(7L));
     }
@@ -229,7 +240,7 @@ class MusicRadioServiceImplTest {
         command.setLyricType(MusicTrack.LYRIC_TYPE_LRC);
         command.setLyrics("[00:12.00]第一句歌词\n这行缺少时间轴");
 
-        assertThrows(BadRequestException.class, () -> service.createTrack(command));
+        assertThrows(BadRequestException.class, () -> service.createTrack(command, 1L));
 
         verify(trackMapper, never()).insert(any(MusicTrack.class));
     }
@@ -255,7 +266,7 @@ class MusicRadioServiceImplTest {
         });
         when(trackMapper.selectById(43L)).thenReturn(buildTrack(43L, "Night Walk", MusicTrack.STATUS_DRAFT, "radio"));
 
-        service.createTrack(command);
+        service.createTrack(command, 1L);
 
         verify(trackMapper).insert(any(MusicTrack.class));
     }
@@ -271,7 +282,7 @@ class MusicRadioServiceImplTest {
         MusicRadioServiceImpl service = buildService(trackMapper, playlistMapper, playlistTrackMapper, sysFileService);
         when(trackMapper.selectById(5L)).thenReturn(buildTrack(5L, "Unlinked Song", MusicTrack.STATUS_DRAFT, "radio"));
 
-        service.deleteTrack(5L);
+        service.deleteTrack(5L, 1L);
 
         verify(playlistTrackMapper).delete(any());
         verify(trackMapper).deleteById(5L);
@@ -304,13 +315,26 @@ class MusicRadioServiceImplTest {
             MusicPlaylistMapper playlistMapper,
             MusicPlaylistTrackMapper playlistTrackMapper,
             SysFileService sysFileService) {
-        return new MusicRadioServiceImpl(
+        AccessService accessService = mock(AccessService.class);
+        when(accessService.canCreateMusicTrack(1L)).thenReturn(true);
+        when(accessService.canManageMusicTrack(eq(1L), any(MusicTrack.class))).thenReturn(true);
+        MusicRadioServiceImpl service = new MusicRadioServiceImpl(
                 trackMapper,
                 playlistMapper,
                 playlistTrackMapper,
                 sysFileService,
-                mock(FileReferenceService.class)
+                mock(FileReferenceService.class),
+                accessService,
+                mock(UserMapper.class),
+                mock(UserAccessProfileSupport.class),
+                mock(AdminContentEventPublisher.class)
         );
+        ProtectedFileAccessService protectedFileAccessService = mock(ProtectedFileAccessService.class);
+        when(protectedFileAccessService.normalizeUrl(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(protectedFileAccessService.issueUrlForReference(any(), any(), any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        ReflectionTestUtils.setField(service, "protectedFileAccessService", protectedFileAccessService);
+        return service;
     }
 
     private void initTableInfo(Class<?> entityClass) {

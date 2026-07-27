@@ -27,6 +27,10 @@ public class SysFile implements Serializable {
 
     private String objectName;
 
+    private String storageScope;
+
+    private String bucketName;
+
     @TableField("file_path")
     private String filePath;
 
@@ -59,6 +63,11 @@ public class SysFile implements Serializable {
         String TEMP = "TEMP";
         String PERMANENT = "PERMANENT";
         String DELETED = "DELETED";
+    }
+
+    public interface StorageScope {
+        String PUBLIC = "PUBLIC";
+        String PROTECTED = "PROTECTED";
     }
 
     public interface RefType {

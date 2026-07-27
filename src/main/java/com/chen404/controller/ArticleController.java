@@ -212,13 +212,9 @@ public class ArticleController {
         Long userId = CurrentUserUtil.requireUserId(currentUser);
         Article article = articleCommandConverter.toEntity(command);
         article.setAuthorId(userId);
-        try {
-            Article created = articleService.createArticle(article);
-            Article freshArticle = articleService.getArticleById(created.getId(), false, userId);
-            return Result.success("创建成功", articleViewConverter.toDetailVO(freshArticle));
-        } catch (RuntimeException e) {
-            return Result.error(ApiErrorCode.BAD_REQUEST, e.getMessage());
-        }
+        Article created = articleService.createArticle(article);
+        Article freshArticle = articleService.getArticleById(created.getId(), false, userId);
+        return Result.success("创建成功", articleViewConverter.toDetailVO(freshArticle));
     }
 
     @Operation(summary = "更新文章", description = "更新已有文章，需要登录")
