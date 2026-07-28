@@ -110,7 +110,8 @@ public class PublicApiRequestMatcher implements RequestMatcher {
         if (!"GET".equalsIgnoreCase(method)) {
             return false;
         }
-        return !path.equals("/music/tracks/mine")
+        return !path.equals("/music/player/state")
+                && !path.equals("/music/tracks/mine")
                 && !path.matches("/music/tracks/mine/[^/]+");
     }
 

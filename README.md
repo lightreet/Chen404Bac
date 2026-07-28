@@ -106,6 +106,7 @@ src/main/resources/db/migration/
 - `app.cors.*`：跨域
 - `app.frontend-base-url` / `app.backend-base-url`：前后端对外基础地址
 - `app.site-runtime.*`：文章分页、上传限制等运行时默认值
+- `app.music.player-state-ttl`：登录用户播放现场在 Redis 中的滑动过期时间，默认 7 天
 - `app.image-processing.*`：上传图片压缩、WebP 转换与尺寸限制
 - `app.ai.runtime.*`：聊天、文章辅助、推荐默认策略
 - `app.ai.maid.*`：Lyra 默认 prompt 与人设资源
@@ -147,7 +148,7 @@ src/main/resources/db/migration/
 - 表情包公开下发、后台维护、ZIP 导入
 - 好友申请、后台审批、邮件审批入口
 - 旅行纪念地图、地点/片段/照片结构、图片 EXIF 解析、权限校验、文件转永久与引用同步
-- Sakura Radio 公开播放、歌曲与歌单维护、默认播放集
+- Sakura Radio 公开播放、歌曲与歌单维护、默认播放集、登录用户 Redis 临时播放现场恢复
 - AI 文章辅助、AI 音乐曲目信息补全
 - Lyra 同步/流式聊天、会话恢复、站内知识检索、相关推荐
 - AI 后台配置、API Key 脱敏、连接测试

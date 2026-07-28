@@ -71,6 +71,22 @@ class SecurityConfigTest {
     }
 
     @Test
+    void shouldRejectMusicPlayerStateWithoutToken() throws Exception {
+        mockMvc.perform(get("/music/player/state"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void shouldAllowMusicPlayerStateWithValidToken() throws Exception {
+        stubValidToken("user");
+
+        mockMvc.perform(get("/music/player/state")
+                        .header("Authorization", "Bearer " + VALID_TOKEN))
+                .andExpect(status().isOk())
+                .andExpect(content().string(String.valueOf(TEST_USER_ID)));
+    }
+
+    @Test
     void shouldRejectProtectedArticleWriteWithoutToken() throws Exception {
         mockMvc.perform(post("/articles"))
                 .andExpect(status().isUnauthorized());
@@ -166,6 +182,12 @@ class SecurityConfigTest {
         @GetMapping("/music/tracks")
         public ResponseEntity<String> publicMusicTracks() {
             return ResponseEntity.ok("music");
+        }
+
+        @GetMapping("/music/player/state")
+        public ResponseEntity<String> musicPlayerState(
+                @AuthenticationPrincipal AuthenticatedUser currentUser) {
+            return ResponseEntity.ok(String.valueOf(CurrentUserUtil.requireUserId(currentUser)));
         }
 
         @PostMapping("/articles")

@@ -50,6 +50,11 @@ public final class RedisKeys {
         return PREFIX + "auth:refresh:blacklist:" + tokenId;
     }
 
+    /** 登录用户音乐播放现场 */
+    public static String musicPlayerState(Long userId) {
+        return PREFIX + "music:player:state:user:" + userId;
+    }
+
     private static String sanitizeIp(String ip) {
         if (ip == null || ip.isBlank()) {
             return "anonymous";

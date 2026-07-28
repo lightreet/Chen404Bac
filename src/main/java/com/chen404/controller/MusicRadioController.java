@@ -2,6 +2,8 @@ package com.chen404.controller;
 
 import com.chen404.annotation.RequireAdmin;
 import com.chen404.domain.Result;
+import com.chen404.domain.dto.MusicPlayerStateCommand;
+import com.chen404.domain.dto.MusicPlayerStateVO;
 import com.chen404.domain.dto.MusicTrackAiSuggestRequest;
 import com.chen404.domain.dto.MusicTrackAiSuggestResponse;
 import com.chen404.domain.dto.MusicPlaylistTracksCommand;
@@ -11,6 +13,7 @@ import com.chen404.domain.dto.MusicTrackUpsertCommand;
 import com.chen404.domain.dto.MusicTrackVO;
 import com.chen404.service.MusicTrackAiSuggestService;
 import com.chen404.service.MusicRadioService;
+import com.chen404.service.MusicPlayerStateService;
 import com.chen404.security.AuthenticatedUser;
 import com.chen404.util.CurrentUserUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -39,10 +42,15 @@ public class MusicRadioController {
 
     private final MusicRadioService musicRadioService;
     private final MusicTrackAiSuggestService musicTrackAiSuggestService;
+    private final MusicPlayerStateService musicPlayerStateService;
 
-    public MusicRadioController(MusicRadioService musicRadioService, MusicTrackAiSuggestService musicTrackAiSuggestService) {
+    public MusicRadioController(
+            MusicRadioService musicRadioService,
+            MusicTrackAiSuggestService musicTrackAiSuggestService,
+            MusicPlayerStateService musicPlayerStateService) {
         this.musicRadioService = musicRadioService;
         this.musicTrackAiSuggestService = musicTrackAiSuggestService;
+        this.musicPlayerStateService = musicPlayerStateService;
     }
 
     @Operation(summary = "获取公开音乐列表")
@@ -132,6 +140,33 @@ public class MusicRadioController {
     @GetMapping("/music/radio/default")
     public Result<MusicPlaylistVO> getDefaultRadio() {
         return Result.success(musicRadioService.getDefaultRadio());
+    }
+
+    @Operation(summary = "获取我的播放现场", description = "需要登录；播放现场由 Redis 临时保存")
+    @GetMapping("/music/player/state")
+    public Result<MusicPlayerStateVO> getPlayerState(
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
+        return Result.success(musicPlayerStateService.getState(userId));
+    }
+
+    @Operation(summary = "保存我的播放现场", description = "需要登录；覆盖保存并刷新 Redis 有效期")
+    @PutMapping("/music/player/state")
+    public Result<Void> savePlayerState(
+            @Valid @RequestBody MusicPlayerStateCommand command,
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
+        musicPlayerStateService.saveState(userId, command);
+        return Result.success("播放现场已保存");
+    }
+
+    @Operation(summary = "清空我的播放现场", description = "需要登录")
+    @DeleteMapping("/music/player/state")
+    public Result<Void> clearPlayerState(
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
+        musicPlayerStateService.clearState(userId);
+        return Result.success("播放现场已清空");
     }
 
     @RequireAdmin
