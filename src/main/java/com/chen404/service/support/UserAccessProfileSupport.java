@@ -2,7 +2,6 @@ package com.chen404.service.support;
 
 import com.chen404.config.MultiUserFeatureProperties;
 import com.chen404.domain.enums.UserRoleEnum;
-import com.chen404.domain.enums.UserCapabilityEnum;
 import com.chen404.domain.enums.UserTrustLevelEnum;
 import com.chen404.domain.entity.Role;
 import com.chen404.domain.entity.SysFile;
@@ -59,9 +58,7 @@ public class UserAccessProfileSupport {
             user.setTrustLevel(UserTrustLevelEnum.NORMAL.getLevel());
         }
         applyIdentityLabels(user);
-        user.setCapabilities(multiUserFeatureProperties.filterEnabledCapabilities(
-                UserCapabilityEnum.resolveCodes(user)
-        ));
+        user.setCapabilities(multiUserFeatureProperties.resolveAvailableCapabilities(user));
         return user;
     }
 
