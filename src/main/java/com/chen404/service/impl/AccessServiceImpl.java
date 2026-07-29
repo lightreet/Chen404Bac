@@ -54,9 +54,7 @@ public class AccessServiceImpl implements AccessService {
 
     @Override
     public List<String> listCapabilities(Long userId) {
-        return multiUserFeatureProperties.filterEnabledCapabilities(
-                UserCapabilityEnum.resolveCodes(getUserOrNull(userId))
-        );
+        return multiUserFeatureProperties.resolveAvailableCapabilities(getUserOrNull(userId));
     }
 
     @Override
