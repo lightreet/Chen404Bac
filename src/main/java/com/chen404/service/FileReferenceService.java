@@ -34,6 +34,9 @@ public interface FileReferenceService extends IService<FileReference> {
     /** 同步音乐曲目的音频与封面引用。 */
     void syncMusicTrackReferences(Long trackId, Long audioFileId, String audioUrl, Long coverFileId, String coverUrl);
 
+    /** 同步私人书架原始小说文件引用。 */
+    void syncReaderBookReference(Long bookId, Long sourceFileId);
+
     /** 删除单个业务对象下的引用记录。 */
     void removeByOwner(String moduleCode, String bizType, Long bizId);
 

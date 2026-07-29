@@ -6,6 +6,7 @@ import com.chen404.domain.entity.Article;
 import com.chen404.domain.entity.Comment;
 import com.chen404.domain.entity.FileReference;
 import com.chen404.domain.entity.MusicTrack;
+import com.chen404.domain.entity.ReaderBook;
 import com.chen404.domain.entity.SiteConfig;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.entity.TravelMemoryEntry;
@@ -16,6 +17,7 @@ import com.chen404.mapper.ArticleMapper;
 import com.chen404.mapper.CommentMapper;
 import com.chen404.mapper.FileReferenceMapper;
 import com.chen404.mapper.MusicTrackMapper;
+import com.chen404.mapper.ReaderBookMapper;
 import com.chen404.mapper.SiteConfigMapper;
 import com.chen404.mapper.TravelMemoryEntryMapper;
 import com.chen404.mapper.TravelMemoryLocationMapper;
@@ -62,6 +64,7 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
     private final TravelMemoryEntryMapper travelMemoryEntryMapper;
     private final UserTrustRequestMapper userTrustRequestMapper;
     private final MusicTrackMapper musicTrackMapper;
+    private final ReaderBookMapper readerBookMapper;
     private final ObjectMapper objectMapper;
 
     public FileReferenceServiceImpl(
@@ -74,6 +77,7 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
             TravelMemoryEntryMapper travelMemoryEntryMapper,
             UserTrustRequestMapper userTrustRequestMapper,
             MusicTrackMapper musicTrackMapper,
+            ReaderBookMapper readerBookMapper,
             ObjectMapper objectMapper) {
         this.sysFileService = sysFileService;
         this.articleMapper = articleMapper;
@@ -84,6 +88,7 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
         this.travelMemoryEntryMapper = travelMemoryEntryMapper;
         this.userTrustRequestMapper = userTrustRequestMapper;
         this.musicTrackMapper = musicTrackMapper;
+        this.readerBookMapper = readerBookMapper;
         this.objectMapper = objectMapper;
     }
 
@@ -263,6 +268,26 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public void syncReaderBookReference(Long bookId, Long sourceFileId) {
+        if (bookId == null) {
+            return;
+        }
+        replaceReferences(
+                FileReference.ModuleCode.READER_BOOK,
+                FileReference.BizType.READER_BOOK_SOURCE,
+                bookId,
+                resolveFileIdReferences(
+                        sourceFileId == null ? List.of() : List.of(sourceFileId),
+                        FileReference.FieldKey.SOURCE_FILE,
+                        FileReference.SourceType.DIRECT
+                )
+        );
+        log.debug("[FILE_REFERENCE_SYNC] module=READER_BOOK bizId={} hasSource={}",
+                bookId, sourceFileId != null);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public void removeByOwner(String moduleCode, String bizType, Long bizId) {
         if (bizId == null || !StringUtils.hasText(moduleCode) || !StringUtils.hasText(bizType)) {
             return;
@@ -386,6 +411,15 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
             musicTrackCount++;
         }
 
+        int readerBookCount = 0;
+        for (ReaderBook book : readerBookMapper.selectList(null)) {
+            if (book == null || book.getId() == null) {
+                continue;
+            }
+            syncReaderBookReference(book.getId(), book.getSourceFileId());
+            readerBookCount++;
+        }
+
         Map<String, Integer> summary = new LinkedHashMap<>();
         summary.put("articles", articleCount);
         summary.put("comments", commentCount);
@@ -393,6 +427,7 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
         summary.put("travelLocations", travelLocationCount);
         summary.put("trustRequests", trustRequestCount);
         summary.put("musicTracks", musicTrackCount);
+        summary.put("readerBooks", readerBookCount);
         summary.put("references", (int) count());
         log.info("[FILE_REFERENCE_REBUILD] done summary={}", summary);
         return summary;

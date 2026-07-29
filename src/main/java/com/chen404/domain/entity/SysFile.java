@@ -80,6 +80,7 @@ public class SysFile implements Serializable {
         String TRAVEL_MEMORY_IMAGE = "TRAVEL_MEMORY_IMAGE";
         String MUSIC_AUDIO = "MUSIC_AUDIO";
         String MUSIC_COVER = "MUSIC_COVER";
+        String NOVEL_SOURCE = "NOVEL_SOURCE";
         String OTHER = "OTHER";
     }
 }
