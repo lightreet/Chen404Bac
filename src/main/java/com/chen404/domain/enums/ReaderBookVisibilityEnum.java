@@ -10,6 +10,7 @@ import lombok.Getter;
 public enum ReaderBookVisibilityEnum {
 
     PUBLIC("public"),
+    FRIEND("friend"),
     PRIVATE("private");
 
     private final String code;
@@ -23,13 +24,27 @@ public enum ReaderBookVisibilityEnum {
      */
     public static String normalize(String value) {
         if (value == null || value.isBlank()) {
-            return PRIVATE.code;
+            return PUBLIC.code;
         }
         for (ReaderBookVisibilityEnum item : values()) {
             if (item.code.equalsIgnoreCase(value.strip())) {
                 return item.code;
             }
         }
-        throw new BadRequestException("书籍可见范围仅支持 public 或 private");
+        throw new BadRequestException("书籍可见范围仅支持 public、friend 或 private");
+    }
+
+    /**
+     * 从持久化值读取权限；遇到历史脏值时按私密处理，避免意外暴露书籍。
+     */
+    public static ReaderBookVisibilityEnum fromCode(String value) {
+        if (value != null) {
+            for (ReaderBookVisibilityEnum item : values()) {
+                if (item.code.equalsIgnoreCase(value.strip())) {
+                    return item;
+                }
+            }
+        }
+        return PRIVATE;
     }
 }

@@ -18,6 +18,7 @@ import com.chen404.domain.entity.ReaderProgress;
 import com.chen404.domain.entity.ReaderTocItem;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.enums.ReaderBookVisibilityEnum;
+import com.chen404.domain.enums.UserCapabilityEnum;
 import com.chen404.exception.BadRequestException;
 import com.chen404.exception.ForbiddenException;
 import com.chen404.exception.ResourceNotFoundException;
@@ -29,6 +30,7 @@ import com.chen404.mapper.ReaderProgressMapper;
 import com.chen404.mapper.ReaderTocItemMapper;
 import com.chen404.service.FileClaim;
 import com.chen404.service.FileReferenceService;
+import com.chen404.service.AccessService;
 import com.chen404.service.ProtectedFileAccessService;
 import com.chen404.service.ReaderLibraryService;
 import com.chen404.service.SysFileService;
@@ -58,7 +60,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * 公开书架实现。
  *
  * <p>原始文件先完成解析校验，再进入受保护文件存储；正文、目录、插图与进度在同一事务内写入。
- * 书籍可公开或仅自己可见，阅读进度以 MySQL 为跨设备真源，前端本地副本仅用于离线和页面关闭前兜底。</p>
+ * 书籍沿用公开、知友、私密三级权限，阅读进度以 MySQL 为跨设备真源，前端本地副本仅用于离线和页面关闭前兜底。</p>
  */
 @Slf4j
 @Service
@@ -80,6 +82,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
     private final ReaderBookParser parser;
     private final SysFileService sysFileService;
     private final FileReferenceService fileReferenceService;
+    private final AccessService accessService;
     private final ProtectedFileAccessService protectedFileAccessService;
 
     public ReaderLibraryServiceImpl(
@@ -92,6 +95,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
             ReaderBookParser parser,
             SysFileService sysFileService,
             FileReferenceService fileReferenceService,
+            AccessService accessService,
             ProtectedFileAccessService protectedFileAccessService) {
         this.bookMapper = bookMapper;
         this.chapterMapper = chapterMapper;
@@ -102,6 +106,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
         this.parser = parser;
         this.sysFileService = sysFileService;
         this.fileReferenceService = fileReferenceService;
+        this.accessService = accessService;
         this.protectedFileAccessService = protectedFileAccessService;
     }
 
@@ -231,6 +236,12 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
     public List<ReaderBookVO> listBooks(Long userId) {
         LambdaQueryWrapper<ReaderBook> bookQuery = new LambdaQueryWrapper<ReaderBook>()
                 .eq(ReaderBook::getVisibility, ReaderBookVisibilityEnum.PUBLIC.getCode());
+        if (canViewFriendBooks(userId)) {
+            bookQuery.or(wrapper -> wrapper.eq(
+                    ReaderBook::getVisibility,
+                    ReaderBookVisibilityEnum.FRIEND.getCode()
+            ));
+        }
         if (userId != null) {
             bookQuery.or(wrapper -> wrapper.eq(ReaderBook::getOwnerUserId, userId));
         }
@@ -659,11 +670,29 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
         if (book == null) {
             throw new ResourceNotFoundException("小说不存在");
         }
-        if (Objects.equals(book.getOwnerUserId(), userId)
-                || ReaderBookVisibilityEnum.PUBLIC.getCode().equals(book.getVisibility())) {
+        if (canReadBook(book, userId)) {
             return book;
         }
-        throw new ForbiddenException("这本小说未公开");
+        throw new ForbiddenException("这本小说当前无权阅读");
+    }
+
+    /**
+     * 书架沿用文章的公开、知友、私密三级权限语义，避免阅读正文和列表查询出现权限分叉。
+     */
+    private boolean canReadBook(ReaderBook book, Long userId) {
+        if (Objects.equals(book.getOwnerUserId(), userId)) {
+            return true;
+        }
+        ReaderBookVisibilityEnum visibility = ReaderBookVisibilityEnum.fromCode(book.getVisibility());
+        return switch (visibility) {
+            case PUBLIC -> true;
+            case FRIEND -> canViewFriendBooks(userId);
+            case PRIVATE -> false;
+        };
+    }
+
+    private boolean canViewFriendBooks(Long userId) {
+        return accessService.hasCapability(userId, UserCapabilityEnum.FRIEND_CONTENT_VIEW.getCode());
     }
 
     private ReaderChapter requireChapter(Long bookId, Long chapterId) {

@@ -8,6 +8,8 @@ import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.entity.TravelMemoryLocation;
 import com.chen404.domain.entity.User;
 import com.chen404.domain.entity.UserTrustRequest;
+import com.chen404.domain.enums.ReaderBookVisibilityEnum;
+import com.chen404.domain.enums.UserCapabilityEnum;
 import com.chen404.exception.ForbiddenException;
 import com.chen404.exception.ResourceNotFoundException;
 import com.chen404.mapper.ArticleMapper;
@@ -166,8 +168,13 @@ public class ProtectedFileAccessService {
 
     private boolean canReadReaderBook(Long bookId, Long viewerId) {
         ReaderBook book = bookId == null ? null : readerBookMapper.selectById(bookId);
-        return book != null && ("public".equals(book.getVisibility())
-                || Objects.equals(book.getOwnerUserId(), viewerId));
+        if (book == null || Objects.equals(book.getOwnerUserId(), viewerId)) {
+            return book != null;
+        }
+        ReaderBookVisibilityEnum visibility = ReaderBookVisibilityEnum.fromCode(book.getVisibility());
+        return visibility == ReaderBookVisibilityEnum.PUBLIC
+                || (visibility == ReaderBookVisibilityEnum.FRIEND
+                && accessService.hasCapability(viewerId, UserCapabilityEnum.FRIEND_CONTENT_VIEW.getCode()));
     }
 
     private boolean canReadArticle(Long articleId, Long viewerId) {

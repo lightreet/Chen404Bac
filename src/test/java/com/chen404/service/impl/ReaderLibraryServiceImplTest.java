@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.chen404.domain.dto.ReaderBookVO;
 import com.chen404.domain.entity.ReaderBook;
 import com.chen404.domain.enums.ReaderBookVisibilityEnum;
+import com.chen404.domain.enums.UserCapabilityEnum;
 import com.chen404.exception.ForbiddenException;
 import com.chen404.mapper.ReaderBookAssetMapper;
 import com.chen404.mapper.ReaderBookMapper;
@@ -15,6 +16,7 @@ import com.chen404.mapper.ReaderProgressMapper;
 import com.chen404.mapper.ReaderTocItemMapper;
 import com.chen404.service.FileReferenceService;
 import com.chen404.service.ProtectedFileAccessService;
+import com.chen404.service.AccessService;
 import com.chen404.service.SysFileService;
 import com.chen404.service.support.reader.ReaderBookParser;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
@@ -75,6 +77,20 @@ class ReaderLibraryServiceImplTest {
     }
 
     @Test
+    void shouldAllowFriendToOpenFriendVisibleBook() {
+        ReaderBookMapper bookMapper = mock(ReaderBookMapper.class);
+        AccessService accessService = mock(AccessService.class);
+        ReaderBook friendBook = book(9L, 12L, ReaderBookVisibilityEnum.FRIEND.getCode());
+        when(bookMapper.selectById(9L)).thenReturn(friendBook);
+        when(accessService.hasCapability(18L, UserCapabilityEnum.FRIEND_CONTENT_VIEW.getCode())).thenReturn(true);
+
+        ReaderBookVO result = service(bookMapper, mock(ReaderBookParser.class), accessService).getBook(9L, 18L);
+
+        assertTrue(result.getId().equals(friendBook.getId()));
+        assertFalse(result.getOwnedByCurrentUser());
+    }
+
+    @Test
     void shouldReuseExistingBookBeforeParsingDuplicateImport() throws Exception {
         ReaderBookMapper bookMapper = mock(ReaderBookMapper.class);
         ReaderBookParser parser = mock(ReaderBookParser.class);
@@ -98,6 +114,13 @@ class ReaderLibraryServiceImplTest {
     }
 
     private ReaderLibraryServiceImpl service(ReaderBookMapper bookMapper, ReaderBookParser parser) {
+        return service(bookMapper, parser, mock(AccessService.class));
+    }
+
+    private ReaderLibraryServiceImpl service(
+            ReaderBookMapper bookMapper,
+            ReaderBookParser parser,
+            AccessService accessService) {
         return new ReaderLibraryServiceImpl(
                 bookMapper,
                 mock(ReaderChapterMapper.class),
@@ -108,6 +131,7 @@ class ReaderLibraryServiceImplTest {
                 parser,
                 mock(SysFileService.class),
                 mock(FileReferenceService.class),
+                accessService,
                 mock(ProtectedFileAccessService.class));
     }
 
