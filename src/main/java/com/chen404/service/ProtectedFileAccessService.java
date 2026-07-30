@@ -3,14 +3,18 @@ package com.chen404.service;
 import com.chen404.config.MinioConfig;
 import com.chen404.domain.entity.Article;
 import com.chen404.domain.entity.MusicTrack;
+import com.chen404.domain.entity.ReaderBook;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.entity.TravelMemoryLocation;
 import com.chen404.domain.entity.User;
 import com.chen404.domain.entity.UserTrustRequest;
+import com.chen404.domain.enums.ReaderBookVisibilityEnum;
+import com.chen404.domain.enums.UserCapabilityEnum;
 import com.chen404.exception.ForbiddenException;
 import com.chen404.exception.ResourceNotFoundException;
 import com.chen404.mapper.ArticleMapper;
 import com.chen404.mapper.MusicTrackMapper;
+import com.chen404.mapper.ReaderBookMapper;
 import com.chen404.mapper.SysFileMapper;
 import com.chen404.mapper.TravelMemoryLocationMapper;
 import com.chen404.mapper.UserTrustRequestMapper;
@@ -36,6 +40,7 @@ public class ProtectedFileAccessService {
     private final ArticleMapper articleMapper;
     private final TravelMemoryLocationMapper travelMemoryLocationMapper;
     private final MusicTrackMapper musicTrackMapper;
+    private final ReaderBookMapper readerBookMapper;
     private final UserTrustRequestMapper userTrustRequestMapper;
     private final AccessService accessService;
     private final FileStorageService fileStorageService;
@@ -47,6 +52,7 @@ public class ProtectedFileAccessService {
             ArticleMapper articleMapper,
             TravelMemoryLocationMapper travelMemoryLocationMapper,
             MusicTrackMapper musicTrackMapper,
+            ReaderBookMapper readerBookMapper,
             UserTrustRequestMapper userTrustRequestMapper,
             AccessService accessService,
             FileStorageService fileStorageService,
@@ -56,6 +62,7 @@ public class ProtectedFileAccessService {
         this.articleMapper = articleMapper;
         this.travelMemoryLocationMapper = travelMemoryLocationMapper;
         this.musicTrackMapper = musicTrackMapper;
+        this.readerBookMapper = readerBookMapper;
         this.userTrustRequestMapper = userTrustRequestMapper;
         this.accessService = accessService;
         this.fileStorageService = fileStorageService;
@@ -151,11 +158,23 @@ public class ProtectedFileAccessService {
                     canReadTravelMemory(file.getRefId(), viewerId);
             case SysFile.RefType.MUSIC_AUDIO, SysFile.RefType.MUSIC_COVER ->
                     canReadMusic(file.getRefId(), viewerId);
+            case SysFile.RefType.NOVEL_COVER -> canReadReaderBook(file.getRefId(), viewerId);
             case SysFile.RefType.TRUST_REQUEST_ATTACHMENT ->
                     canReadTrustRequest(file.getRefId(), viewerId);
             case SysFile.RefType.AVATAR, SysFile.RefType.SITE_ASSET, SysFile.RefType.SITE_HERO -> true;
             default -> Objects.equals(file.getUserId(), viewerId) || isActiveAdmin(viewerId);
         };
+    }
+
+    private boolean canReadReaderBook(Long bookId, Long viewerId) {
+        ReaderBook book = bookId == null ? null : readerBookMapper.selectById(bookId);
+        if (book == null || Objects.equals(book.getOwnerUserId(), viewerId)) {
+            return book != null;
+        }
+        ReaderBookVisibilityEnum visibility = ReaderBookVisibilityEnum.fromCode(book.getVisibility());
+        return visibility == ReaderBookVisibilityEnum.PUBLIC
+                || (visibility == ReaderBookVisibilityEnum.FRIEND
+                && accessService.hasCapability(viewerId, UserCapabilityEnum.FRIEND_CONTENT_VIEW.getCode()));
     }
 
     private boolean canReadArticle(Long articleId, Long viewerId) {

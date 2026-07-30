@@ -39,7 +39,11 @@ class FlywayMigrationLayoutTest {
             "V2026061202__normalize_legacy_icon_names.sql",
             "V2026062201__add_travel_memory_visibility.sql",
             "V2026072701__multi_user_creator_platform.sql",
-            "V2026072702__harden_multi_user_security.sql"
+            "V2026072702__harden_multi_user_security.sql",
+            "V2026072901__create_reader_library.sql",
+            "V2026073001__add_reader_book_visibility.sql",
+            "V2026073002__add_reader_book_custom_cover.sql",
+            "V2026073003__default_reader_book_visibility_public.sql"
     );
 
     @Test

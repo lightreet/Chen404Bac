@@ -7,5 +7,6 @@ public enum AdminNotificationResourceTypeEnum {
     ARTICLE,
     TRAVEL_MEMORY,
     MUSIC_TRACK,
+    READER_BOOK,
     TRUST_REQUEST
 }

@@ -2,10 +2,13 @@ package com.chen404.service;
 
 import com.chen404.config.MinioConfig;
 import com.chen404.domain.entity.Article;
+import com.chen404.domain.entity.ReaderBook;
 import com.chen404.domain.entity.SysFile;
+import com.chen404.domain.enums.UserCapabilityEnum;
 import com.chen404.exception.ForbiddenException;
 import com.chen404.mapper.ArticleMapper;
 import com.chen404.mapper.MusicTrackMapper;
+import com.chen404.mapper.ReaderBookMapper;
 import com.chen404.mapper.SysFileMapper;
 import com.chen404.mapper.TravelMemoryLocationMapper;
 import com.chen404.mapper.UserTrustRequestMapper;
@@ -23,6 +26,7 @@ class ProtectedFileAccessServiceTest {
 
     private SysFileMapper sysFileMapper;
     private ArticleMapper articleMapper;
+    private ReaderBookMapper readerBookMapper;
     private AccessService accessService;
     private FileStorageService fileStorageService;
     private ManagedFileUrlCodec codec;
@@ -32,6 +36,7 @@ class ProtectedFileAccessServiceTest {
     void setUp() {
         sysFileMapper = mock(SysFileMapper.class);
         articleMapper = mock(ArticleMapper.class);
+        readerBookMapper = mock(ReaderBookMapper.class);
         accessService = mock(AccessService.class);
         fileStorageService = mock(FileStorageService.class);
         codec = new ManagedFileUrlCodec("test-protected-file-secret", 5);
@@ -42,6 +47,7 @@ class ProtectedFileAccessServiceTest {
                 articleMapper,
                 mock(TravelMemoryLocationMapper.class),
                 mock(MusicTrackMapper.class),
+                readerBookMapper,
                 mock(UserTrustRequestMapper.class),
                 accessService,
                 fileStorageService,
@@ -80,6 +86,47 @@ class ProtectedFileAccessServiceTest {
         assertEquals(
                 "https://storage.example.com/signed",
                 protectedFileAccessService.resolveDownloadUrl(12L, null, ticket)
+        );
+    }
+
+    @Test
+    void shouldAllowAnonymousAccessToPublicReaderBookCover() {
+        SysFile file = buildProtectedArticleFile();
+        file.setRefType(SysFile.RefType.NOVEL_COVER);
+        file.setRefId(23L);
+        ReaderBook book = new ReaderBook();
+        book.setId(23L);
+        book.setOwnerUserId(7L);
+        book.setVisibility("public");
+        when(sysFileMapper.selectById(12L)).thenReturn(file);
+        when(readerBookMapper.selectById(23L)).thenReturn(book);
+        when(fileStorageService.getPresignedGetUrl("protected", "article/a.webp", 5))
+                .thenReturn("https://storage.example.com/reader-cover");
+
+        assertEquals(
+                "https://storage.example.com/reader-cover",
+                protectedFileAccessService.resolveDownloadUrl(12L, null, null)
+        );
+    }
+
+    @Test
+    void shouldAllowFriendAccessToFriendVisibleReaderBookCover() {
+        SysFile file = buildProtectedArticleFile();
+        file.setRefType(SysFile.RefType.NOVEL_COVER);
+        file.setRefId(24L);
+        ReaderBook book = new ReaderBook();
+        book.setId(24L);
+        book.setOwnerUserId(7L);
+        book.setVisibility("friend");
+        when(sysFileMapper.selectById(12L)).thenReturn(file);
+        when(readerBookMapper.selectById(24L)).thenReturn(book);
+        when(accessService.hasCapability(18L, UserCapabilityEnum.FRIEND_CONTENT_VIEW.getCode())).thenReturn(true);
+        when(fileStorageService.getPresignedGetUrl("protected", "article/a.webp", 5))
+                .thenReturn("https://storage.example.com/friend-reader-cover");
+
+        assertEquals(
+                "https://storage.example.com/friend-reader-cover",
+                protectedFileAccessService.resolveDownloadUrl(12L, 18L, null)
         );
     }
 

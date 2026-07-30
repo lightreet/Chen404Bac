@@ -87,6 +87,35 @@ class SecurityConfigTest {
     }
 
     @Test
+    void shouldAllowPublicBookshelfWithoutToken() throws Exception {
+        mockMvc.perform(get("/reader/books"))
+                .andExpect(status().isOk())
+                .andExpect(content().string("public-books"));
+    }
+
+    @Test
+    void shouldKeepAuthenticatedViewerForPublicBookshelf() throws Exception {
+        stubValidToken("user");
+
+        mockMvc.perform(get("/reader/books")
+                        .header("Authorization", "Bearer " + VALID_TOKEN))
+                .andExpect(status().isOk())
+                .andExpect(content().string(String.valueOf(TEST_USER_ID)));
+    }
+
+    @Test
+    void shouldRejectBookshelfImportWithoutToken() throws Exception {
+        mockMvc.perform(post("/reader/books/import"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void shouldRejectBookshelfProgressWithoutToken() throws Exception {
+        mockMvc.perform(get("/reader/books/7/progress"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void shouldRejectProtectedArticleWriteWithoutToken() throws Exception {
         mockMvc.perform(post("/articles"))
                 .andExpect(status().isUnauthorized());
@@ -186,6 +215,20 @@ class SecurityConfigTest {
 
         @GetMapping("/music/player/state")
         public ResponseEntity<String> musicPlayerState(
+                @AuthenticationPrincipal AuthenticatedUser currentUser) {
+            return ResponseEntity.ok(String.valueOf(CurrentUserUtil.requireUserId(currentUser)));
+        }
+
+        @GetMapping("/reader/books")
+        public ResponseEntity<String> publicBookshelf(
+                @AuthenticationPrincipal AuthenticatedUser currentUser) {
+            return ResponseEntity.ok(currentUser == null
+                    ? "public-books"
+                    : String.valueOf(CurrentUserUtil.requireUserId(currentUser)));
+        }
+
+        @GetMapping("/reader/books/{bookId}/progress")
+        public ResponseEntity<String> bookshelfProgress(
                 @AuthenticationPrincipal AuthenticatedUser currentUser) {
             return ResponseEntity.ok(String.valueOf(CurrentUserUtil.requireUserId(currentUser)));
         }

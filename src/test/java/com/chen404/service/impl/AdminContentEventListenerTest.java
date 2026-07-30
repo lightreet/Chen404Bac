@@ -59,6 +59,40 @@ class AdminContentEventListenerTest {
     }
 
     @Test
+    void shouldDescribeImportedReaderBookInAdminNotification() {
+        AdminNotificationMapper notificationMapper = mock(AdminNotificationMapper.class);
+        UserMapper userMapper = mock(UserMapper.class);
+        SiteOwnerProperties ownerProperties = new SiteOwnerProperties();
+        ownerProperties.setSiteOwnerUserId(1L);
+        AdminNotificationProperties notificationProperties = new AdminNotificationProperties();
+        notificationProperties.setEnabled(true);
+        User actor = new User();
+        actor.setNickname("知友小陈");
+        when(userMapper.selectById(7L)).thenReturn(actor);
+
+        AdminContentEventListener listener = new AdminContentEventListener(
+                notificationMapper,
+                userMapper,
+                ownerProperties,
+                notificationProperties
+        );
+        listener.handle(new AdminContentEvent(
+                AdminNotificationEventTypeEnum.READER_BOOK_IMPORTED,
+                7L,
+                AdminNotificationResourceTypeEnum.READER_BOOK,
+                42L,
+                "夜航故事"
+        ));
+
+        ArgumentCaptor<AdminNotification> captor = ArgumentCaptor.forClass(AdminNotification.class);
+        verify(notificationMapper).insert(captor.capture());
+        AdminNotification notification = captor.getValue();
+        assertEquals("知友导入了新小说", notification.getTitle());
+        assertEquals("知友小陈 导入了小说《夜航故事》", notification.getSummary());
+        assertEquals(AdminNotificationResourceTypeEnum.READER_BOOK.name(), notification.getResourceType());
+    }
+
+    @Test
     void duplicateOrFailedNotificationWriteShouldNotEscapeToContentTransaction() {
         AdminContentEvent event = new AdminContentEvent(
                 AdminNotificationEventTypeEnum.MUSIC_TRACK_PUBLISHED,

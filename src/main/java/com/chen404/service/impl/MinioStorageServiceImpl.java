@@ -80,6 +80,21 @@ public class MinioStorageServiceImpl implements FileStorageService {
     }
 
     @Override
+    public InputStream openFile(String bucketName, String objectName) {
+        try {
+            return minioClient.getObject(
+                    GetObjectArgs.builder()
+                            .bucket(bucketName)
+                            .object(objectName)
+                            .build()
+            );
+        } catch (Exception exception) {
+            log.error("读取MinIO文件失败: bucket={}, object={}", bucketName, objectName, exception);
+            throw new RuntimeException("读取文件失败");
+        }
+    }
+
+    @Override
     public boolean deleteFile(String objectName) {
         return deleteFile(minioConfig.getBucketName(), objectName);
     }

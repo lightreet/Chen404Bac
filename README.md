@@ -1,6 +1,6 @@
 # Chen404 博客系统 - 后端
 
-Chen404Bac 是 Chen404 的 Spring Boot 后端服务，负责 REST API、认证鉴权、内容数据、站点配置、文件与对象存储、旅行纪念地图、Sakura Radio、AI 场景编排以及后台任务。
+Chen404Bac 是 Chen404 的 Spring Boot 后端服务，负责 REST API、认证鉴权、内容数据、站点配置、文件与对象存储、私人小说书架、旅行纪念地图、Sakura Radio、AI 场景编排以及后台任务。
 
 ## 技术栈
 
@@ -78,6 +78,7 @@ src/main/resources/db/migration/
 - 统一文件引用
 - AI 后台配置
 - Sakura Radio 歌曲与歌单
+- 私人小说书架、章节目录与阅读进度
 
 当前 `application.yml` 已启用：
 
@@ -134,6 +135,7 @@ src/main/resources/db/migration/
 | `AdminUserController` | `/admin/users/**` | 用户信任等级维护 |
 | `TravelMemoryController` | `/travel-memories/**`, `/admin/travel-memories/**` | 旅行纪念地图查询与管理 |
 | `MusicRadioController` | `/music/**`, `/admin/music/**` | Sakura Radio 公开播放、歌曲/歌单维护、AI 曲目信息补全 |
+| `ReaderLibraryController` | `/reader/**` | 私人小说导入、书架、目录、章节、全文搜索、资源、进度与阅读偏好 |
 | `AdminAiConfigController` | `/admin/ai/config/**` | AI 后台配置读取、保存、连接测试 |
 
 ## 当前能力
@@ -149,6 +151,8 @@ src/main/resources/db/migration/
 - 好友申请、后台审批、邮件审批入口
 - 旅行纪念地图、地点/片段/照片结构、图片 EXIF 解析、权限校验、文件转永久与引用同步
 - Sakura Radio 公开播放、歌曲与歌单维护、默认播放集、登录用户 Redis 临时播放现场恢复
+- 私人小说书架，支持 TXT、EPUB、HTML、Markdown、FB2 导入、多级目录和书内插图
+- 阅读进度按章节、段落与字符偏移持久化，阅读偏好支持跨设备恢复
 - AI 文章辅助、AI 音乐曲目信息补全
 - Lyra 同步/流式聊天、会话恢复、站内知识检索、相关推荐
 - AI 后台配置、API Key 脱敏、连接测试
@@ -179,6 +183,7 @@ src/main/resources/db/migration/
 - 业务保存时转换为永久文件
 - `file_reference` 维护统一引用关系
 - 后台文件页按引用状态和归属类型展示
+- 小说原始文件以 `NOVEL_SOURCE` 归属保护；书内资源存入小说资源表，仅允许所属用户鉴权读取
 
 ## 后台任务
 
