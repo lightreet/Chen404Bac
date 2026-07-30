@@ -3,6 +3,7 @@ package com.chen404.controller;
 import com.chen404.domain.Result;
 import com.chen404.domain.dto.ReaderBookUpdateCommand;
 import com.chen404.domain.dto.ReaderBookVO;
+import com.chen404.domain.dto.ReaderBookPreviewVO;
 import com.chen404.domain.dto.ReaderChapterVO;
 import com.chen404.domain.dto.ReaderPreferenceCommand;
 import com.chen404.domain.dto.ReaderPreferenceVO;
@@ -66,6 +67,16 @@ public class ReaderLibraryController {
         Long userId = CurrentUserUtil.requireUserId(currentUser);
         return Result.success("小说已导入书架",
                 readerLibraryService.importBook(file, title, author, description, encoding, visibility, coverFileId, userId));
+    }
+
+    @Operation(summary = "预解析小说资料", description = "读取书名、作者、简介、语言和内嵌封面，供导入表单自动回填")
+    @PostMapping(value = "/reader/books/preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Result<ReaderBookPreviewVO> previewBook(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(required = false) String encoding,
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        return Result.success(readerLibraryService.previewBook(
+                file, encoding, CurrentUserUtil.requireUserId(currentUser)));
     }
 
     @Operation(summary = "获取公开书架", description = "匿名访客仅看到公开书籍；登录用户还会看到自己的私密书籍。")

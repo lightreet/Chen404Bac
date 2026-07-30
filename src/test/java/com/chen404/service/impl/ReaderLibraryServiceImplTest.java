@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.chen404.domain.dto.ReaderBookVO;
+import com.chen404.domain.dto.ReaderBookPreviewVO;
 import com.chen404.domain.entity.ReaderBook;
 import com.chen404.domain.enums.ReaderBookVisibilityEnum;
 import com.chen404.domain.enums.UserCapabilityEnum;
@@ -19,6 +20,7 @@ import com.chen404.service.ProtectedFileAccessService;
 import com.chen404.service.AccessService;
 import com.chen404.service.SysFileService;
 import com.chen404.service.support.reader.ReaderBookParser;
+import com.chen404.service.support.reader.ParsedReaderBook;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -28,6 +30,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -107,6 +110,34 @@ class ReaderLibraryServiceImplTest {
 
         assertTrue(result.getId().equals(existing.getId()));
         verify(parser, never()).parse(any(), any(), any());
+    }
+
+    @Test
+    void shouldPreviewParsedMetadataAndEmbeddedCover() throws Exception {
+        ReaderBookParser parser = mock(ReaderBookParser.class);
+        MultipartFile file = mock(MultipartFile.class);
+        ParsedReaderBook parsed = new ParsedReaderBook();
+        parsed.setTitle("解析书名");
+        parsed.setAuthor("解析作者");
+        parsed.setDescription("解析简介");
+        parsed.setLanguage("zh");
+        parsed.setFormat("epub");
+        parsed.setEncoding("UTF-8");
+        parsed.getAssets().add(new ParsedReaderBook.Asset(
+                "cover.jpg", "cover.jpg", "image/jpeg", new byte[]{1, 2, 3}, true, "asset://cover"));
+        when(file.isEmpty()).thenReturn(false);
+        when(file.getOriginalFilename()).thenReturn("测试.epub");
+        when(file.getBytes()).thenReturn(new byte[]{9, 8, 7});
+        when(parser.sha256(any())).thenReturn("preview-checksum");
+        when(parser.parse(any(), any(), any())).thenReturn(parsed);
+
+        ReaderBookPreviewVO preview = service(mock(ReaderBookMapper.class), parser)
+                .previewBook(file, null, 12L);
+
+        assertEquals("解析书名", preview.getTitle());
+        assertEquals("解析作者", preview.getAuthor());
+        assertEquals("解析简介", preview.getDescription());
+        assertTrue(preview.getCoverDataUrl().startsWith("data:image/jpeg;base64,"));
     }
 
     private ReaderLibraryServiceImpl service(ReaderBookMapper bookMapper) {

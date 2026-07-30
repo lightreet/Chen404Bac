@@ -2,6 +2,7 @@ package com.chen404.service;
 
 import com.chen404.domain.dto.ReaderBookUpdateCommand;
 import com.chen404.domain.dto.ReaderBookVO;
+import com.chen404.domain.dto.ReaderBookPreviewVO;
 import com.chen404.domain.dto.ReaderChapterVO;
 import com.chen404.domain.dto.ReaderPreferenceCommand;
 import com.chen404.domain.dto.ReaderPreferenceVO;
@@ -17,6 +18,11 @@ import java.util.List;
  * 私人书架、阅读正文、阅读进度与阅读偏好服务。
  */
 public interface ReaderLibraryService {
+
+    /**
+     * 预解析小说元数据，供导入表单自动回填。
+     */
+    ReaderBookPreviewVO previewBook(MultipartFile file, String encoding, Long userId);
 
     ReaderBookVO importBook(
             MultipartFile file,

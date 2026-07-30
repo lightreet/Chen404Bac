@@ -3,6 +3,7 @@ package com.chen404.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.chen404.domain.dto.ReaderBookUpdateCommand;
 import com.chen404.domain.dto.ReaderBookVO;
+import com.chen404.domain.dto.ReaderBookPreviewVO;
 import com.chen404.domain.dto.ReaderChapterVO;
 import com.chen404.domain.dto.ReaderPreferenceCommand;
 import com.chen404.domain.dto.ReaderPreferenceVO;
@@ -47,6 +48,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -71,7 +73,10 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
     private static final int DEFAULT_CONTENT_WIDTH = 720;
     private static final int DEFAULT_PARAGRAPH_SPACING = 16;
     private static final int SEARCH_LIMIT = 50;
+    private static final long PREVIEW_CACHE_TTL_MILLIS = 5 * 60 * 1000L;
+    private static final int MAX_PREVIEW_COVER_BYTES = 3 * 1024 * 1024;
     private static final ConcurrentMap<String, ReentrantLock> IMPORT_LOCKS = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<String, PreviewCacheEntry> PREVIEW_CACHE = new ConcurrentHashMap<>();
 
     private final ReaderBookMapper bookMapper;
     private final ReaderChapterMapper chapterMapper;
@@ -111,6 +116,19 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
     }
 
     @Override
+    public ReaderBookPreviewVO previewBook(MultipartFile file, String encoding, Long userId) {
+        requireUser(userId);
+        UploadedReaderSource source = readSource(file);
+        ParsedReaderBook parsed = parser.parse(source.originalName(), source.bytes(), encoding);
+        String cacheKey = previewCacheKey(userId, source.checksum(), encoding);
+        evictExpiredPreviewCache();
+        PREVIEW_CACHE.put(cacheKey, new PreviewCacheEntry(parsed, System.currentTimeMillis()));
+        log.info("[READER_PREVIEW] userId={} format={} chapters={} file={}", userId,
+                parsed.getFormat(), parsed.getChapters().size(), source.originalName());
+        return toPreviewVO(parsed);
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public ReaderBookVO importBook(
             MultipartFile file,
@@ -122,35 +140,79 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
             Long coverFileId,
             Long userId) {
         requireUser(userId);
+        UploadedReaderSource source = readSource(file);
+        String importLockKey = userId + ":" + source.checksum();
+        ReentrantLock importLock = IMPORT_LOCKS.computeIfAbsent(importLockKey, ignored -> new ReentrantLock());
+        importLock.lock();
+        try {
+            ReaderBook existingBook = findBookByChecksum(userId, source.checksum());
+            if (existingBook != null) {
+                log.info("[READER_IMPORT_REUSED] userId={} bookId={} file={}", userId, existingBook.getId(), source.originalName());
+                return toBookVO(existingBook, null, null, userId);
+            }
+            ParsedReaderBook previewParsed = takePreviewParse(userId, source.checksum(), encoding);
+            return importNewBook(file, title, author, description, encoding, visibility, coverFileId,
+                    userId, source.originalName(), source.bytes(), source.checksum(), previewParsed);
+        } finally {
+            importLock.unlock();
+            IMPORT_LOCKS.remove(importLockKey, importLock);
+        }
+    }
+
+    /**
+     * 统一读取和校验导入源，确保预解析与正式导入使用同一份校验值。
+     */
+    private UploadedReaderSource readSource(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new BadRequestException("请选择要导入的小说文件");
         }
         String originalName = StringUtils.hasText(file.getOriginalFilename())
                 ? file.getOriginalFilename().strip()
                 : "未命名小说.txt";
-        byte[] bytes;
         try {
-            bytes = file.getBytes();
+            byte[] bytes = file.getBytes();
+            return new UploadedReaderSource(originalName, bytes, parser.sha256(bytes));
         } catch (IOException exception) {
             throw new BadRequestException("无法读取上传文件");
         }
+    }
 
-        String checksum = parser.sha256(bytes);
-        String importLockKey = userId + ":" + checksum;
-        ReentrantLock importLock = IMPORT_LOCKS.computeIfAbsent(importLockKey, ignored -> new ReentrantLock());
-        importLock.lock();
-        try {
-            ReaderBook existingBook = findBookByChecksum(userId, checksum);
-            if (existingBook != null) {
-                log.info("[READER_IMPORT_REUSED] userId={} bookId={} file={}", userId, existingBook.getId(), originalName);
-                return toBookVO(existingBook, null, null, userId);
-            }
-            return importNewBook(file, title, author, description, encoding, visibility, coverFileId,
-                    userId, originalName, bytes, checksum);
-        } finally {
-            importLock.unlock();
-            IMPORT_LOCKS.remove(importLockKey, importLock);
+    private ParsedReaderBook takePreviewParse(Long userId, String checksum, String encoding) {
+        PreviewCacheEntry entry = PREVIEW_CACHE.remove(previewCacheKey(userId, checksum, encoding));
+        if (entry == null || entry.createdAtMillis() + PREVIEW_CACHE_TTL_MILLIS < System.currentTimeMillis()) {
+            return null;
         }
+        return entry.parsedBook();
+    }
+
+    private String previewCacheKey(Long userId, String checksum, String encoding) {
+        return userId + ":" + checksum + ":" + (StringUtils.hasText(encoding) ? encoding.strip() : "auto");
+    }
+
+    private void evictExpiredPreviewCache() {
+        long expireBefore = System.currentTimeMillis() - PREVIEW_CACHE_TTL_MILLIS;
+        PREVIEW_CACHE.entrySet().removeIf(entry -> entry.getValue().createdAtMillis() < expireBefore);
+    }
+
+    private ReaderBookPreviewVO toPreviewVO(ParsedReaderBook parsed) {
+        ReaderBookPreviewVO preview = new ReaderBookPreviewVO();
+        preview.setTitle(limit(parsed.getTitle(), 255));
+        preview.setAuthor(limit(parsed.getAuthor(), 255));
+        preview.setDescription(limit(parsed.getDescription(), 4_000));
+        preview.setLanguage(limit(parsed.getLanguage(), 40));
+        preview.setSourceFormat(parsed.getFormat());
+        preview.setSourceEncoding(parsed.getEncoding());
+        parsed.getAssets().stream()
+                .filter(ParsedReaderBook.Asset::isCover)
+                .filter(asset -> asset.getData() != null && asset.getData().length <= MAX_PREVIEW_COVER_BYTES)
+                .findFirst()
+                .ifPresent(asset -> {
+                    String mediaType = StringUtils.hasText(asset.getMediaType()) ? asset.getMediaType() : "image/jpeg";
+                    preview.setCoverDataUrl("data:" + mediaType + ";base64,"
+                            + Base64.getEncoder().encodeToString(asset.getData()));
+                    preview.setCoverFileName(asset.getFileName());
+                });
+        return preview;
     }
 
     /**
@@ -167,9 +229,12 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
             Long userId,
             String originalName,
             byte[] bytes,
-            String checksum) {
+            String checksum,
+            ParsedReaderBook previewParsed) {
         long importStartedAt = System.nanoTime();
-        ParsedReaderBook parsed = parser.parse(originalName, bytes, encoding);
+        ParsedReaderBook parsed = previewParsed == null
+                ? parser.parse(originalName, bytes, encoding)
+                : previewParsed;
         long parsedAt = System.nanoTime();
         if (StringUtils.hasText(title)) {
             parsed.setTitle(title.strip());
@@ -820,5 +885,11 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
     private String limit(String value, int max) {
         if (value == null || value.length() <= max) return value;
         return value.substring(0, max);
+    }
+
+    private record UploadedReaderSource(String originalName, byte[] bytes, String checksum) {
+    }
+
+    private record PreviewCacheEntry(ParsedReaderBook parsedBook, long createdAtMillis) {
     }
 }
