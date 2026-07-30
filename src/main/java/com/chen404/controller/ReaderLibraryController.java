@@ -38,7 +38,9 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 私人书架与沉浸式阅读控制器。全部接口均需要登录，且只允许访问本人书籍。
+ * 公开书架与沉浸式阅读控制器。
+ *
+ * <p>公开书籍可匿名浏览和阅读；导入、编辑、删除、进度与偏好仍只对登录用户开放。</p>
  */
 @Tag(name = "小说阅读", description = "小说导入、目录、正文、阅读进度与阅读偏好")
 @RestController
@@ -56,18 +58,21 @@ public class ReaderLibraryController {
             @RequestParam("file") MultipartFile file,
             @RequestParam(required = false) String title,
             @RequestParam(required = false) String author,
+            @RequestParam(required = false) String description,
             @RequestParam(required = false) String encoding,
+            @RequestParam(required = false) String visibility,
+            @RequestParam(required = false) Long coverFileId,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
         Long userId = CurrentUserUtil.requireUserId(currentUser);
         return Result.success("小说已导入书架",
-                readerLibraryService.importBook(file, title, author, encoding, userId));
+                readerLibraryService.importBook(file, title, author, description, encoding, visibility, coverFileId, userId));
     }
 
-    @Operation(summary = "获取我的书架")
+    @Operation(summary = "获取公开书架", description = "匿名访客仅看到公开书籍；登录用户还会看到自己的私密书籍。")
     @GetMapping("/reader/books")
     public Result<List<ReaderBookVO>> listBooks(
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
-        return Result.success(readerLibraryService.listBooks(CurrentUserUtil.requireUserId(currentUser)));
+        return Result.success(readerLibraryService.listBooks(CurrentUserUtil.getUserId(currentUser)));
     }
 
     @Operation(summary = "获取书籍详情")
@@ -75,7 +80,7 @@ public class ReaderLibraryController {
     public Result<ReaderBookVO> getBook(
             @PathVariable Long bookId,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
-        return Result.success(readerLibraryService.getBook(bookId, CurrentUserUtil.requireUserId(currentUser)));
+        return Result.success(readerLibraryService.getBook(bookId, CurrentUserUtil.getUserId(currentUser)));
     }
 
     @Operation(summary = "修改书籍信息")
@@ -102,7 +107,7 @@ public class ReaderLibraryController {
     public Result<List<ReaderTocItemVO>> getToc(
             @PathVariable Long bookId,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
-        return Result.success(readerLibraryService.getToc(bookId, CurrentUserUtil.requireUserId(currentUser)));
+        return Result.success(readerLibraryService.getToc(bookId, CurrentUserUtil.getUserId(currentUser)));
     }
 
     @Operation(summary = "读取章节正文")
@@ -112,7 +117,7 @@ public class ReaderLibraryController {
             @PathVariable Long chapterId,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
         return Result.success(readerLibraryService.getChapter(
-                bookId, chapterId, CurrentUserUtil.requireUserId(currentUser)));
+                bookId, chapterId, CurrentUserUtil.getUserId(currentUser)));
     }
 
     @Operation(summary = "搜索当前书籍")
@@ -122,7 +127,7 @@ public class ReaderLibraryController {
             @RequestParam String keyword,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
         return Result.success(readerLibraryService.search(
-                bookId, keyword, CurrentUserUtil.requireUserId(currentUser)));
+                bookId, keyword, CurrentUserUtil.getUserId(currentUser)));
     }
 
     @Operation(summary = "获取阅读进度")
@@ -176,13 +181,15 @@ public class ReaderLibraryController {
             @PathVariable Long assetId,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
         ReaderLibraryService.ReaderAssetPayload asset = readerLibraryService.getAsset(
-                bookId, assetId, CurrentUserUtil.requireUserId(currentUser));
+                bookId, assetId, CurrentUserUtil.getUserId(currentUser));
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.parseMediaType(asset.mediaType()));
         headers.setContentDisposition(ContentDisposition.inline()
                 .filename(asset.fileName() == null ? "book-asset" : asset.fileName(), StandardCharsets.UTF_8)
                 .build());
-        headers.setCacheControl(CacheControl.maxAge(30, TimeUnit.DAYS).cachePrivate());
+        headers.setCacheControl(asset.publicVisible()
+                ? CacheControl.maxAge(30, TimeUnit.DAYS).cachePublic()
+                : CacheControl.maxAge(30, TimeUnit.DAYS).cachePrivate());
         headers.set("X-Content-Type-Options", "nosniff");
         headers.set("Content-Security-Policy",
                 "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:");

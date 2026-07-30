@@ -25,6 +25,7 @@ public class ReaderBook implements Serializable {
     private String author;
     private String description;
     private String language;
+    private String visibility;
     private String sourceFormat;
     private String sourceEncoding;
     private Long sourceFileId;
@@ -35,6 +36,7 @@ public class ReaderBook implements Serializable {
     private Integer chapterCount;
     private Long totalCharCount;
     private Long coverAssetId;
+    private Long coverFileId;
     private Integer contentVersion;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;

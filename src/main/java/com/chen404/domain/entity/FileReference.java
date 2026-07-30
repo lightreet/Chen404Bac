@@ -62,6 +62,7 @@ public class FileReference implements Serializable {
         String MUSIC_TRACK_AUDIO = "MUSIC_TRACK_AUDIO";
         String MUSIC_TRACK_COVER = "MUSIC_TRACK_COVER";
         String READER_BOOK_SOURCE = "READER_BOOK_SOURCE";
+        String READER_BOOK_COVER = "READER_BOOK_COVER";
     }
 
     public interface FieldKey {

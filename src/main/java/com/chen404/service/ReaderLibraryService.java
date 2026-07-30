@@ -22,7 +22,10 @@ public interface ReaderLibraryService {
             MultipartFile file,
             String title,
             String author,
+            String description,
             String encoding,
+            String visibility,
+            Long coverFileId,
             Long userId
     );
 
@@ -52,6 +55,6 @@ public interface ReaderLibraryService {
 
     ReaderAssetPayload getAsset(Long bookId, Long assetId, Long userId);
 
-    record ReaderAssetPayload(String fileName, String mediaType, byte[] data) {
+    record ReaderAssetPayload(String fileName, String mediaType, byte[] data, boolean publicVisible) {
     }
 }

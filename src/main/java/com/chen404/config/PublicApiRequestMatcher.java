@@ -56,6 +56,10 @@ public class PublicApiRequestMatcher implements RequestMatcher {
             return isPublicTravelMemoryRequest(path, method);
         }
 
+        if (path.equals("/reader/books") || path.startsWith("/reader/books/")) {
+            return isPublicReaderRequest(path, method);
+        }
+
         if (path.matches("/files/\\d+")) {
             return "GET".equalsIgnoreCase(method);
         }
@@ -121,6 +125,18 @@ public class PublicApiRequestMatcher implements RequestMatcher {
         }
         return !path.equals("/travel-memories/mine")
                 && !path.matches("/travel-memories/mine/[^/]+");
+    }
+
+    private boolean isPublicReaderRequest(String path, String method) {
+        if (!"GET".equalsIgnoreCase(method)) {
+            return false;
+        }
+        return path.equals("/reader/books")
+                || path.matches("/reader/books/[^/]+")
+                || path.matches("/reader/books/[^/]+/toc")
+                || path.matches("/reader/books/[^/]+/chapters/[^/]+")
+                || path.matches("/reader/books/[^/]+/search")
+                || path.matches("/reader/books/[^/]+/assets/[^/]+");
     }
 
     private boolean isSwaggerPath(String path) {

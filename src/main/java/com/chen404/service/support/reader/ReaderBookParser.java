@@ -61,6 +61,7 @@ public class ReaderBookParser {
     private static final int MAX_ZIP_ENTRIES = 10_000;
     private static final long MAX_ASSET_TOTAL_SIZE = 48L * 1024 * 1024;
     private static final int FALLBACK_CHUNK_SIZE = 20_000;
+    private static final int ENCODING_SAMPLE_SIZE = 256 * 1024;
 
     private static final Pattern CHAPTER_HEADING = Pattern.compile(
             "^(?:第[0-9０-９零〇○一二三四五六七八九十百千万两]+[章节回篇幕集](?:\\s+|[:：、.-])?.*"
@@ -355,28 +356,34 @@ public class ReaderBookParser {
     }
 
     private ParsedReaderBook.Chapter plainChapter(String title, String volume, String content) {
-        Document document = Document.createShell("");
-        Element body = document.body();
+        StringBuilder html = new StringBuilder(content.length() + 256);
+        StringBuilder text = new StringBuilder(content.length());
         int blockIndex = 0;
-        for (String paragraph : normalizeText(content).split("\\n\\s*\\n")) {
+        for (String paragraph : content.split("\\n\\s*\\n")) {
             if (!StringUtils.hasText(paragraph)) {
                 continue;
             }
-            Element p = body.appendElement("p").attr("data-reader-block", String.valueOf(blockIndex++));
+            String normalizedParagraph = paragraph.strip();
+            if (text.length() > 0) {
+                text.append("\n\n");
+            }
+            text.append(normalizedParagraph);
+            html.append("<p data-reader-block=\"").append(blockIndex++).append("\">");
             String[] lines = paragraph.strip().split("\\n");
             for (int index = 0; index < lines.length; index++) {
                 if (index > 0) {
-                    p.appendElement("br");
+                    html.append("<br>");
                 }
-                p.appendText(lines[index].stripTrailing());
+                html.append(org.jsoup.nodes.Entities.escape(lines[index].stripTrailing()));
             }
+            html.append("</p>");
         }
         return new ParsedReaderBook.Chapter(
                 safeTitle(title),
                 blankToNull(volume),
                 null,
-                body.html(),
-                body.text()
+                html.toString(),
+                text.toString()
         );
     }
 
@@ -995,10 +1002,22 @@ public class ReaderBookParser {
             candidates.add(StandardCharsets.UTF_16LE);
             candidates.add(StandardCharsets.UTF_16BE);
         }
-        return candidates.stream()
-                .map(charset -> new DecodedText(stripBom(new String(bytes, charset)), charset))
-                .min(Comparator.comparingDouble(value -> encodingPenalty(value.text())))
-                .orElse(new DecodedText(new String(bytes, StandardCharsets.UTF_8), StandardCharsets.UTF_8));
+        Charset selectedCharset = candidates.stream()
+                .min(Comparator.comparingDouble(charset -> encodingPenalty(decodeSample(bytes, charset))))
+                .orElse(StandardCharsets.UTF_8);
+        return new DecodedText(stripBom(new String(bytes, selectedCharset)), selectedCharset);
+    }
+
+    /**
+     * 编码识别只需要观察有代表性的前段文本，避免大文件为每个候选编码都构建完整字符串。
+     */
+    private String decodeSample(byte[] bytes, Charset charset) {
+        int length = Math.min(bytes.length, ENCODING_SAMPLE_SIZE);
+        if ((StandardCharsets.UTF_16LE.equals(charset) || StandardCharsets.UTF_16BE.equals(charset))
+                && (length & 1) == 1) {
+            length--;
+        }
+        return stripBom(new String(bytes, 0, length, charset));
     }
 
     private boolean looksLikeUtf16WithoutBom(byte[] bytes) {

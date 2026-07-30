@@ -16,6 +16,8 @@ public class ReaderBookVO {
     private String author;
     private String description;
     private String language;
+    private String visibility;
+    private Boolean ownedByCurrentUser;
     private String sourceFormat;
     private String sourceEncoding;
     private String status;

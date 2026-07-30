@@ -468,6 +468,7 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
                 || SysFile.RefType.MUSIC_AUDIO.equals(refType)
                 || SysFile.RefType.MUSIC_COVER.equals(refType)
                 || SysFile.RefType.NOVEL_SOURCE.equals(refType)
+                || SysFile.RefType.NOVEL_COVER.equals(refType)
                 || SysFile.RefType.TRUST_REQUEST_ATTACHMENT.equals(refType);
     }
 

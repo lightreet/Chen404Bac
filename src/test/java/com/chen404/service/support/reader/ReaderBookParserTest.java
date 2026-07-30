@@ -192,6 +192,24 @@ class ReaderBookParserTest {
         );
     }
 
+    @Test
+    void shouldParseTenMegabyteTextWithinReasonableTime() {
+        String body = "a".repeat(16_000);
+        StringBuilder source = new StringBuilder(10 * 1024 * 1024);
+        for (int index = 1; index <= 640; index++) {
+            source.append("第").append(index).append("章 性能验证\n\n")
+                    .append(body)
+                    .append("\n\n");
+        }
+
+        long startedAt = System.nanoTime();
+        ParsedReaderBook parsed = parser.parse("large.txt", source.toString().getBytes(StandardCharsets.UTF_8), null);
+        long elapsedMillis = (System.nanoTime() - startedAt) / 1_000_000;
+
+        assertTrue(parsed.getChapters().size() > 100);
+        assertTrue(elapsedMillis < 10_000, () -> "10MB TXT parsing took " + elapsedMillis + "ms");
+    }
+
     private byte[] zip(Map<String, byte[]> entries) throws Exception {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         try (ZipOutputStream zip = new ZipOutputStream(output)) {

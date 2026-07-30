@@ -269,6 +269,21 @@ public class UploadController {
         return executeUpload(file, userId, SysFile.RefType.MUSIC_COVER, "MUSIC_COVER_UPLOAD");
     }
 
+    @Operation(summary = "上传小说封面", description = "登录用户上传书架小说的自定义封面")
+    @PostMapping(value = "/novel-cover", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Result<UploadFileVO> uploadNovelCover(
+            @ModelAttribute SingleFileUploadDTO form,
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
+        MultipartFile file = form.getFile();
+        Result<UploadFileVO> validateResult = validateImage(file, MAX_COVER_SIZE, resolveAllowedImageTypes());
+        if (validateResult != null) {
+            return validateResult;
+        }
+        return executeUpload(file, userId, SysFile.RefType.NOVEL_COVER, "NOVEL_COVER_UPLOAD");
+    }
+
     @Operation(summary = "上传头像", description = "用户头像上传")
     @PostMapping(value = "/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Result<UploadFileVO> uploadAvatar(

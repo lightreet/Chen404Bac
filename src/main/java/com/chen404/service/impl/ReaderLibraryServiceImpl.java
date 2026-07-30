@@ -17,6 +17,7 @@ import com.chen404.domain.entity.ReaderPreference;
 import com.chen404.domain.entity.ReaderProgress;
 import com.chen404.domain.entity.ReaderTocItem;
 import com.chen404.domain.entity.SysFile;
+import com.chen404.domain.enums.ReaderBookVisibilityEnum;
 import com.chen404.exception.BadRequestException;
 import com.chen404.exception.ForbiddenException;
 import com.chen404.exception.ResourceNotFoundException;
@@ -28,6 +29,7 @@ import com.chen404.mapper.ReaderProgressMapper;
 import com.chen404.mapper.ReaderTocItemMapper;
 import com.chen404.service.FileClaim;
 import com.chen404.service.FileReferenceService;
+import com.chen404.service.ProtectedFileAccessService;
 import com.chen404.service.ReaderLibraryService;
 import com.chen404.service.SysFileService;
 import com.chen404.service.support.reader.ParsedReaderBook;
@@ -48,12 +50,15 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * 私人书架实现。
+ * 公开书架实现。
  *
  * <p>原始文件先完成解析校验，再进入受保护文件存储；正文、目录、插图与进度在同一事务内写入。
- * 阅读进度以 MySQL 为跨设备真源，前端本地副本仅用于离线和页面关闭前兜底。</p>
+ * 书籍可公开或仅自己可见，阅读进度以 MySQL 为跨设备真源，前端本地副本仅用于离线和页面关闭前兜底。</p>
  */
 @Slf4j
 @Service
@@ -64,6 +69,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
     private static final int DEFAULT_CONTENT_WIDTH = 720;
     private static final int DEFAULT_PARAGRAPH_SPACING = 16;
     private static final int SEARCH_LIMIT = 50;
+    private static final ConcurrentMap<String, ReentrantLock> IMPORT_LOCKS = new ConcurrentHashMap<>();
 
     private final ReaderBookMapper bookMapper;
     private final ReaderChapterMapper chapterMapper;
@@ -74,6 +80,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
     private final ReaderBookParser parser;
     private final SysFileService sysFileService;
     private final FileReferenceService fileReferenceService;
+    private final ProtectedFileAccessService protectedFileAccessService;
 
     public ReaderLibraryServiceImpl(
             ReaderBookMapper bookMapper,
@@ -84,7 +91,8 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
             ReaderPreferenceMapper preferenceMapper,
             ReaderBookParser parser,
             SysFileService sysFileService,
-            FileReferenceService fileReferenceService) {
+            FileReferenceService fileReferenceService,
+            ProtectedFileAccessService protectedFileAccessService) {
         this.bookMapper = bookMapper;
         this.chapterMapper = chapterMapper;
         this.tocItemMapper = tocItemMapper;
@@ -94,6 +102,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
         this.parser = parser;
         this.sysFileService = sysFileService;
         this.fileReferenceService = fileReferenceService;
+        this.protectedFileAccessService = protectedFileAccessService;
     }
 
     @Override
@@ -102,7 +111,10 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
             MultipartFile file,
             String title,
             String author,
+            String description,
             String encoding,
+            String visibility,
+            Long coverFileId,
             Long userId) {
         requireUser(userId);
         if (file == null || file.isEmpty()) {
@@ -119,14 +131,41 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
         }
 
         String checksum = parser.sha256(bytes);
-        Long duplicateCount = bookMapper.selectCount(new LambdaQueryWrapper<ReaderBook>()
-                .eq(ReaderBook::getOwnerUserId, userId)
-                .eq(ReaderBook::getContentChecksum, checksum));
-        if (duplicateCount != null && duplicateCount > 0) {
-            throw new BadRequestException("这本小说已经在你的书架中");
+        String importLockKey = userId + ":" + checksum;
+        ReentrantLock importLock = IMPORT_LOCKS.computeIfAbsent(importLockKey, ignored -> new ReentrantLock());
+        importLock.lock();
+        try {
+            ReaderBook existingBook = findBookByChecksum(userId, checksum);
+            if (existingBook != null) {
+                log.info("[READER_IMPORT_REUSED] userId={} bookId={} file={}", userId, existingBook.getId(), originalName);
+                return toBookVO(existingBook, null, null, userId);
+            }
+            return importNewBook(file, title, author, description, encoding, visibility, coverFileId,
+                    userId, originalName, bytes, checksum);
+        } finally {
+            importLock.unlock();
+            IMPORT_LOCKS.remove(importLockKey, importLock);
         }
+    }
 
+    /**
+     * 在同一内容校验锁内解析并落库，防止重复点击导致第二次完整解析后才触发唯一键异常。
+     */
+    private ReaderBookVO importNewBook(
+            MultipartFile file,
+            String title,
+            String author,
+            String description,
+            String encoding,
+            String visibility,
+            Long coverFileId,
+            Long userId,
+            String originalName,
+            byte[] bytes,
+            String checksum) {
+        long importStartedAt = System.nanoTime();
         ParsedReaderBook parsed = parser.parse(originalName, bytes, encoding);
+        long parsedAt = System.nanoTime();
         if (StringUtils.hasText(title)) {
             parsed.setTitle(title.strip());
         }
@@ -139,8 +178,9 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
         book.setOwnerUserId(userId);
         book.setTitle(limit(parsed.getTitle(), 255));
         book.setAuthor(limit(parsed.getAuthor(), 255));
-        book.setDescription(limit(parsed.getDescription(), 4_000));
+        book.setDescription(limit(StringUtils.hasText(description) ? description.strip() : parsed.getDescription(), 4_000));
         book.setLanguage(limit(parsed.getLanguage(), 40));
+        book.setVisibility(ReaderBookVisibilityEnum.normalize(visibility));
         book.setSourceFormat(parsed.getFormat());
         book.setSourceEncoding(parsed.getEncoding());
         book.setSourceFileId(sourceFile.getId());
@@ -154,6 +194,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
                 .filter(Objects::nonNull)
                 .mapToLong(String::length)
                 .sum());
+        book.setCoverFileId(coverFileId);
         book.setContentVersion(1);
         bookMapper.insert(book);
 
@@ -178,17 +219,22 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
                 SysFile.RefType.NOVEL_SOURCE,
                 book.getId()
         );
-        fileReferenceService.syncReaderBookReference(book.getId(), sourceFile.getId());
-        log.info("[READER_IMPORT] userId={} bookId={} format={} chapters={} assets={} file={}",
-                userId, book.getId(), parsed.getFormat(), chapterIds.size(), assetIds.size(), originalName);
-        return toBookVO(book, null, null);
+        claimReaderCoverFile(userId, coverFileId, book.getId());
+        fileReferenceService.syncReaderBookReferences(book.getId(), sourceFile.getId(), coverFileId);
+        log.info("[READER_IMPORT] userId={} bookId={} format={} chapters={} assets={} parseMs={} persistMs={} file={}",
+                userId, book.getId(), parsed.getFormat(), chapterIds.size(), assetIds.size(),
+                elapsedMillis(importStartedAt, parsedAt), elapsedMillis(parsedAt, System.nanoTime()), originalName);
+        return toBookVO(book, null, null, userId);
     }
 
     @Override
     public List<ReaderBookVO> listBooks(Long userId) {
-        requireUser(userId);
-        List<ReaderBook> books = bookMapper.selectList(new LambdaQueryWrapper<ReaderBook>()
-                .eq(ReaderBook::getOwnerUserId, userId)
+        LambdaQueryWrapper<ReaderBook> bookQuery = new LambdaQueryWrapper<ReaderBook>()
+                .eq(ReaderBook::getVisibility, ReaderBookVisibilityEnum.PUBLIC.getCode());
+        if (userId != null) {
+            bookQuery.or(wrapper -> wrapper.eq(ReaderBook::getOwnerUserId, userId));
+        }
+        List<ReaderBook> books = bookMapper.selectList(bookQuery
                 .orderByDesc(ReaderBook::getUpdateTime)
                 .orderByDesc(ReaderBook::getId));
         if (books.isEmpty()) {
@@ -196,10 +242,12 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
         }
         List<Long> bookIds = books.stream().map(ReaderBook::getId).toList();
         Map<Long, ReaderProgress> progressByBook = new HashMap<>();
-        for (ReaderProgress progress : progressMapper.selectList(new LambdaQueryWrapper<ReaderProgress>()
-                .eq(ReaderProgress::getUserId, userId)
-                .in(ReaderProgress::getBookId, bookIds))) {
-            progressByBook.put(progress.getBookId(), progress);
+        if (userId != null) {
+            for (ReaderProgress progress : progressMapper.selectList(new LambdaQueryWrapper<ReaderProgress>()
+                    .eq(ReaderProgress::getUserId, userId)
+                    .in(ReaderProgress::getBookId, bookIds))) {
+                progressByBook.put(progress.getBookId(), progress);
+            }
         }
         Map<Long, String> chapterTitles = new HashMap<>();
         List<Long> currentChapterIds = progressByBook.values().stream()
@@ -218,7 +266,8 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
                         progressByBook.get(book.getId()),
                         chapterTitles.get(progressByBook.get(book.getId()) == null
                                 ? null
-                                : progressByBook.get(book.getId()).getChapterId())
+                                : progressByBook.get(book.getId()).getChapterId()),
+                        userId
                 ))
                 .sorted((left, right) -> {
                     LocalDateTime leftTime = left.getLastReadAt();
@@ -233,12 +282,12 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
 
     @Override
     public ReaderBookVO getBook(Long bookId, Long userId) {
-        ReaderBook book = requireOwnedBook(bookId, userId);
-        ReaderProgress progress = findProgress(bookId, userId);
+        ReaderBook book = requireReadableBook(bookId, userId);
+        ReaderProgress progress = userId == null ? null : findProgress(bookId, userId);
         ReaderChapter current = progress == null || progress.getChapterId() == null
                 ? null
                 : chapterMapper.selectById(progress.getChapterId());
-        return toBookVO(book, progress, current == null ? null : current.getTitle());
+        return toBookVO(book, progress, current == null ? null : current.getTitle(), userId);
     }
 
     @Override
@@ -248,7 +297,19 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
         book.setTitle(command.getTitle().strip());
         book.setAuthor(blankToNull(command.getAuthor()));
         book.setDescription(blankToNull(command.getDescription()));
+        book.setVisibility(ReaderBookVisibilityEnum.normalize(command.getVisibility()));
+        Long previousCoverFileId = book.getCoverFileId();
+        boolean coverChanged = false;
+        if (command.getCoverFileId() != null && !Objects.equals(command.getCoverFileId(), book.getCoverFileId())) {
+            claimReaderCoverFile(userId, command.getCoverFileId(), bookId);
+            book.setCoverFileId(command.getCoverFileId());
+            coverChanged = true;
+        }
         bookMapper.updateById(book);
+        fileReferenceService.syncReaderBookReferences(bookId, book.getSourceFileId(), book.getCoverFileId());
+        if (coverChanged) {
+            deleteCoverFile(previousCoverFileId, userId);
+        }
         return getBook(bookId, userId);
     }
 
@@ -265,16 +326,22 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
                 com.chen404.domain.entity.FileReference.BizType.READER_BOOK_SOURCE,
                 bookId
         );
+        fileReferenceService.removeByOwner(
+                com.chen404.domain.entity.FileReference.ModuleCode.READER_BOOK,
+                com.chen404.domain.entity.FileReference.BizType.READER_BOOK_COVER,
+                bookId
+        );
         bookMapper.deleteById(bookId);
         if (StringUtils.hasText(book.getSourceFileUrl())) {
             sysFileService.deleteByUrl(book.getSourceFileUrl(), userId);
         }
+        deleteCoverFile(book.getCoverFileId(), userId);
         log.info("[READER_DELETE] userId={} bookId={}", userId, bookId);
     }
 
     @Override
     public List<ReaderTocItemVO> getToc(Long bookId, Long userId) {
-        requireOwnedBook(bookId, userId);
+        requireReadableBook(bookId, userId);
         List<ReaderTocItem> items = tocItemMapper.selectList(new LambdaQueryWrapper<ReaderTocItem>()
                 .eq(ReaderTocItem::getBookId, bookId)
                 .orderByAsc(ReaderTocItem::getDepth)
@@ -302,7 +369,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
 
     @Override
     public ReaderChapterVO getChapter(Long bookId, Long chapterId, Long userId) {
-        ReaderBook book = requireOwnedBook(bookId, userId);
+        ReaderBook book = requireReadableBook(bookId, userId);
         ReaderChapter chapter = requireChapter(bookId, chapterId);
         ReaderChapter previous = chapterMapper.selectOne(new LambdaQueryWrapper<ReaderChapter>()
                 .eq(ReaderChapter::getBookId, bookId)
@@ -331,7 +398,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
 
     @Override
     public List<ReaderSearchResultVO> search(Long bookId, String keyword, Long userId) {
-        requireOwnedBook(bookId, userId);
+        requireReadableBook(bookId, userId);
         String query = keyword == null ? "" : keyword.strip();
         if (query.length() < 2) {
             throw new BadRequestException("搜索关键词至少需要 2 个字符");
@@ -358,7 +425,8 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
 
     @Override
     public ReaderProgressVO getProgress(Long bookId, Long userId) {
-        requireOwnedBook(bookId, userId);
+        requireReadableBook(bookId, userId);
+        requireUser(userId);
         ReaderProgress progress = findProgress(bookId, userId);
         return progress == null ? null : toProgressVO(progress);
     }
@@ -366,7 +434,8 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ReaderProgressVO saveProgress(Long bookId, ReaderProgressCommand command, Long userId) {
-        ReaderBook book = requireOwnedBook(bookId, userId);
+        ReaderBook book = requireReadableBook(bookId, userId);
+        requireUser(userId);
         ReaderChapter chapter = requireChapter(bookId, command.getChapterId());
         ReaderProgress progress = findProgress(bookId, userId);
         if (progress == null) {
@@ -394,7 +463,8 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void clearProgress(Long bookId, Long userId) {
-        requireOwnedBook(bookId, userId);
+        requireReadableBook(bookId, userId);
+        requireUser(userId);
         progressMapper.delete(new LambdaQueryWrapper<ReaderProgress>()
                 .eq(ReaderProgress::getBookId, bookId)
                 .eq(ReaderProgress::getUserId, userId));
@@ -435,12 +505,17 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
 
     @Override
     public ReaderAssetPayload getAsset(Long bookId, Long assetId, Long userId) {
-        requireOwnedBook(bookId, userId);
+        ReaderBook book = requireReadableBook(bookId, userId);
         ReaderBookAsset asset = assetMapper.selectById(assetId);
         if (asset == null || !Objects.equals(asset.getBookId(), bookId)) {
             throw new ResourceNotFoundException("书籍资源不存在");
         }
-        return new ReaderAssetPayload(asset.getFileName(), asset.getMediaType(), asset.getAssetData());
+        return new ReaderAssetPayload(
+                asset.getFileName(),
+                asset.getMediaType(),
+                asset.getAssetData(),
+                ReaderBookVisibilityEnum.PUBLIC.getCode().equals(book.getVisibility())
+        );
     }
 
     private Map<String, Long> persistAssets(Long bookId, List<ParsedReaderBook.Asset> assets) {
@@ -528,6 +603,45 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
                 : null;
     }
 
+    private ReaderBook findBookByChecksum(Long userId, String checksum) {
+        return bookMapper.selectOne(new LambdaQueryWrapper<ReaderBook>()
+                .eq(ReaderBook::getOwnerUserId, userId)
+                .eq(ReaderBook::getContentChecksum, checksum));
+    }
+
+    /**
+     * 封面与正文分属不同上传类型，分别认领才能保留文件用途和访问边界。
+     */
+    private void claimReaderCoverFile(Long userId, Long coverFileId, Long bookId) {
+        if (coverFileId == null) {
+            return;
+        }
+        SysFile coverFile = sysFileService.getById(coverFileId);
+        if (coverFile == null) {
+            throw new BadRequestException("小说封面不存在或已过期，请重新上传");
+        }
+        sysFileService.claimPermanentFiles(
+                userId,
+                List.of(FileClaim.byIdAndUrl(coverFile.getId(), coverFile.getFileUrl())),
+                SysFile.RefType.NOVEL_COVER,
+                bookId
+        );
+    }
+
+    private void deleteCoverFile(Long coverFileId, Long userId) {
+        if (coverFileId == null) {
+            return;
+        }
+        SysFile coverFile = sysFileService.getById(coverFileId);
+        if (coverFile != null && StringUtils.hasText(coverFile.getFileUrl())) {
+            sysFileService.deleteByUrl(coverFile.getFileUrl(), userId);
+        }
+    }
+
+    private long elapsedMillis(long startNanos, long endNanos) {
+        return (endNanos - startNanos) / 1_000_000;
+    }
+
     private ReaderBook requireOwnedBook(Long bookId, Long userId) {
         requireUser(userId);
         ReaderBook book = bookId == null ? null : bookMapper.selectById(bookId);
@@ -538,6 +652,18 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
             throw new ForbiddenException("只能访问自己书架中的小说");
         }
         return book;
+    }
+
+    private ReaderBook requireReadableBook(Long bookId, Long userId) {
+        ReaderBook book = bookId == null ? null : bookMapper.selectById(bookId);
+        if (book == null) {
+            throw new ResourceNotFoundException("小说不存在");
+        }
+        if (Objects.equals(book.getOwnerUserId(), userId)
+                || ReaderBookVisibilityEnum.PUBLIC.getCode().equals(book.getVisibility())) {
+            return book;
+        }
+        throw new ForbiddenException("这本小说未公开");
     }
 
     private ReaderChapter requireChapter(Long bookId, Long chapterId) {
@@ -555,13 +681,19 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
                 .last("LIMIT 1"));
     }
 
-    private ReaderBookVO toBookVO(ReaderBook book, ReaderProgress progress, String currentChapterTitle) {
+    private ReaderBookVO toBookVO(
+            ReaderBook book,
+            ReaderProgress progress,
+            String currentChapterTitle,
+            Long viewerUserId) {
         ReaderBookVO vo = new ReaderBookVO();
         vo.setId(book.getId());
         vo.setTitle(book.getTitle());
         vo.setAuthor(book.getAuthor());
         vo.setDescription(book.getDescription());
         vo.setLanguage(book.getLanguage());
+        vo.setVisibility(book.getVisibility());
+        vo.setOwnedByCurrentUser(Objects.equals(book.getOwnerUserId(), viewerUserId));
         vo.setSourceFormat(book.getSourceFormat());
         vo.setSourceEncoding(book.getSourceEncoding());
         vo.setStatus(book.getStatus());
@@ -569,9 +701,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
         vo.setChapterCount(book.getChapterCount());
         vo.setTotalCharCount(book.getTotalCharCount());
         vo.setContentVersion(book.getContentVersion());
-        vo.setCoverUrl(book.getCoverAssetId() == null
-                ? null
-                : "/api/reader/books/" + book.getId() + "/assets/" + book.getCoverAssetId());
+        vo.setCoverUrl(resolveCoverUrl(book));
         vo.setCurrentChapterId(progress == null ? null : progress.getChapterId());
         vo.setCurrentChapterTitle(currentChapterTitle);
         vo.setProgressPercent(progress == null ? BigDecimal.ZERO : progress.getProgressPercent());
@@ -580,6 +710,22 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
         vo.setCreateTime(book.getCreateTime());
         vo.setUpdateTime(book.getUpdateTime());
         return vo;
+    }
+
+    private String resolveCoverUrl(ReaderBook book) {
+        if (book.getCoverFileId() != null) {
+            SysFile coverFile = sysFileService.getById(book.getCoverFileId());
+            if (coverFile != null && StringUtils.hasText(coverFile.getFileUrl())) {
+                return protectedFileAccessService.issueUrlForReference(
+                        coverFile.getFileUrl(),
+                        SysFile.RefType.NOVEL_COVER,
+                        book.getId()
+                );
+            }
+        }
+        return book.getCoverAssetId() == null
+                ? null
+                : "/api/reader/books/" + book.getId() + "/assets/" + book.getCoverAssetId();
     }
 
     private ReaderProgressVO toProgressVO(ReaderProgress progress) {

@@ -268,7 +268,7 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void syncReaderBookReference(Long bookId, Long sourceFileId) {
+    public void syncReaderBookReferences(Long bookId, Long sourceFileId, Long coverFileId) {
         if (bookId == null) {
             return;
         }
@@ -282,8 +282,18 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
                         FileReference.SourceType.DIRECT
                 )
         );
-        log.debug("[FILE_REFERENCE_SYNC] module=READER_BOOK bizId={} hasSource={}",
-                bookId, sourceFileId != null);
+        replaceReferences(
+                FileReference.ModuleCode.READER_BOOK,
+                FileReference.BizType.READER_BOOK_COVER,
+                bookId,
+                resolveFileIdReferences(
+                        coverFileId == null ? List.of() : List.of(coverFileId),
+                        FileReference.FieldKey.COVER_URL,
+                        FileReference.SourceType.DIRECT
+                )
+        );
+        log.debug("[FILE_REFERENCE_SYNC] module=READER_BOOK bizId={} hasSource={} hasCover={}",
+                bookId, sourceFileId != null, coverFileId != null);
     }
 
     @Override
@@ -416,7 +426,7 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
             if (book == null || book.getId() == null) {
                 continue;
             }
-            syncReaderBookReference(book.getId(), book.getSourceFileId());
+            syncReaderBookReferences(book.getId(), book.getSourceFileId(), book.getCoverFileId());
             readerBookCount++;
         }
 
