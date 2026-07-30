@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
 @TableName("reader_book")
 public class ReaderBook implements Serializable {
 
+    public static final String STATUS_IMPORTING = "importing";
     public static final String STATUS_READY = "ready";
     public static final String STATUS_FAILED = "failed";
 

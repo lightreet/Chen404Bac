@@ -92,6 +92,7 @@ public class AdminContentEventListener {
             case TRAVEL_MEMORY_CREATED -> "知友新增了旅行地点";
             case MUSIC_TRACK_CREATED -> "知友上传了音乐草稿";
             case MUSIC_TRACK_PUBLISHED -> "知友发布了新音乐";
+            case READER_BOOK_IMPORTED -> "知友导入了新小说";
             case TRUST_REQUEST_CREATED -> "有新的知友申请";
         };
     }
@@ -105,6 +106,7 @@ public class AdminContentEventListener {
             case TRAVEL_MEMORY_CREATED -> actorName + " 新增了旅行地点《" + resourceTitle + "》";
             case MUSIC_TRACK_CREATED -> actorName + " 上传了音乐草稿《" + resourceTitle + "》";
             case MUSIC_TRACK_PUBLISHED -> actorName + " 发布了音乐《" + resourceTitle + "》";
+            case READER_BOOK_IMPORTED -> actorName + " 导入了小说《" + resourceTitle + "》";
             case TRUST_REQUEST_CREATED -> actorName + " 提交了知友申请";
         };
     }

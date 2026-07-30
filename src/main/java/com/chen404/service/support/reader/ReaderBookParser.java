@@ -55,7 +55,8 @@ import java.util.zip.ZipInputStream;
 @Component
 public class ReaderBookParser {
 
-    private static final long MAX_SOURCE_SIZE = 60L * 1024 * 1024;
+    /** 单本小说源文件允许的最大字节数。 */
+    public static final int MAX_SOURCE_SIZE_BYTES = 60 * 1024 * 1024;
     private static final long MAX_ZIP_ENTRY_SIZE = 16L * 1024 * 1024;
     private static final long MAX_ZIP_TOTAL_SIZE = 120L * 1024 * 1024;
     private static final int MAX_ZIP_ENTRIES = 10_000;
@@ -83,21 +84,12 @@ public class ReaderBookParser {
     );
 
     public ParsedReaderBook parse(String fileName, byte[] bytes, String requestedEncoding) {
-        if (bytes == null || bytes.length == 0) {
-            throw new BadRequestException("小说文件不能为空");
-        }
-        if (bytes.length > MAX_SOURCE_SIZE) {
-            throw new BadRequestException("小说文件不能超过 60MB");
-        }
-        String extension = extensionOf(fileName);
-        if (!SUPPORTED_EXTENSIONS.contains(extension)) {
-            throw unsupportedFormat(extension);
-        }
+        String sourceFormat = detectSourceFormat(fileName, bytes);
         try {
-            return switch (extension) {
+            return switch (sourceFormat) {
                 case "epub" -> parseEpub(fileName, bytes);
-                case "html", "htm", "xhtml" -> parseHtml(fileName, bytes, requestedEncoding);
-                case "md", "markdown" -> parseMarkdown(fileName, bytes, requestedEncoding);
+                case "html" -> parseHtml(fileName, bytes, requestedEncoding);
+                case "markdown" -> parseMarkdown(fileName, bytes, requestedEncoding);
                 case "fb2" -> parseFb2(fileName, bytes);
                 default -> parseText(fileName, bytes, requestedEncoding);
             };
@@ -106,6 +98,27 @@ public class ReaderBookParser {
         } catch (Exception exception) {
             throw new BadRequestException("小说解析失败：" + safeMessage(exception));
         }
+    }
+
+    /**
+     * 在创建后台任务前完成轻量格式校验，避免上传成功后才发现文件类型不可处理。
+     */
+    public String detectSourceFormat(String fileName, byte[] bytes) {
+        if (bytes == null || bytes.length == 0) {
+            throw new BadRequestException("小说文件不能为空");
+        }
+        if (bytes.length > MAX_SOURCE_SIZE_BYTES) {
+            throw new BadRequestException("小说文件不能超过 60MB");
+        }
+        String extension = extensionOf(fileName);
+        if (!SUPPORTED_EXTENSIONS.contains(extension)) {
+            throw unsupportedFormat(extension);
+        }
+        return switch (extension) {
+            case "html", "htm", "xhtml" -> "html";
+            case "md", "markdown" -> "markdown";
+            default -> extension;
+        };
     }
 
     private ParsedReaderBook parseText(String fileName, byte[] bytes, String requestedEncoding) {

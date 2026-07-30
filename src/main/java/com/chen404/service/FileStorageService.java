@@ -40,6 +40,17 @@ public interface FileStorageService {
     );
 
     /**
+     * 打开存储对象的读取流。
+     *
+     * <p>调用方必须关闭返回的流。</p>
+     *
+     * @param bucketName 存储桶名称
+     * @param objectName 对象名称
+     * @return 对象读取流
+     */
+    InputStream openFile(String bucketName, String objectName);
+
+    /**
      * 删除文件
      *
      * @param objectName 对象名称
