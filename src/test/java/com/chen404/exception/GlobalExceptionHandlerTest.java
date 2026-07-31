@@ -51,4 +51,24 @@ class GlobalExceptionHandlerTest {
         assertEquals(ApiErrorCode.BAD_REQUEST, response.getBody().getCode());
         assertEquals("请求参数错误", response.getBody().getMessage());
     }
+
+    @Test
+    void conflictExceptionShouldReturnConflict() {
+        ResponseEntity<Result<String>> response =
+                handler.handleApiException(new ConflictException("资源状态已变化"));
+
+        assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals(ApiErrorCode.CONFLICT, response.getBody().getCode());
+    }
+
+    @Test
+    void illegalArgumentShouldReturnBadRequest() {
+        ResponseEntity<Result<String>> response =
+                handler.handleIllegalArgumentException(new IllegalArgumentException("参数不合法"));
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals(ApiErrorCode.BAD_REQUEST, response.getBody().getCode());
+    }
 }

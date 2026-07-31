@@ -1,6 +1,8 @@
 package com.chen404.domain.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -59,8 +61,22 @@ public class RegisterDTO {
     private String code;
 
     /**
-     * 注册类型（兼容前端当前 email / phone 双入口模型）
+     * 注册类型；保留字段用于兼容旧客户端，当前只接受 email。
      */
-    @Schema(description = "注册类型：email-邮箱注册 phone-手机号注册", example = "email")
+    @Schema(description = "注册类型，当前只支持 email", example = "email")
     private String registerType;
+
+    /**
+     * 短信通道尚未接入时，只允许使用已验证的邮箱注册，避免保存未验证手机号。
+     */
+    @JsonIgnore
+    @AssertTrue(message = "当前仅支持邮箱注册，请填写邮箱并选择 email 注册类型")
+    public boolean isSupportedRegistrationChannel() {
+        boolean hasEmail = email != null && !email.isBlank();
+        boolean hasPhone = phone != null && !phone.isBlank();
+        boolean emailType = registerType == null
+                || registerType.isBlank()
+                || "email".equalsIgnoreCase(registerType.trim());
+        return hasEmail && !hasPhone && emailType;
+    }
 }

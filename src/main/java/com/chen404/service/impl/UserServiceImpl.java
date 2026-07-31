@@ -16,7 +16,11 @@ import com.chen404.domain.entity.UserRole;
 import com.chen404.mapper.RoleMapper;
 import com.chen404.mapper.UserMapper;
 import com.chen404.mapper.UserRoleMapper;
+import com.chen404.exception.BadRequestException;
+import com.chen404.exception.ConflictException;
+import com.chen404.exception.ResourceNotFoundException;
 import com.chen404.service.EmailService;
+import com.chen404.service.AuthSessionService;
 import com.chen404.service.FileClaim;
 import com.chen404.service.FileReferenceService;
 import com.chen404.service.SysFileService;
@@ -26,6 +30,7 @@ import com.chen404.util.JwtUtil;
 import com.chen404.util.RedisKeys;
 import com.chen404.util.RedisUtil;
 import com.chen404.exception.TooManyRequestsException;
+import com.chen404.exception.UnauthorizedException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -85,6 +90,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Autowired
     private FileReferenceService fileReferenceService;
 
+    @Autowired
+    private AuthSessionService authSessionService;
+
     @Value("${jwt.expiration}")
     private Long expiration;
 
@@ -105,19 +113,19 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
         if (user == null) {
             recordLoginFailure(account, clientIp);
-            throw new RuntimeException("用户不存在或密码错误");
+            throw new UnauthorizedException("用户不存在或密码错误");
         }
 
         // 检查账号是否禁用
         if (user.getStatus() == 0) {
-            throw new RuntimeException("账号已被禁用");
+            throw new UnauthorizedException("账号已被禁用");
         }
 
         // 校验密码（BCrypt）
         boolean passwordValid = passwordEncoder.matches(loginDTO.getPassword(), user.getPassword());
         if (!passwordValid) {
             recordLoginFailure(account, clientIp);
-            throw new RuntimeException("用户不存在或密码错误");
+            throw new UnauthorizedException("用户不存在或密码错误");
         }
 
         clearLoginFailureState(account, clientIp);
@@ -184,17 +192,17 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     public User register(RegisterDTO registerDTO) {
         // 用户名唯一
         if (isUsernameExists(registerDTO.getUsername())) {
-            throw new RuntimeException("用户名已存在");
+            throw new ConflictException("用户名已存在");
         }
 
         // 邮箱唯一
         if (StringUtils.hasText(registerDTO.getEmail()) && isEmailExists(registerDTO.getEmail())) {
-            throw new RuntimeException("邮箱已被注册");
+            throw new ConflictException("邮箱已被注册");
         }
 
         // 手机号唯一
         if (StringUtils.hasText(registerDTO.getPhone()) && isPhoneExists(registerDTO.getPhone())) {
-            throw new RuntimeException("手机号已被注册");
+            throw new ConflictException("手机号已被注册");
         }
 
         // 构造用户实体
@@ -288,7 +296,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     public User updateProfile(Long userId, UpdateProfileDTO dto) {
         User user = userMapper.selectById(userId);
         if (user == null) {
-            throw new RuntimeException("用户不存在");
+            throw new ResourceNotFoundException("用户不存在");
         }
         String oldAvatar = user.getAvatar();
         String newAvatar = dto.getAvatar();
@@ -338,12 +346,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Transactional(rollbackFor = Exception.class)
     public User updateTrustLevel(Long userId, Integer trustLevel) {
         if (!UserTrustLevelEnum.isValidLevel(trustLevel)) {
-            throw new RuntimeException("信任级别无效，仅允许读者(0)或知友(1)");
+            throw new BadRequestException("信任级别无效，仅允许读者(0)或知友(1)");
         }
 
         User user = userMapper.selectById(userId);
         if (user == null) {
-            throw new RuntimeException("用户不存在");
+            throw new ResourceNotFoundException("用户不存在");
         }
 
         user.setTrustLevel(trustLevel);
@@ -356,17 +364,19 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     public void changePassword(Long userId, ChangePasswordDTO dto, String clientIp, String userAgent) {
         User user = userMapper.selectById(userId);
         if (user == null) {
-            throw new RuntimeException("用户不存在");
+            throw new ResourceNotFoundException("用户不存在");
         }
         if (!passwordEncoder.matches(dto.getOldPassword(), user.getPassword())) {
-            throw new RuntimeException("当前密码错误");
+            throw new BadRequestException("当前密码错误");
         }
         if (passwordEncoder.matches(dto.getNewPassword(), user.getPassword())) {
-            throw new RuntimeException("新密码不能与当前密码相同");
+            throw new BadRequestException("新密码不能与当前密码相同");
         }
         user.setPassword(passwordEncoder.encode(dto.getNewPassword()));
         userMapper.updateById(user);
-        log.info("[USER_PASSWORD_CHANGED] userId={} via=auth-change ip={}", userId, normalizeClientIp(clientIp));
+        authSessionService.revokeAll(userId);
+        log.info("[USER_PASSWORD_CHANGED] userId={} via=auth-change clientIpPresent={}",
+                userId, StringUtils.hasText(clientIp));
 
         sendPasswordChangeNotification(user, clientIp, userAgent, "账号设置");
     }
@@ -376,19 +386,20 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     public void resetPasswordByEmail(ForgotPasswordDTO dto, String clientIp, String userAgent) {
         User user = userMapper.selectByEmail(dto.getEmail());
         if (user == null) {
-            throw new RuntimeException("用户不存在");
+            throw new BadRequestException("用户不存在");
         }
         if (user.getStatus() == 0) {
-            throw new RuntimeException("账号已被禁用");
+            throw new UnauthorizedException("账号已被禁用");
         }
         if (passwordEncoder.matches(dto.getNewPassword(), user.getPassword())) {
-            throw new RuntimeException("新密码不能与当前密码相同");
+            throw new BadRequestException("新密码不能与当前密码相同");
         }
 
         user.setPassword(passwordEncoder.encode(dto.getNewPassword()));
         userMapper.updateById(user);
-        log.info("[USER_PASSWORD_RESET] userId={} email={} ip={}",
-                user.getId(), dto.getEmail(), normalizeClientIp(clientIp));
+        authSessionService.revokeAll(user.getId());
+        log.info("[USER_PASSWORD_RESET] userId={} clientIpPresent={}",
+                user.getId(), StringUtils.hasText(clientIp));
 
         sendPasswordChangeNotification(user, clientIp, userAgent, "邮箱找回");
     }
@@ -406,8 +417,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                         + "如非本人操作，请尽快登录并修改密码。";
                 emailService.sendEmail(user.getEmail(), PASSWORD_CHANGE_SUBJECT, content);
             } catch (Exception ex) {
-                log.error("[USER_PASSWORD_NOTIFY_FAIL] userId={} email={} message={}",
-                        user.getId(), user.getEmail(), ex.getMessage(), ex);
+                log.error("[USER_PASSWORD_NOTIFY_FAIL] userId={}", user.getId(), ex);
             }
         }
     }

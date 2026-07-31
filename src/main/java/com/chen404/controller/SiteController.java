@@ -3,7 +3,6 @@ package com.chen404.controller;
 import com.chen404.annotation.RequireAdmin;
 import com.chen404.config.SiteOwnerProperties;
 import com.chen404.converter.HomeViewConverter;
-import com.chen404.domain.ApiErrorCode;
 import com.chen404.domain.Result;
 import com.chen404.domain.dto.BannerVO;
 import com.chen404.domain.dto.DevelopmentHistoryVO;
@@ -12,6 +11,7 @@ import com.chen404.domain.dto.SiteMemberDTO;
 import com.chen404.domain.dto.SiteOwnerDTO;
 import com.chen404.domain.entity.Banner;
 import com.chen404.domain.entity.User;
+import com.chen404.exception.ResourceNotFoundException;
 import com.chen404.service.BannerService;
 import com.chen404.service.DevelopmentHistoryService;
 import com.chen404.service.SiteConfigService;
@@ -111,7 +111,7 @@ public class SiteController {
             @Parameter(description = "用户 ID", required = true) @PathVariable Long id) {
         User user = userService.getPublicUser(id);
         if (user == null) {
-            return Result.error(ApiErrorCode.NOT_FOUND, "用户不存在");
+            throw new ResourceNotFoundException("用户不存在");
         }
         return Result.success(toPublicMember(user));
     }

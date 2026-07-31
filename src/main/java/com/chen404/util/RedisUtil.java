@@ -4,10 +4,12 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.time.Duration;
+import java.util.List;
 
 /**
  * Redis 工具类（统一序列化、TTL、常用操作）
@@ -19,6 +21,27 @@ import java.time.Duration;
 @Component
 @RequiredArgsConstructor
 public class RedisUtil {
+
+    private static final DefaultRedisScript<Long> INCREMENT_WITH_TTL_SCRIPT = new DefaultRedisScript<>(
+            "local count = redis.call('INCR', KEYS[1]); "
+                    + "if count == 1 then redis.call('PEXPIRE', KEYS[1], ARGV[1]); end; "
+                    + "return count;",
+            Long.class
+    );
+    private static final DefaultRedisScript<Long> VERIFY_AND_CONSUME_CODE_SCRIPT = new DefaultRedisScript<>(
+            "local stored = redis.call('GET', KEYS[1]); "
+                    + "if not stored then return 0; end; "
+                    + "if stored == ARGV[1] then "
+                    + "redis.call('DEL', KEYS[1], KEYS[2]); return 1; "
+                    + "end; "
+                    + "local attempts = redis.call('INCR', KEYS[2]); "
+                    + "if attempts == 1 then redis.call('PEXPIRE', KEYS[2], ARGV[3]); end; "
+                    + "if attempts >= tonumber(ARGV[2]) then "
+                    + "redis.call('DEL', KEYS[1], KEYS[2]); return -2; "
+                    + "end; "
+                    + "return -1;",
+            Long.class
+    );
 
     private final StringRedisTemplate redis;
     private final ObjectMapper objectMapper;
@@ -69,6 +92,42 @@ public class RedisUtil {
 
     public Long increment(String key) {
         return redis.opsForValue().increment(key);
+    }
+
+    /**
+     * 原子自增，并仅在首次创建 key 时设置 TTL。
+     */
+    public Long incrementWithInitialTtl(String key, Duration ttl) {
+        if (!StringUtils.hasText(key) || ttl == null || ttl.isNegative() || ttl.isZero()) {
+            return null;
+        }
+        return redis.execute(
+                INCREMENT_WITH_TTL_SCRIPT,
+                List.of(key),
+                String.valueOf(ttl.toMillis())
+        );
+    }
+
+    /**
+     * 原子校验并消费验证码。
+     *
+     * @return 1-验证成功，0-验证码不存在，-1-本次错误，-2-错误次数达到上限且验证码已锁定
+     */
+    public long verifyAndConsumeCode(
+            String codeKey,
+            String attemptsKey,
+            String candidate,
+            int maxAttempts,
+            Duration attemptsTtl
+    ) {
+        Long result = redis.execute(
+                VERIFY_AND_CONSUME_CODE_SCRIPT,
+                List.of(codeKey, attemptsKey),
+                candidate == null ? "" : candidate,
+                String.valueOf(maxAttempts),
+                String.valueOf(attemptsTtl.toMillis())
+        );
+        return result == null ? 0L : result;
     }
 
     // -------- JSON value --------

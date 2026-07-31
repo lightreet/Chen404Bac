@@ -24,6 +24,10 @@ public final class RedisKeys {
         return PREFIX + "verify:daily:" + type.getCode() + ":" + target;
     }
 
+    public static String verifyAttempts(VerificationCodeTypeEnum type, String target) {
+        return PREFIX + "verify:attempts:" + type.getCode() + ":" + target;
+    }
+
     /** 匿名文章点赞冷却（与 IP 绑定） */
     public static String articleLikeThrottle(Long articleId, String clientIp) {
         return PREFIX + "article:like:throttle:" + articleId + ":" + sanitizeIp(clientIp);
@@ -48,6 +52,11 @@ public final class RedisKeys {
 
     public static String refreshTokenBlacklist(String tokenId) {
         return PREFIX + "auth:refresh:blacklist:" + tokenId;
+    }
+
+    /** 用户会话版本；提升后可统一失效该用户此前签发的全部令牌。 */
+    public static String authSessionVersion(Long userId) {
+        return PREFIX + "auth:session:version:user:" + userId;
     }
 
     /** 登录用户音乐播放现场 */

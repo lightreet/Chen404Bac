@@ -40,7 +40,7 @@ public class MinioStorageServiceImpl implements FileStorageService {
             return uploadFile(inputStream, bucketName, objectName, file.getContentType(), file.getSize());
         } catch (IOException e) {
             log.error("读取文件流失败", e);
-            throw new RuntimeException("读取文件流失败");
+            throw new IllegalStateException("读取文件流失败", e);
         }
     }
 
@@ -75,7 +75,7 @@ public class MinioStorageServiceImpl implements FileStorageService {
 
         } catch (Exception e) {
             log.error("上传文件到MinIO失败", e);
-            throw new RuntimeException("上传文件失败: " + e.getMessage());
+            throw new IllegalStateException("上传文件失败", e);
         }
     }
 
@@ -90,7 +90,7 @@ public class MinioStorageServiceImpl implements FileStorageService {
             );
         } catch (Exception exception) {
             log.error("读取MinIO文件失败: bucket={}, object={}", bucketName, objectName, exception);
-            throw new RuntimeException("读取文件失败");
+            throw new IllegalStateException("读取文件失败", exception);
         }
     }
 
@@ -140,7 +140,7 @@ public class MinioStorageServiceImpl implements FileStorageService {
             );
         } catch (Exception e) {
             log.error("获取文件下载链接失败: bucket={}, object={}", bucketName, objectName, e);
-            throw new RuntimeException("获取文件下载链接失败");
+            throw new IllegalStateException("获取文件下载链接失败", e);
         }
     }
 
@@ -184,7 +184,7 @@ public class MinioStorageServiceImpl implements FileStorageService {
             );
         } catch (Exception e) {
             log.error("获取预签名URL失败", e);
-            throw new RuntimeException("获取上传链接失败");
+            throw new IllegalStateException("获取上传链接失败", e);
         }
     }
 

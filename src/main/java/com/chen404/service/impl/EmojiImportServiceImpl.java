@@ -18,20 +18,33 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 @Slf4j
 @Service
 public class EmojiImportServiceImpl implements EmojiImportService {
+
+    private static final int ZIP_BUFFER_SIZE = 8192;
+    private static final int MAX_ZIP_ENTRY_COUNT = 512;
+    private static final long MAX_MANIFEST_BYTES = 512 * 1024L;
+    private static final long MAX_ASSET_BYTES = 5 * 1024 * 1024L;
+    private static final long MAX_TOTAL_UNCOMPRESSED_BYTES = 50 * 1024 * 1024L;
+    private static final long MAX_COMPRESSION_RATIO = 100L;
+    private static final Set<String> ALLOWED_IMAGE_EXTENSIONS = Set.of(
+            "png", "jpg", "jpeg", "gif", "webp"
+    );
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -63,6 +76,8 @@ public class EmojiImportServiceImpl implements EmojiImportService {
 
         Map<String, byte[]> fileBytes = new HashMap<>();
         byte[] manifestBytes = null;
+        int entryCount = 0;
+        long totalUncompressedBytes = 0L;
 
         try (InputStream is = zipFile.getInputStream(); ZipInputStream zis = new ZipInputStream(is)) {
             ZipEntry entry;
@@ -70,12 +85,31 @@ public class EmojiImportServiceImpl implements EmojiImportService {
                 if (entry.isDirectory()) {
                     continue;
                 }
-                String name = entry.getName();
-                byte[] bytes = zis.readAllBytes();
+                entryCount++;
+                if (entryCount > MAX_ZIP_ENTRY_COUNT) {
+                    throw new IllegalArgumentException("zip 内文件数量不能超过 " + MAX_ZIP_ENTRY_COUNT);
+                }
+
+                String name = normalizeZipEntryName(entry.getName());
+                long entryLimit = "manifest.json".equalsIgnoreCase(name)
+                        ? MAX_MANIFEST_BYTES
+                        : MAX_ASSET_BYTES;
+                byte[] bytes = readEntry(zis, entryLimit);
+                totalUncompressedBytes += bytes.length;
+                if (totalUncompressedBytes > MAX_TOTAL_UNCOMPRESSED_BYTES) {
+                    throw new IllegalArgumentException("zip 解压后总大小不能超过 50MB");
+                }
+                assertSafeCompressionRatio(entry, bytes.length);
+
                 if ("manifest.json".equalsIgnoreCase(name)) {
+                    if (manifestBytes != null) {
+                        throw new IllegalArgumentException("zip 内只能包含一个 manifest.json");
+                    }
                     manifestBytes = bytes;
                 } else {
-                    fileBytes.put(name, bytes);
+                    if (fileBytes.putIfAbsent(name, bytes) != null) {
+                        throw new IllegalArgumentException("zip 内存在重复文件: " + name);
+                    }
                 }
             }
         } catch (IOException e) {
@@ -154,14 +188,15 @@ public class EmojiImportServiceImpl implements EmojiImportService {
         if (!StringUtils.hasText(item.getFile())) {
             throw new IllegalArgumentException("type=image 时 item.file 不能为空");
         }
-        byte[] bytes = fileBytes.get(item.getFile());
+        String assetPath = normalizeZipEntryName(item.getFile());
+        byte[] bytes = fileBytes.get(assetPath);
         if (bytes == null) {
             throw new IllegalArgumentException("资源文件不存在: " + item.getFile());
         }
 
-        String ext = guessExt(item.getFile());
-        String sha1 = sha1Hex(bytes);
-        String objectName = "emoji/packs/" + packCode + "/items/" + item.getShortcode() + "/" + sha1 + "." + ext;
+        String ext = requireSupportedImageExtension(assetPath);
+        String sha256 = sha256Hex(bytes);
+        String objectName = "emoji/packs/" + packCode + "/items/" + item.getShortcode() + "/" + sha256 + "." + ext;
         String assetUrl = fileStorageService.uploadFile(new ByteArrayInputStream(bytes), objectName, guessContentType(ext), bytes.length);
 
         dto.setType(EmojiItem.Type.IMAGE);
@@ -170,13 +205,17 @@ public class EmojiImportServiceImpl implements EmojiImportService {
         return dto;
     }
 
-    private static String guessExt(String fileName) {
+    private static String requireSupportedImageExtension(String fileName) {
         String lower = fileName.toLowerCase(Locale.ROOT);
         int idx = lower.lastIndexOf('.');
         if (idx < 0) {
-            return "webp";
+            throw new IllegalArgumentException("表情资源缺少文件扩展名: " + fileName);
         }
-        return lower.substring(idx + 1);
+        String ext = lower.substring(idx + 1);
+        if (!ALLOWED_IMAGE_EXTENSIONS.contains(ext)) {
+            throw new IllegalArgumentException("不支持的表情资源格式: " + ext);
+        }
+        return ext;
     }
 
     private static String guessContentType(String ext) {
@@ -185,22 +224,58 @@ public class EmojiImportServiceImpl implements EmojiImportService {
             case "jpg", "jpeg" -> "image/jpeg";
             case "gif" -> "image/gif";
             case "webp" -> "image/webp";
-            case "svg" -> "image/svg+xml";
             default -> "application/octet-stream";
         };
     }
 
-    private static String sha1Hex(byte[] bytes) {
+    private static byte[] readEntry(ZipInputStream inputStream, long maxBytes) throws IOException {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        byte[] buffer = new byte[ZIP_BUFFER_SIZE];
+        long total = 0L;
+        int read;
+        while ((read = inputStream.read(buffer)) != -1) {
+            total += read;
+            if (total > maxBytes) {
+                throw new IllegalArgumentException("zip 内单个文件超过允许大小");
+            }
+            output.write(buffer, 0, read);
+        }
+        return output.toByteArray();
+    }
+
+    private static String normalizeZipEntryName(String rawName) {
+        if (!StringUtils.hasText(rawName)) {
+            throw new IllegalArgumentException("zip 内存在空文件名");
+        }
+        String normalized = rawName.replace('\\', '/');
+        if (normalized.startsWith("/")
+                || normalized.equals("..")
+                || normalized.startsWith("../")
+                || normalized.contains("/../")) {
+            throw new IllegalArgumentException("zip 内存在非法路径");
+        }
+        return normalized;
+    }
+
+    private static void assertSafeCompressionRatio(ZipEntry entry, long uncompressedBytes) {
+        long compressedBytes = entry.getCompressedSize();
+        if (compressedBytes > 0
+                && uncompressedBytes > compressedBytes * MAX_COMPRESSION_RATIO) {
+            throw new IllegalArgumentException("zip 内文件压缩比异常");
+        }
+    }
+
+    private static String sha256Hex(byte[] bytes) {
         try {
-            MessageDigest md = MessageDigest.getInstance("SHA-1");
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
             byte[] digest = md.digest(bytes);
             StringBuilder sb = new StringBuilder();
             for (byte b : digest) {
                 sb.append(String.format("%02x", b));
             }
             return sb.toString();
-        } catch (Exception e) {
-            throw new RuntimeException("sha1 计算失败");
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 算法不可用", e);
         }
     }
 }

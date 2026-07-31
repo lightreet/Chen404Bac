@@ -24,6 +24,7 @@ import com.chen404.domain.entity.UserArticleFavorite;
 import com.chen404.domain.entity.UserArticleLike;
 import com.chen404.domain.event.AdminContentEvent;
 import com.chen404.exception.ForbiddenException;
+import com.chen404.exception.ResourceNotFoundException;
 import com.chen404.exception.TooManyRequestsException;
 import com.chen404.exception.UnauthorizedException;
 import com.chen404.mapper.ArticleMapper;
@@ -327,7 +328,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     public Article updateArticle(Long id, Article article, Long operatorId) {
         Article existing = articleMapper.selectById(id);
         if (existing == null) {
-            throw new RuntimeException("文章不存在");
+            throw new ResourceNotFoundException("文章不存在");
         }
         User operator = accessService.getUserOrNull(operatorId);
         if (operator == null) {
@@ -413,7 +414,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     public void deleteArticle(Long id, Long operatorId) {
         Article article = articleMapper.selectById(id);
         if (article == null) {
-            throw new RuntimeException("文章不存在");
+            throw new ResourceNotFoundException("文章不存在");
         }
         User operator = accessService.getUserOrNull(operatorId);
         if (operator == null) {
@@ -475,32 +476,27 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     public ArticleLikeResult likeArticle(Long id, Long requesterId, String clientIp) {
         Article article = articleMapper.selectById(id);
         if (article == null) {
-            throw new RuntimeException("文章不存在");
+            throw new ResourceNotFoundException("文章不存在");
         }
         if (!accessService.canViewArticle(requesterId, article)) {
             throw new ForbiddenException("当前文章无权互动");
         }
 
         if (requesterId != null) {
-            LambdaQueryWrapper<UserArticleLike> w = new LambdaQueryWrapper<UserArticleLike>()
-                    .eq(UserArticleLike::getUserId, requesterId)
-                    .eq(UserArticleLike::getArticleId, id);
-            UserArticleLike existing = userArticleLikeMapper.selectOne(w);
-            if (existing == null) {
-                UserArticleLike row = new UserArticleLike();
-                row.setUserId(requesterId);
-                row.setArticleId(id);
-                userArticleLikeMapper.insert(row);
-                articleMapper.incrementLikeCount(id);
-            } else {
-                userArticleLikeMapper.deleteById(existing.getId());
+            int deleted = userArticleLikeMapper.deleteLike(requesterId, id);
+            boolean liked;
+            if (deleted > 0) {
                 articleMapper.decrementLikeCount(id);
+                liked = false;
+            } else {
+                int inserted = userArticleLikeMapper.insertLikeIfAbsent(requesterId, id);
+                if (inserted > 0) {
+                    articleMapper.incrementLikeCount(id);
+                }
+                liked = true;
             }
             Article fresh = articleMapper.selectById(id);
             int likes = fresh.getLikeCount() == null ? 0 : fresh.getLikeCount();
-            boolean liked = userArticleLikeMapper.selectCount(new LambdaQueryWrapper<UserArticleLike>()
-                    .eq(UserArticleLike::getUserId, requesterId)
-                    .eq(UserArticleLike::getArticleId, id)) > 0;
             return new ArticleLikeResult(likes, liked);
         }
 
@@ -519,7 +515,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         }
         Article article = articleMapper.selectById(articleId);
         if (article == null) {
-            throw new RuntimeException("文章不存在");
+            throw new ResourceNotFoundException("文章不存在");
         }
         if (!accessService.canViewArticle(userId, article)) {
             throw new ForbiddenException("当前文章无权收藏");
@@ -534,9 +530,10 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
             row.setArticleId(articleId);
             userArticleFavoriteMapper.insert(row);
             return true;
+        } else {
+            userArticleFavoriteMapper.deleteById(existing.getId());
+            return false;
         }
-        userArticleFavoriteMapper.deleteById(existing.getId());
-        return false;
     }
 
     @Override

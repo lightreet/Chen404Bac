@@ -1,7 +1,9 @@
 package com.chen404.domain.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 
 /**
@@ -15,12 +17,14 @@ public class SendCodeDTO {
      * 邮箱（邮箱验证时必填）
      */
     @Schema(description = "邮箱（邮箱验证时必填）", example = "test@example.com")
+    @Email(message = "邮箱格式不正确")
     private String email;
 
     /**
-     * 手机号（短信验证时必填）
+     * 兼容旧客户端的手机号字段；短信通道接入前不会发送验证码。
      */
-    @Schema(description = "手机号（短信验证时必填）", example = "13800138000")
+    @Schema(description = "手机号（预留字段，当前短信通道未开放）", example = "13800138000")
+    @Pattern(regexp = "^1[3-9]\\d{9}$", message = "手机号格式不正确")
     private String phone;
 
     /**

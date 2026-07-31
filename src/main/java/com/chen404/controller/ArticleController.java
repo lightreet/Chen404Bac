@@ -4,7 +4,6 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.chen404.converter.ArticleCommandConverter;
 import com.chen404.converter.ArticleViewConverter;
 import com.chen404.domain.PageResult;
-import com.chen404.domain.ApiErrorCode;
 import com.chen404.domain.Result;
 import com.chen404.domain.dto.ArchiveYearVO;
 import com.chen404.domain.dto.ArticleDetailVO;
@@ -16,6 +15,7 @@ import com.chen404.domain.dto.FavoriteToggleResultDTO;
 import com.chen404.domain.dto.UpdateArticleCommand;
 import com.chen404.domain.entity.Article;
 import com.chen404.exception.ForbiddenException;
+import com.chen404.exception.ResourceNotFoundException;
 import com.chen404.exception.UnauthorizedException;
 import com.chen404.security.AuthenticatedUser;
 import com.chen404.service.ArticleService;
@@ -135,7 +135,7 @@ public class ArticleController {
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
         Article article = articleService.getArticleById(id, incrementView, CurrentUserUtil.getUserId(currentUser));
         if (article == null) {
-            return Result.error(ApiErrorCode.NOT_FOUND, "文章不存在");
+            throw new ResourceNotFoundException("文章不存在");
         }
         return Result.success(articleViewConverter.toDetailVO(article));
     }
@@ -226,14 +226,8 @@ public class ArticleController {
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
         Long userId = CurrentUserUtil.requireUserId(currentUser);
         Article article = articleCommandConverter.toEntity(command);
-        try {
-            Article updated = articleService.updateArticle(id, article, userId);
-            return Result.success("更新成功", articleViewConverter.toDetailVO(updated));
-        } catch (ForbiddenException | UnauthorizedException e) {
-            throw e;
-        } catch (RuntimeException e) {
-            return Result.error(ApiErrorCode.BAD_REQUEST, e.getMessage());
-        }
+        Article updated = articleService.updateArticle(id, article, userId);
+        return Result.success("更新成功", articleViewConverter.toDetailVO(updated));
     }
 
     @Operation(summary = "删除文章", description = "逻辑删除，需要登录")
@@ -243,14 +237,8 @@ public class ArticleController {
             @PathVariable Long id,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
         Long userId = CurrentUserUtil.requireUserId(currentUser);
-        try {
-            articleService.deleteArticle(id, userId);
-            return Result.success("删除成功");
-        } catch (ForbiddenException | UnauthorizedException e) {
-            throw e;
-        } catch (RuntimeException e) {
-            return Result.error(ApiErrorCode.BAD_REQUEST, e.getMessage());
-        }
+        articleService.deleteArticle(id, userId);
+        return Result.success("删除成功");
     }
 
     private <T> PageResult<T> toPageResult(Page<?> page, List<T> records) {

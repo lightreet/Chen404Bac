@@ -6,6 +6,7 @@ import com.chen404.annotation.RequireAdmin;
 import com.chen404.domain.entity.User;
 import com.chen404.filter.JwtAuthenticationFilter;
 import com.chen404.security.AuthenticatedUser;
+import com.chen404.service.AuthSessionService;
 import com.chen404.service.UserService;
 import com.chen404.util.CurrentUserUtil;
 import com.chen404.util.JwtUtil;
@@ -55,6 +56,9 @@ class SecurityConfigTest {
 
     @MockBean
     private UserService userService;
+
+    @MockBean
+    private AuthSessionService authSessionService;
 
     @Test
     void shouldAllowPublicArticleListWithoutToken() throws Exception {
@@ -134,6 +138,19 @@ class SecurityConfigTest {
     }
 
     @Test
+    void shouldAllowEmailApprovalRedirectWithoutToken() throws Exception {
+        mockMvc.perform(get("/trust-requests/email-approve"))
+                .andExpect(status().isOk())
+                .andExpect(content().string("confirmation"));
+    }
+
+    @Test
+    void shouldRejectEmailApprovalMutationWithoutAdminToken() throws Exception {
+        mockMvc.perform(post("/admin/trust-requests/email-approve"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void shouldAllowProtectedRequestWithValidToken() throws Exception {
         stubValidToken("user");
 
@@ -164,7 +181,7 @@ class SecurityConfigTest {
 
     @Test
     void shouldIgnoreInvalidTokenOnPublicRequest() throws Exception {
-        when(jwtUtil.verifyToken(anyString())).thenThrow(new JWTVerificationException("invalid"));
+        when(jwtUtil.verifyAccessToken(anyString())).thenThrow(new JWTVerificationException("invalid"));
 
         mockMvc.perform(get("/articles")
                         .header("Authorization", "Bearer broken-token"))
@@ -189,8 +206,10 @@ class SecurityConfigTest {
     }
 
     private void stubValidToken(String roleCode) {
-        when(jwtUtil.verifyToken(VALID_TOKEN)).thenReturn(Mockito.mock(DecodedJWT.class));
-        when(jwtUtil.getUserIdFromToken(VALID_TOKEN)).thenReturn(TEST_USER_ID);
+        DecodedJWT decodedJWT = Mockito.mock(DecodedJWT.class);
+        when(jwtUtil.verifyAccessToken(VALID_TOKEN)).thenReturn(decodedJWT);
+        when(jwtUtil.getUserId(decodedJWT)).thenReturn(TEST_USER_ID);
+        when(authSessionService.isCurrent(TEST_USER_ID, decodedJWT)).thenReturn(true);
 
         User user = new User();
         user.setId(TEST_USER_ID);
@@ -246,6 +265,18 @@ class SecurityConfigTest {
         @RequireAdmin
         @GetMapping("/admin/ping")
         public ResponseEntity<String> adminPing(@AuthenticationPrincipal AuthenticatedUser currentUser) {
+            return ResponseEntity.ok(String.valueOf(CurrentUserUtil.requireUserId(currentUser)));
+        }
+
+        @GetMapping("/trust-requests/email-approve")
+        public ResponseEntity<String> emailApprovalConfirmation() {
+            return ResponseEntity.ok("confirmation");
+        }
+
+        @RequireAdmin
+        @PostMapping("/admin/trust-requests/email-approve")
+        public ResponseEntity<String> emailApprovalMutation(
+                @AuthenticationPrincipal AuthenticatedUser currentUser) {
             return ResponseEntity.ok(String.valueOf(CurrentUserUtil.requireUserId(currentUser)));
         }
 

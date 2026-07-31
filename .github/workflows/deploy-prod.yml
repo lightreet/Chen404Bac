@@ -25,8 +25,8 @@ jobs:
           java-version: 17
           cache: maven
 
-      - name: Build jar
-        run: mvn clean package -DskipTests
+      - name: Verify and build jar
+        run: mvn -B clean verify
 
       - name: Prepare SSH
         shell: bash

@@ -1,10 +1,10 @@
 package com.chen404.controller;
 
 import com.chen404.converter.TagConverter;
-import com.chen404.domain.ApiErrorCode;
 import com.chen404.domain.Result;
 import com.chen404.domain.dto.TagVO;
 import com.chen404.domain.entity.Tag;
+import com.chen404.exception.ResourceNotFoundException;
 import com.chen404.service.TagService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -55,7 +55,7 @@ public class TagController {
             @Parameter(description = "标签 ID 或 slug", required = true) @PathVariable String idOrSlug) {
         Tag tag = tagService.getTagByIdOrSlug(idOrSlug);
         if (tag == null) {
-            return Result.error(ApiErrorCode.NOT_FOUND, "标签不存在");
+            throw new ResourceNotFoundException("标签不存在");
         }
         return Result.success(tagConverter.toVO(tag));
     }

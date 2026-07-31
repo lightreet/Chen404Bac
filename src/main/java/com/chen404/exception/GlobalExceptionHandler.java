@@ -26,8 +26,8 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<Result<String>> handleApiException(ApiException e) {
-        log.warn("[API_ERROR] status={} code={} message={}",
-                e.getHttpStatus().value(), e.getCode(), e.getMessage());
+        log.warn("[API_ERROR] status={} code={} exception={}",
+                e.getHttpStatus().value(), e.getCode(), e.getClass().getSimpleName());
         return ResponseEntity.status(e.getHttpStatus())
                 .body(Result.error(e.getCode(), e.getMessage()));
     }
@@ -59,9 +59,19 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Result<String>> handleHttpMessageNotReadableException(HttpMessageNotReadableException e) {
-        log.warn("请求体解析失败", e);
+        log.warn("[REQUEST_BODY_PARSE_FAIL] exception={}", e.getClass().getSimpleName());
         return ResponseEntity.badRequest()
                 .body(Result.error(ApiErrorCode.BAD_REQUEST, "请求参数格式错误"));
+    }
+
+    /**
+     * 处理服务边界仍使用的参数异常，避免把明确的客户端输入错误升级成 500。
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Result<String>> handleIllegalArgumentException(IllegalArgumentException e) {
+        log.warn("[API_BAD_REQUEST] exception={}", e.getClass().getSimpleName());
+        return ResponseEntity.badRequest()
+                .body(Result.error(ApiErrorCode.BAD_REQUEST, e.getMessage()));
     }
 
     /**

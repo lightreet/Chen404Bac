@@ -79,8 +79,9 @@ public class EmailServiceImpl implements EmailService {
 
             mailSender.send(message);
         } catch (MessagingException e) {
-            log.error("发送HTML邮件失败: toEmail={}", toEmail, e);
-            throw new RuntimeException("邮件发送失败");
+            log.error("[MAIL_SEND_FAIL] channel=email subjectPresent={}",
+                    subject != null && !subject.isBlank(), e);
+            throw new IllegalStateException("邮件发送失败", e);
         }
     }
 

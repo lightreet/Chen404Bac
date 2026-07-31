@@ -110,7 +110,8 @@ public class MaidChatScenarioDefinition implements AiScenarioDefinition<MaidChat
                     normalizeSuggestions(payload.getJSONArray(OUTPUT_FIELD_SUGGESTIONS), request.scene(), request.currentArticle(), request.aiConfig())
             );
         } catch (RuntimeException ex) {
-            log.warn("[AI_CHAT_PARSE_FAIL] scene={} body={}", request.scene(), outputText, ex);
+            log.warn("[AI_CHAT_PARSE_FAIL] scene={} outputLength={}",
+                    request.scene(), outputText == null ? 0 : outputText.length(), ex);
             return buildFallbackResult(request);
         }
     }

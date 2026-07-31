@@ -16,6 +16,10 @@ import com.chen404.domain.event.AdminContentEvent;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.entity.User;
 import com.chen404.domain.entity.UserTrustRequest;
+import com.chen404.exception.BadRequestException;
+import com.chen404.exception.ConflictException;
+import com.chen404.exception.ResourceNotFoundException;
+import com.chen404.exception.UnauthorizedException;
 import com.chen404.mapper.UserTrustRequestMapper;
 import com.chen404.service.EmailService;
 import com.chen404.service.AdminContentEventPublisher;
@@ -64,7 +68,6 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
     private static final String ATTACHMENT_ITEM_TEMPLATE = "mail/fragment/trust-attachment-item.html";
     private static final String AVATAR_IMAGE_TEMPLATE = "mail/fragment/trust-avatar-image.html";
     private static final String AVATAR_INITIAL_TEMPLATE = "mail/fragment/trust-avatar-initial.html";
-    private static final String REVIEW_RESULT_PAGE_TEMPLATE = "mail/fragment/trust-review-result-page.html";
     private static final String APPROVED_BY_MAIL_REVIEW_NOTE = "已通过邮件快速审批";
     private static final String DEFAULT_APPROVED_REVIEW_NOTE = "审核通过";
     private static final String DEFAULT_EMPTY_ATTACHMENT_HTML = "<p style=\"color: #6b7280;\">未上传附件</p>";
@@ -116,18 +119,18 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
     @Transactional(rollbackFor = Exception.class)
     public TrustRequestVO createRequest(Long userId, CreateTrustRequestDTO dto) {
         if (userId == null) {
-            throw new RuntimeException("请先登录后再申请");
+            throw new UnauthorizedException("请先登录后再申请");
         }
 
         User currentUser = userService.getCurrentUser(userId);
         if (currentUser == null) {
-            throw new RuntimeException("用户不存在");
+            throw new ResourceNotFoundException("用户不存在");
         }
         if (UserRoleEnum.ADMIN.matchesRoleCode(currentUser.getRoleCode())) {
-            throw new RuntimeException("管理员无需提交好友申请");
+            throw new BadRequestException("管理员无需提交好友申请");
         }
         if (Objects.equals(currentUser.getTrustLevel(), UserTrustLevelEnum.FRIEND.getLevel())) {
-            throw new RuntimeException("你已经是知友了");
+            throw new ConflictException("你已经是知友了");
         }
 
         String reason = normalizeReason(dto == null ? null : dto.getReason());
@@ -138,7 +141,7 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
                 .eq(UserTrustRequest::getStatus, UserTrustRequest.Status.PENDING)
                 .count() > 0;
         if (hasPending) {
-            throw new RuntimeException("你已经有一条待处理申请，请等待管理员审核");
+            throw new ConflictException("你已经有一条待处理申请，请等待管理员审核");
         }
 
         String approveToken = UUID.randomUUID().toString().replace("-", "")
@@ -272,20 +275,34 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
     public TrustRequestVO rejectRequest(Long requestId, Long adminId, String reviewNote) {
         UserTrustRequest request = requireRequest(requestId);
         if (!Objects.equals(request.getStatus(), UserTrustRequest.Status.PENDING)) {
-            throw new RuntimeException("该申请已处理，不能重复拒绝");
+            throw new ConflictException("该申请已处理，不能重复拒绝");
         }
 
         String note = normalizeReviewNote(reviewNote);
         if (!StringUtils.hasText(note)) {
-            throw new RuntimeException("拒绝申请时请填写审核说明");
+            throw new BadRequestException("拒绝申请时请填写审核说明");
         }
 
+        LocalDateTime reviewedAt = LocalDateTime.now();
+        boolean updated = lambdaUpdate()
+                .eq(UserTrustRequest::getId, request.getId())
+                .eq(UserTrustRequest::getStatus, UserTrustRequest.Status.PENDING)
+                .set(UserTrustRequest::getStatus, UserTrustRequest.Status.REJECTED)
+                .set(UserTrustRequest::getReviewNote, note)
+                .set(UserTrustRequest::getReviewedBy, adminId)
+                .set(UserTrustRequest::getReviewedAt, reviewedAt)
+                .set(UserTrustRequest::getApproveTokenUsedAt, reviewedAt)
+                .update();
+        if (!updated) {
+            throw new ConflictException("该申请已被其他审核操作处理");
+        }
         request.setStatus(UserTrustRequest.Status.REJECTED);
         request.setReviewNote(note);
         request.setReviewedBy(adminId);
-        request.setReviewedAt(LocalDateTime.now());
-        request.setApproveTokenUsedAt(LocalDateTime.now());
-        updateById(request);
+        request.setReviewedAt(reviewedAt);
+        request.setApproveTokenUsedAt(reviewedAt);
+        log.info("[TRUST_REQUEST_REJECT] adminId={} requestId={} applicantUserId={}",
+                adminId, request.getId(), request.getUserId());
 
         User applicant = userService.getById(request.getUserId());
         try {
@@ -302,9 +319,9 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public String approveByEmailToken(String token) {
+    public TrustRequestVO approveByEmailToken(String token, Long adminId) {
         if (!StringUtils.hasText(token)) {
-            return buildResultHtml("链接无效", "这个审批链接缺少参数，无法完成审核。", false);
+            throw new BadRequestException("邮件审批链接缺少 token");
         }
 
         UserTrustRequest request = lambdaQuery()
@@ -312,32 +329,55 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
                 .last("limit 1")
                 .one();
         if (request == null) {
-            return buildResultHtml("链接已失效", "没有找到对应的申请记录，可能已经处理或链接已过期。", false);
+            throw new BadRequestException("邮件审批链接无效或已过期");
         }
         if (!Objects.equals(request.getStatus(), UserTrustRequest.Status.PENDING)) {
-            return buildResultHtml("申请已处理", "这条申请已经审核完成，不需要再次操作。", true);
+            throw new ConflictException("该申请已经审核完成，不能重复操作");
         }
         if (request.getApproveTokenExpireAt() != null && request.getApproveTokenExpireAt().isBefore(LocalDateTime.now())) {
-            return buildResultHtml("链接已过期", "这条邮件审批链接已经过期，请改为在后台管理页面处理。", false);
+            throw new BadRequestException("邮件审批链接已过期，请在后台列表中处理");
         }
 
-        approveRequestInternal(request, null, APPROVED_BY_MAIL_REVIEW_NOTE);
-        return buildResultHtml("审批成功", "该用户已被设置为知友，后台列表也会同步更新。", true);
+        UserTrustRequest approved = approveRequestInternal(request, adminId, APPROVED_BY_MAIL_REVIEW_NOTE);
+        Map<Long, User> users = loadUsers(Set.of(approved.getUserId()));
+        Map<Long, User> reviewers = loadUsers(optionalIdSet(approved.getReviewedBy()));
+        Map<Long, List<SysFile>> attachments = loadAttachmentMap(Set.of(approved.getId()));
+        return buildTrustRequestVO(approved, users, reviewers, attachments);
     }
 
     private UserTrustRequest approveRequestInternal(UserTrustRequest request, Long adminId, String reviewNote) {
+        if (adminId == null) {
+            throw new UnauthorizedException("邮件审批需要管理员登录");
+        }
         if (!Objects.equals(request.getStatus(), UserTrustRequest.Status.PENDING)) {
-            throw new RuntimeException("该申请已处理，不能重复通过");
+            throw new ConflictException("该申请已处理，不能重复通过");
         }
 
+        String normalizedReviewNote = StringUtils.hasText(reviewNote)
+                ? reviewNote.trim()
+                : DEFAULT_APPROVED_REVIEW_NOTE;
+        LocalDateTime reviewedAt = LocalDateTime.now();
+        boolean updated = lambdaUpdate()
+                .eq(UserTrustRequest::getId, request.getId())
+                .eq(UserTrustRequest::getStatus, UserTrustRequest.Status.PENDING)
+                .set(UserTrustRequest::getStatus, UserTrustRequest.Status.APPROVED)
+                .set(UserTrustRequest::getReviewNote, normalizedReviewNote)
+                .set(UserTrustRequest::getReviewedBy, adminId)
+                .set(UserTrustRequest::getReviewedAt, reviewedAt)
+                .set(UserTrustRequest::getApproveTokenUsedAt, reviewedAt)
+                .update();
+        if (!updated) {
+            throw new ConflictException("该申请已被其他审核操作处理");
+        }
         request.setStatus(UserTrustRequest.Status.APPROVED);
-        request.setReviewNote(StringUtils.hasText(reviewNote) ? reviewNote.trim() : DEFAULT_APPROVED_REVIEW_NOTE);
+        request.setReviewNote(normalizedReviewNote);
         request.setReviewedBy(adminId);
-        request.setReviewedAt(LocalDateTime.now());
-        request.setApproveTokenUsedAt(LocalDateTime.now());
-        updateById(request);
+        request.setReviewedAt(reviewedAt);
+        request.setApproveTokenUsedAt(reviewedAt);
 
         userService.updateTrustLevel(request.getUserId(), UserTrustLevelEnum.FRIEND.getLevel());
+        log.info("[TRUST_REQUEST_APPROVE] adminId={} requestId={} applicantUserId={}",
+                adminId, request.getId(), request.getUserId());
 
         User applicant = userService.getById(request.getUserId());
         try {
@@ -351,12 +391,12 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
 
     private UserTrustRequest requireRequest(Long requestId) {
         if (requestId == null) {
-            throw new RuntimeException("申请 ID 不能为空");
+            throw new BadRequestException("申请 ID 不能为空");
         }
 
         UserTrustRequest request = getById(requestId);
         if (request == null) {
-            throw new RuntimeException("申请记录不存在");
+            throw new ResourceNotFoundException("申请记录不存在");
         }
         return request;
     }
@@ -364,10 +404,10 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
     private String normalizeReason(String reason) {
         String normalized = reason == null ? "" : reason.trim();
         if (!StringUtils.hasText(normalized)) {
-            throw new RuntimeException("请填写申请理由");
+            throw new BadRequestException("请填写申请理由");
         }
         if (normalized.length() > MAX_REASON_LENGTH) {
-            throw new RuntimeException("申请理由不能超过 " + MAX_REASON_LENGTH + " 个字");
+            throw new BadRequestException("申请理由不能超过 " + MAX_REASON_LENGTH + " 个字");
         }
         return normalized;
     }
@@ -385,19 +425,19 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
                 .toList();
 
         if (normalized.size() > MAX_ATTACHMENT_COUNT) {
-            throw new RuntimeException("最多只能上传 " + MAX_ATTACHMENT_COUNT + " 个附件");
+            throw new BadRequestException("最多只能上传 " + MAX_ATTACHMENT_COUNT + " 个附件");
         }
 
         for (String fileUrl : normalized) {
             SysFile file = sysFileService.findByFileUrl(fileUrl);
             if (file == null) {
-                throw new RuntimeException("存在无效附件，请重新上传");
+                throw new BadRequestException("存在无效附件，请重新上传");
             }
             if (!Objects.equals(file.getUserId(), userId)) {
-                throw new RuntimeException("只能提交你自己上传的附件");
+                throw new BadRequestException("只能提交你自己上传的附件");
             }
             if (!SysFile.RefType.TRUST_REQUEST_ATTACHMENT.equals(file.getRefType())) {
-                throw new RuntimeException("附件类型不合法，请重新上传");
+                throw new BadRequestException("附件类型不合法，请重新上传");
             }
         }
 
@@ -670,20 +710,6 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
     private String extractInitial(String value) {
         String text = StringUtils.hasText(value) ? value.trim() : "C";
         return text.substring(0, 1).toUpperCase();
-    }
-
-    /**
-     * 邮件审批链接点击后返回的浏览器结果页；页面骨架在模板中维护，Java 只负责变量组装。
-     */
-    private String buildResultHtml(String title, String message, boolean success) {
-        Map<String, String> brandVariables = mailTemplateSupport.buildBrandVariables();
-        Map<String, String> variables = new LinkedHashMap<>(brandVariables);
-        variables.put("pageTitle", mailTemplateSupport.safeAttribute(title));
-        variables.put("badgeColor", success ? "#16a34a" : "#dc2626");
-        variables.put("badgeText", success ? "Success" : "Failed");
-        variables.put("resultTitle", mailTemplateSupport.safeText(title));
-        variables.put("resultMessage", mailTemplateSupport.safeText(message));
-        return mailTemplateSupport.render(REVIEW_RESULT_PAGE_TEMPLATE, variables);
     }
 
     private String joinUrl(String baseUrl, String path) {

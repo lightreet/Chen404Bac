@@ -3,12 +3,12 @@ package com.chen404.controller;
 import com.chen404.annotation.RequireAdmin;
 import com.chen404.config.SiteRuntimeProperties;
 import com.chen404.config.UploadTaskConfig;
-import com.chen404.domain.ApiErrorCode;
 import com.chen404.domain.Result;
 import com.chen404.domain.dto.MultiFileUploadDTO;
 import com.chen404.domain.dto.SingleFileUploadDTO;
 import com.chen404.domain.dto.UploadFileVO;
 import com.chen404.domain.entity.SysFile;
+import com.chen404.exception.BadRequestException;
 import com.chen404.exception.ForbiddenException;
 import com.chen404.exception.UnauthorizedException;
 import com.chen404.security.AuthenticatedUser;
@@ -139,10 +139,7 @@ public class UploadController {
         Long userId = CurrentUserUtil.requireUserId(currentUser);
         ensureArticleCreator(userId);
         MultipartFile file = form.getFile();
-        Result<UploadFileVO> validateResult = validateImage(file, resolveImageMaxSize(), resolveAllowedImageTypes());
-        if (validateResult != null) {
-            return validateResult;
-        }
+        validateImage(file, resolveImageMaxSize(), resolveAllowedImageTypes());
 
         return executeUpload(file, userId, SysFile.RefType.ARTICLE_CONTENT, "ARTICLE_IMAGE_UPLOAD");
     }
@@ -158,10 +155,10 @@ public class UploadController {
         MultipartFile[] files = form.getFiles();
 
         if (files == null || files.length == 0) {
-            return Result.error(ApiErrorCode.BAD_REQUEST, "请选择要上传的文件");
+            throw new BadRequestException("请选择要上传的文件");
         }
         if (files.length > MAX_BATCH_IMAGE_COUNT) {
-            return Result.error(ApiErrorCode.BAD_REQUEST, "一次最多上传 " + MAX_BATCH_IMAGE_COUNT + " 张图片");
+            throw new BadRequestException("一次最多上传 " + MAX_BATCH_IMAGE_COUNT + " 张图片");
         }
         long maxSize = resolveImageMaxSize();
         Set<String> allowedTypes = resolveAllowedImageTypes();
@@ -184,13 +181,13 @@ public class UploadController {
                     errors.add(files[i].getOriginalFilename() + ": " + result.getName());
                 }
             } catch (Exception e) {
-                log.error("批量上传等待结果失败，文件名: {}", files[i].getOriginalFilename(), e);
+                log.error("[ARTICLE_IMAGE_BATCH_WAIT_FAIL] userId={} fileIndex={}", userId, i, e);
                 errors.add(files[i].getOriginalFilename() + ": 上传失败");
             }
         }
 
         if (results.isEmpty()) {
-            return Result.error(ApiErrorCode.INTERNAL_SERVER_ERROR, "所有文件上传失败: " + String.join(", ", errors));
+            throw new IllegalStateException("所有文件上传失败: " + String.join(", ", errors));
         }
 
         String message = "上传成功 " + results.size() + " 张";
@@ -210,10 +207,7 @@ public class UploadController {
         Long userId = CurrentUserUtil.requireUserId(currentUser);
         ensureArticleCreator(userId);
         MultipartFile file = form.getFile();
-        Result<UploadFileVO> validateResult = validateImage(file, resolveImageMaxSize(), resolveAllowedImageTypes());
-        if (validateResult != null) {
-            return validateResult;
-        }
+        validateImage(file, resolveImageMaxSize(), resolveAllowedImageTypes());
 
         return executeUpload(file, userId, SysFile.RefType.ARTICLE_COVER, "ARTICLE_COVER_UPLOAD");
     }
@@ -247,10 +241,7 @@ public class UploadController {
         Long userId = CurrentUserUtil.requireUserId(currentUser);
         ensureMusicCreator(userId);
         MultipartFile file = form.getFile();
-        Result<UploadFileVO> validateResult = validateMusicAudioFile(file);
-        if (validateResult != null) {
-            return validateResult;
-        }
+        validateMusicAudioFile(file);
 
         return executeUpload(file, userId, SysFile.RefType.MUSIC_AUDIO, "MUSIC_AUDIO_UPLOAD");
     }
@@ -264,10 +255,7 @@ public class UploadController {
         Long userId = CurrentUserUtil.requireUserId(currentUser);
         ensureMusicCreator(userId);
         MultipartFile file = form.getFile();
-        Result<UploadFileVO> validateResult = validateImage(file, MAX_COVER_SIZE, resolveAllowedImageTypes());
-        if (validateResult != null) {
-            return validateResult;
-        }
+        validateImage(file, MAX_COVER_SIZE, resolveAllowedImageTypes());
 
         return executeUpload(file, userId, SysFile.RefType.MUSIC_COVER, "MUSIC_COVER_UPLOAD");
     }
@@ -280,10 +268,7 @@ public class UploadController {
 
         Long userId = CurrentUserUtil.requireUserId(currentUser);
         MultipartFile file = form.getFile();
-        Result<UploadFileVO> validateResult = validateImage(file, MAX_COVER_SIZE, resolveAllowedImageTypes());
-        if (validateResult != null) {
-            return validateResult;
-        }
+        validateImage(file, MAX_COVER_SIZE, resolveAllowedImageTypes());
         return executeUpload(file, userId, SysFile.RefType.NOVEL_COVER, "NOVEL_COVER_UPLOAD");
     }
 
@@ -295,10 +280,7 @@ public class UploadController {
 
         Long userId = CurrentUserUtil.requireUserId(currentUser);
         MultipartFile file = form.getFile();
-        Result<UploadFileVO> validateResult = validateImage(file, resolveImageMaxSize(), resolveAllowedImageTypes());
-        if (validateResult != null) {
-            return validateResult;
-        }
+        validateImage(file, resolveImageMaxSize(), resolveAllowedImageTypes());
 
         return executeUpload(file, userId, SysFile.RefType.AVATAR, "AVATAR_UPLOAD");
     }
@@ -311,15 +293,12 @@ public class UploadController {
 
         Long userId = CurrentUserUtil.requireUserId(currentUser);
         MultipartFile file = form.getFile();
-        Result<UploadFileVO> validateResult = validateFile(
+        validateFile(
                 file,
                 MAX_TRUST_ATTACHMENT_SIZE,
                 ALLOWED_TRUST_ATTACHMENT_TYPES,
                 "仅允许上传图片、PDF、TXT、Word 或压缩包文件"
         );
-        if (validateResult != null) {
-            return validateResult;
-        }
 
         return executeUpload(file, userId, SysFile.RefType.TRUST_REQUEST_ATTACHMENT, "TRUST_ATTACHMENT_UPLOAD");
     }
@@ -333,10 +312,7 @@ public class UploadController {
         Long userId = CurrentUserUtil.requireUserId(currentUser);
         ensureTravelCreator(userId);
         MultipartFile file = form.getFile();
-        Result<UploadFileVO> validateResult = validateImage(file, resolveImageMaxSize(), resolveAllowedImageTypes());
-        if (validateResult != null) {
-            return validateResult;
-        }
+        validateImage(file, resolveImageMaxSize(), resolveAllowedImageTypes());
 
         try {
             TravelMemoryImageMetadataService.TravelMemoryImageMetadata metadata =
@@ -346,14 +322,13 @@ public class UploadController {
             data.setLatitude(metadata.latitude());
             data.setLongitude(metadata.longitude());
             data.setShotAt(metadata.shotAt());
-            log.info("[TRAVEL_MEMORY_IMAGE_UPLOAD] userId={} url={} hasLatLng={} hasShotAt={}",
-                    userId, sysFile.getFileUrl(), metadata.latitude() != null && metadata.longitude() != null,
+            log.info("[TRAVEL_MEMORY_IMAGE_UPLOAD] userId={} fileId={} hasLatLng={} hasShotAt={}",
+                    userId, sysFile.getId(), metadata.latitude() != null && metadata.longitude() != null,
                     metadata.shotAt() != null);
             return Result.success("上传成功", data);
         } catch (Exception e) {
-            log.error("[TRAVEL_MEMORY_IMAGE_UPLOAD_FAIL] userId={} fileName={} message={}",
-                    userId, file == null ? null : file.getOriginalFilename(), e.getMessage(), e);
-            return Result.error(ApiErrorCode.INTERNAL_SERVER_ERROR, MSG_UPLOAD_RETRY);
+            log.error("[TRAVEL_MEMORY_IMAGE_UPLOAD_FAIL] userId={}", userId, e);
+            throw new IllegalStateException(MSG_UPLOAD_RETRY, e);
         }
     }
 
@@ -385,14 +360,11 @@ public class UploadController {
             String eventLabel) {
         Long userId = CurrentUserUtil.requireUserId(currentUser);
         MultipartFile file = form.getFile();
-        Result<UploadFileVO> validateResult = validateImage(
+        validateImage(
                 file,
                 resolveImageMaxSize(),
                 resolveAllowedImageTypes()
         );
-        if (validateResult != null) {
-            return validateResult;
-        }
         return executeUpload(file, userId, refType, eventLabel);
     }
 
@@ -407,15 +379,15 @@ public class UploadController {
         try {
             boolean success = sysFileService.deleteByUrl(url, userId);
             if (success) {
-                log.info("用户 {} 删除文件成功: {}", userId, url);
+                log.info("[FILE_DELETE_OK] userId={}", userId);
                 return Result.success("删除成功");
             }
-            return Result.error(ApiErrorCode.INTERNAL_SERVER_ERROR, "删除失败");
+            throw new IllegalStateException("删除失败");
         } catch (ForbiddenException | UnauthorizedException e) {
             throw e;
         } catch (Exception e) {
             log.error("删除文件失败", e);
-            return Result.error(ApiErrorCode.INTERNAL_SERVER_ERROR, "删除失败，请稍后重试");
+            throw new IllegalStateException("删除失败，请稍后重试", e);
         }
     }
 
@@ -430,31 +402,32 @@ public class UploadController {
             String eventLabel) {
         try {
             SysFile sysFile = sysFileService.uploadTempFile(file, userId, refType);
-            log.info("[{}_OK] userId={} url={}", eventLabel, userId, sysFile.getFileUrl());
+            log.info("[{}_OK] userId={} fileId={}", eventLabel, userId, sysFile.getId());
             return Result.success(MSG_UPLOAD_SUCCESS, buildUploadData(sysFile));
         } catch (Exception e) {
-            log.error("[{}_FAIL] userId={} fileName={}", eventLabel, userId, file.getOriginalFilename(), e);
-            return Result.error(ApiErrorCode.INTERNAL_SERVER_ERROR, MSG_UPLOAD_RETRY);
+            log.error("[{}_FAIL] userId={}", eventLabel, userId, e);
+            throw new IllegalStateException(MSG_UPLOAD_RETRY, e);
         }
     }
 
     private UploadFileVO uploadSingleImage(MultipartFile file, Long userId, long maxSize, Set<String> allowedTypes) {
-        Result<UploadFileVO> validateResult = validateImage(file, maxSize, allowedTypes);
-        if (validateResult != null) {
-            return buildErrorUploadResult(validateResult.getMessage());
+        try {
+            validateImage(file, maxSize, allowedTypes);
+        } catch (BadRequestException e) {
+            return buildErrorUploadResult(e.getMessage());
         }
 
         try {
             SysFile sysFile = sysFileService.uploadTempFile(file, userId, SysFile.RefType.ARTICLE_CONTENT);
             return buildUploadData(sysFile);
         } catch (Exception e) {
-            log.error("批量上传单文件失败，用户: {}, 文件名: {}", userId, file.getOriginalFilename(), e);
+            log.error("[ARTICLE_IMAGE_BATCH_ITEM_FAIL] userId={}", userId, e);
             return buildErrorUploadResult("上传失败");
         }
     }
 
-    private Result<UploadFileVO> validateImage(MultipartFile file, long maxSize, Set<String> allowedTypes) {
-        return validateFile(
+    private void validateImage(MultipartFile file, long maxSize, Set<String> allowedTypes) {
+        validateFile(
                 file,
                 maxSize,
                 allowedTypes,
@@ -478,48 +451,40 @@ public class UploadController {
         return resolved.isEmpty() ? ALLOWED_IMAGE_TYPES : resolved;
     }
 
-    private Result<UploadFileVO> validateFile(
+    private void validateFile(
             MultipartFile file,
             long maxSize,
             Set<String> allowedContentTypes,
             String invalidTypeMessage) {
-        Result<UploadFileVO> basicResult = validateFileBasics(file, maxSize);
-        if (basicResult != null) {
-            return basicResult;
-        }
+        validateFileBasics(file, maxSize);
 
         String contentType = file.getContentType();
-        if (contentType == null || !allowedContentTypes.contains(contentType.toLowerCase())) {
-            return Result.error(ApiErrorCode.BAD_REQUEST, invalidTypeMessage);
+        if (contentType == null || !allowedContentTypes.contains(contentType.toLowerCase(Locale.ROOT))) {
+            throw new BadRequestException(invalidTypeMessage);
         }
-        return null;
     }
 
     /**
      * 音频上传既兼容标准 MIME，也兼容部分浏览器只带扩展名或上报变体 MIME 的情况。
      */
-    private Result<UploadFileVO> validateMusicAudioFile(MultipartFile file) {
-        Result<UploadFileVO> basicResult = validateFileBasics(file, MAX_AUDIO_SIZE);
-        if (basicResult != null) {
-            return basicResult;
-        }
+    private void validateMusicAudioFile(MultipartFile file) {
+        validateFileBasics(file, MAX_AUDIO_SIZE);
         if (hasAllowedContentType(file, ALLOWED_AUDIO_TYPES) || hasAllowedExtension(file, ALLOWED_AUDIO_EXTENSIONS)) {
-            return null;
+            return;
         }
-        return Result.error(ApiErrorCode.BAD_REQUEST, "仅允许上传 mp3、wav、flac、ogg、aac 或 m4a 音频文件");
+        throw new BadRequestException("仅允许上传 mp3、wav、flac、ogg、aac 或 m4a 音频文件");
     }
 
     /**
-     * 空文件与大小上限是所有上传共享的基础校验；通过时返回 null。
+     * 空文件与大小上限是所有上传共享的基础校验。
      */
-    private Result<UploadFileVO> validateFileBasics(MultipartFile file, long maxSize) {
+    private void validateFileBasics(MultipartFile file, long maxSize) {
         if (file == null || file.isEmpty()) {
-            return Result.error(ApiErrorCode.BAD_REQUEST, MSG_FILE_EMPTY);
+            throw new BadRequestException(MSG_FILE_EMPTY);
         }
         if (file.getSize() > maxSize) {
-            return Result.error(ApiErrorCode.BAD_REQUEST, "文件大小不能超过 " + (maxSize / 1024 / 1024) + "MB");
+            throw new BadRequestException("文件大小不能超过 " + (maxSize / 1024 / 1024) + "MB");
         }
-        return null;
     }
 
     private boolean hasAllowedContentType(MultipartFile file, Set<String> allowedContentTypes) {
