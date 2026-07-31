@@ -219,20 +219,23 @@ public class UploadController {
     }
 
     @RequireAdmin
-    @Operation(summary = "上传站点资源图片", description = "站点配置中的 Logo、Favicon 与页面封面图片上传，保持原图不压缩")
+    @Operation(summary = "上传站点资源图片", description = "站点配置中的 Logo 与 Favicon 图片上传，保持原图不压缩")
     @PostMapping(value = "/site-asset", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Result<UploadFileVO> uploadSiteAsset(
             @ModelAttribute SingleFileUploadDTO form,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
 
-        Long userId = CurrentUserUtil.requireUserId(currentUser);
-        MultipartFile file = form.getFile();
-        Result<UploadFileVO> validateResult = validateImage(file, resolveImageMaxSize(), resolveAllowedImageTypes());
-        if (validateResult != null) {
-            return validateResult;
-        }
+        return uploadSiteImage(form, currentUser, SysFile.RefType.SITE_ASSET, "SITE_ASSET_UPLOAD");
+    }
 
-        return executeUpload(file, userId, SysFile.RefType.SITE_ASSET, "SITE_ASSET_UPLOAD");
+    @RequireAdmin
+    @Operation(summary = "上传页面封面", description = "站点页面 Hero 封面上传，保持原图不压缩")
+    @PostMapping(value = "/site-hero", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Result<UploadFileVO> uploadSiteHero(
+            @ModelAttribute SingleFileUploadDTO form,
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+
+        return uploadSiteImage(form, currentUser, SysFile.RefType.SITE_HERO, "SITE_HERO_UPLOAD");
     }
 
     @Operation(summary = "上传音乐音频", description = "知友或管理员上传音乐馆歌曲音频")
@@ -370,6 +373,27 @@ public class UploadController {
         if (!accessService.canCreateMusicTrack(userId)) {
             throw new ForbiddenException("仅知友或管理员可上传音乐资源");
         }
+    }
+
+    /**
+     * 站点品牌资源与页面封面共用图片校验，但必须在上传时登记各自的业务类型。
+     */
+    private Result<UploadFileVO> uploadSiteImage(
+            SingleFileUploadDTO form,
+            AuthenticatedUser currentUser,
+            String refType,
+            String eventLabel) {
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
+        MultipartFile file = form.getFile();
+        Result<UploadFileVO> validateResult = validateImage(
+                file,
+                resolveImageMaxSize(),
+                resolveAllowedImageTypes()
+        );
+        if (validateResult != null) {
+            return validateResult;
+        }
+        return executeUpload(file, userId, refType, eventLabel);
     }
 
     @Operation(summary = "删除文件", description = "根据文件 URL 删除已上传文件")
