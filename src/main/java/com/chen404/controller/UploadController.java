@@ -260,13 +260,14 @@ public class UploadController {
         return executeUpload(file, userId, SysFile.RefType.MUSIC_COVER, "MUSIC_COVER_UPLOAD");
     }
 
-    @Operation(summary = "上传小说封面", description = "登录用户上传书架小说的自定义封面")
+    @Operation(summary = "上传小说封面", description = "知友或管理员上传书架小说的自定义封面")
     @PostMapping(value = "/novel-cover", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Result<UploadFileVO> uploadNovelCover(
             @ModelAttribute SingleFileUploadDTO form,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
 
         Long userId = CurrentUserUtil.requireUserId(currentUser);
+        ensureReaderBookImporter(userId);
         MultipartFile file = form.getFile();
         validateImage(file, MAX_COVER_SIZE, resolveAllowedImageTypes());
         return executeUpload(file, userId, SysFile.RefType.NOVEL_COVER, "NOVEL_COVER_UPLOAD");
@@ -347,6 +348,13 @@ public class UploadController {
     private void ensureMusicCreator(Long userId) {
         if (!accessService.canCreateMusicTrack(userId)) {
             throw new ForbiddenException("仅知友或管理员可上传音乐资源");
+        }
+    }
+
+    private void ensureReaderBookImporter(Long userId) {
+        if (!accessService.canImportReaderBook(userId)) {
+            log.warn("[NOVEL_COVER_UPLOAD_FORBIDDEN] userId={}", userId);
+            throw new ForbiddenException("仅知友或管理员可上传小说封面");
         }
     }
 

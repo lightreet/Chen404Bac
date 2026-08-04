@@ -70,6 +70,21 @@ class AccessServiceImplPermissionRevocationTest {
         assertFalse(accessService.canManageTravelMemory(USER_ID, location));
     }
 
+    @Test
+    void shouldAllowReaderBookImportOnlyForEnabledFriendsAndAdmins() {
+        when(support.loadUserProfile(USER_ID)).thenReturn(buildUser("user", 0, 1));
+        assertFalse(accessService.canImportReaderBook(USER_ID));
+
+        when(support.loadUserProfile(USER_ID)).thenReturn(buildUser("user", 1, 1));
+        assertTrue(accessService.canImportReaderBook(USER_ID));
+
+        when(support.loadUserProfile(USER_ID)).thenReturn(buildUser("admin", 0, 1));
+        assertTrue(accessService.canImportReaderBook(USER_ID));
+
+        when(support.loadUserProfile(USER_ID)).thenReturn(buildUser("user", 1, 0));
+        assertFalse(accessService.canImportReaderBook(USER_ID));
+    }
+
     private User buildUser(String roleCode, int trustLevel, int status) {
         User user = new User();
         user.setId(USER_ID);
