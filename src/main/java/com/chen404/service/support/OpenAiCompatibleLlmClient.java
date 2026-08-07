@@ -57,7 +57,6 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
     private static final String FIELD_DELTA = "delta";
     private static final String FIELD_STREAM = "stream";
     private static final int MIN_TIMEOUT_SECONDS = 5;
-    private static final int MAX_LOG_TEXT_LENGTH = 240;
     private static final String DEFAULT_ERROR_PREFIX = "LLM 服务调用失败：";
     private static final String EMPTY_TEXT_ERROR = "LLM 响应缺少文本内容";
     private static final String SSE_DONE_MARKER = "[DONE]";
@@ -84,7 +83,8 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
             log.info("[LLM_TEXT_REQ] model={} style={}", resolveModel(request), apiStyle);
             HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                log.warn("[LLM_TEXT_FAIL] model={} status={} body={}", resolveModel(request), response.statusCode(), response.body());
+                log.warn("[LLM_TEXT_FAIL] model={} status={} responseLength={}",
+                        resolveModel(request), response.statusCode(), response.body().length());
                 throw new IllegalStateException(DEFAULT_ERROR_PREFIX + response.statusCode());
             }
 
@@ -94,11 +94,11 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
                 outputText = retryEmptySseWithStream(request);
             }
             if (!StringUtils.hasText(outputText)) {
-                log.warn("[LLM_TEXT_EMPTY] model={} body={}", resolveModel(request), response.body());
+                log.warn("[LLM_TEXT_EMPTY] model={} responseLength={}",
+                        resolveModel(request), response.body().length());
                 throw new IllegalStateException(EMPTY_TEXT_ERROR);
             }
-            log.info("[LLM_TEXT_OK] model={} textLength={} textPreview={}",
-                    resolveModel(request), outputText.length(), formatTextForLog(outputText));
+            log.info("[LLM_TEXT_OK] model={} textLength={}", resolveModel(request), outputText.length());
             return outputText;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -128,9 +128,9 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
             log.info("[LLM_TEXT_STREAM_REQ] model={} style={}", resolveModel(request), apiStyle);
             HttpResponse<InputStream> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                String body = new String(response.body().readAllBytes(), StandardCharsets.UTF_8);
-                log.warn("[LLM_TEXT_STREAM_FAIL] model={} status={} body={}",
-                        resolveModel(request), response.statusCode(), body);
+                response.body().close();
+                log.warn("[LLM_TEXT_STREAM_FAIL] model={} status={}",
+                        resolveModel(request), response.statusCode());
                 throw new IllegalStateException(DEFAULT_ERROR_PREFIX + response.statusCode());
             }
             try (InputStream inputStream = response.body();
@@ -474,20 +474,6 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
             return request.responsesPath().trim();
         }
         return llmProperties.getResponsesPath();
-    }
-
-    private String formatTextForLog(String text) {
-        if (!StringUtils.hasText(text)) {
-            return "";
-        }
-
-        String normalized = text
-                .replaceAll("\\s+", " ")
-                .trim();
-        if (normalized.length() <= MAX_LOG_TEXT_LENGTH) {
-            return normalized;
-        }
-        return normalized.substring(0, MAX_LOG_TEXT_LENGTH) + "...(truncated)";
     }
 
     private String normalizeBaseUrl(String baseUrl) {

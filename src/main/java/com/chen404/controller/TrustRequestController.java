@@ -4,6 +4,7 @@ import com.chen404.annotation.RequireAdmin;
 import com.chen404.domain.PageResult;
 import com.chen404.domain.Result;
 import com.chen404.domain.dto.CreateTrustRequestDTO;
+import com.chen404.domain.dto.EmailApproveTrustRequestDTO;
 import com.chen404.domain.dto.ReviewTrustRequestDTO;
 import com.chen404.domain.dto.TrustRequestVO;
 import com.chen404.security.AuthenticatedUser;
@@ -12,8 +13,10 @@ import com.chen404.util.CurrentUserUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,8 +26,9 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.util.UriComponentsBuilder;
 
-import java.nio.charset.StandardCharsets;
+import java.net.URI;
 
 /**
  * 好友申请提交与后台审核接口。
@@ -34,9 +38,13 @@ import java.nio.charset.StandardCharsets;
 public class TrustRequestController {
 
     private final UserTrustRequestService userTrustRequestService;
+    private final String frontendBaseUrl;
 
-    public TrustRequestController(UserTrustRequestService userTrustRequestService) {
+    public TrustRequestController(
+            UserTrustRequestService userTrustRequestService,
+            @Value("${app.frontend-base-url:http://localhost:20204}") String frontendBaseUrl) {
         this.userTrustRequestService = userTrustRequestService;
+        this.frontendBaseUrl = frontendBaseUrl;
     }
 
     @Operation(summary = "提交好友申请", description = "登录用户提交好友申请，可携带申请理由和附件 URL 列表")
@@ -95,15 +103,35 @@ public class TrustRequestController {
         return Result.success("已拒绝申请", userTrustRequestService.rejectRequest(id, adminId, dto == null ? null : dto.getReviewNote()));
     }
 
-    @Operation(summary = "邮件中直接通过好友申请", description = "通过邮件审批 token 完成审核，并返回 HTML 结果页")
-    @GetMapping(value = "/trust-requests/email-approve", produces = MediaType.TEXT_HTML_VALUE)
-    public ResponseEntity<byte[]> approveByEmail(
+    @Operation(summary = "打开邮件审批确认页", description = "仅跳转到后台确认页，不在 GET 请求中修改审核状态")
+    @GetMapping("/trust-requests/email-approve")
+    public ResponseEntity<Void> openEmailApproval(
             @Parameter(description = "邮件审批 token", required = true)
             @RequestParam("token") String token) {
-        String html = userTrustRequestService.approveByEmailToken(token);
-        byte[] body = html.getBytes(StandardCharsets.UTF_8);
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_TYPE, "text/html; charset=UTF-8")
-                .body(body);
+        URI confirmationUri = UriComponentsBuilder.fromUriString(frontendBaseUrl)
+                .path("/admin")
+                .queryParam("tab", "trust-requests")
+                .fragment("emailApproveToken=" + token)
+                .build()
+                .encode()
+                .toUri();
+        return ResponseEntity.status(HttpStatus.SEE_OTHER)
+                .location(confirmationUri)
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .header("Referrer-Policy", "no-referrer")
+                .build();
+    }
+
+    @RequireAdmin
+    @Operation(summary = "管理员确认邮件审批", description = "管理员登录后使用一次性邮件 token 确认通过申请")
+    @PostMapping("/admin/trust-requests/email-approve")
+    public Result<TrustRequestVO> approveByEmail(
+            @Valid @RequestBody EmailApproveTrustRequestDTO dto,
+            @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        Long adminId = CurrentUserUtil.requireUserId(currentUser);
+        return Result.success(
+                "审核通过",
+                userTrustRequestService.approveByEmailToken(dto.getToken(), adminId)
+        );
     }
 }

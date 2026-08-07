@@ -80,3 +80,9 @@ logging:
   level:
     com.chen404: info
     com.chen404.interceptor: warn
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

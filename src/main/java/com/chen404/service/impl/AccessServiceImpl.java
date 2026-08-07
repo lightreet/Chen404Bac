@@ -68,6 +68,11 @@ public class AccessServiceImpl implements AccessService {
     }
 
     @Override
+    public boolean canImportReaderBook(Long userId) {
+        return hasCapability(userId, UserCapabilityEnum.FRIEND_CONTENT_VIEW.getCode());
+    }
+
+    @Override
     public boolean canCurateArticle(Long userId) {
         User user = getUserOrNull(userId);
         return isEnabled(user) && isAdmin(user);

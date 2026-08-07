@@ -9,30 +9,17 @@ public final class WebRequestUtil {
 
     private static final String UNKNOWN = "unknown";
     private static final String LOCALHOST_IPV4 = "127.0.0.1";
-    private static final String[] CLIENT_IP_HEADERS = {
-            "X-Forwarded-For",
-            "X-Real-IP",
-            "Proxy-Client-IP",
-            "WL-Proxy-Client-IP",
-            "HTTP_CLIENT_IP",
-            "HTTP_X_FORWARDED_FOR"
-    };
 
     private WebRequestUtil() {
     }
 
     /**
-     * 按代理头优先级解析客户端 IP，并兼容本机 IPv6 回环地址。
+     * 读取容器已经解析后的远端地址，并兼容本机 IPv6 回环地址。
+     * 原始转发头只能由受信代理交给容器处理，业务代码不直接信任客户端提交的 Header。
      */
     public static String getClientIp(HttpServletRequest request) {
         if (request == null) {
             return UNKNOWN;
-        }
-        for (String header : CLIENT_IP_HEADERS) {
-            String ip = firstValidIp(request.getHeader(header));
-            if (ip != null) {
-                return normalizeLoopback(ip);
-            }
         }
         String remoteAddr = firstValidIp(request.getRemoteAddr());
         return remoteAddr == null ? UNKNOWN : normalizeLoopback(remoteAddr);

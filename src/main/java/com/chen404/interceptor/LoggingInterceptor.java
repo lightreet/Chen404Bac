@@ -9,14 +9,14 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.web.servlet.ModelAndView;
 
-import java.io.IOException;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 /**
  * API请求日志拦截器
- * 记录请求入参、出参、执行时间等信息
+ * 记录不含请求正文和敏感查询参数的请求摘要、响应状态与执行时间。
  */
 @Slf4j
 @Component
@@ -50,10 +50,9 @@ public class LoggingInterceptor implements HandlerInterceptor {
         try {
             String method = request.getMethod();
             String uri = request.getRequestURI();
-            String query = request.getQueryString() != null ? "?" + request.getQueryString() : "";
             String clientIp = WebRequestUtil.getClientIp(request);
             String traceId = MDC.get("traceId");
-            log.info("[API-REQ] traceId={} method={} uri={} clientIp={}", traceId, method, uri + query, clientIp);
+            log.info("[API-REQ] traceId={} method={} uri={} clientIp={}", traceId, method, uri, clientIp);
             if (log.isDebugEnabled()) {
                 logDebugRequest(request);
             }
@@ -62,7 +61,7 @@ public class LoggingInterceptor implements HandlerInterceptor {
         }
     }
 
-    /** DEBUG 下输出请求详情（参数、Body 脱敏） */
+    /** DEBUG 下只输出经过字段级脱敏的请求参数与必要 Header，不读取请求正文。 */
     private void logDebugRequest(HttpServletRequest request) {
         try {
             Map<String, String> headers = new HashMap<>();
@@ -85,12 +84,6 @@ public class LoggingInterceptor implements HandlerInterceptor {
                     log.debug("[API-REQ] params={}", formatMap(params));
                 }
             }
-            if (isJsonRequest(request)) {
-                String body = getRequestBody(request);
-                if (body != null && !body.isEmpty()) {
-                    log.debug("[API-REQ] body={}", maskSensitiveJson(body));
-                }
-            }
         } catch (Exception e) {
             log.debug("记录请求详情失败: {}", e.getMessage());
         }
@@ -108,7 +101,8 @@ public class LoggingInterceptor implements HandlerInterceptor {
             String uri = request.getRequestURI();
             int status = response.getStatus();
             if (ex != null) {
-                log.error("[API-RES] traceId={} method={} uri={} status={} duration={}ms error={}", traceId, method, uri, status, duration, ex.getMessage(), ex);
+                log.error("[API-RES] traceId={} method={} uri={} status={} duration={}ms exception={}",
+                        traceId, method, uri, status, duration, ex.getClass().getSimpleName());
             } else if (duration > SLOW_REQUEST_THRESHOLD_MS) {
                 log.warn("[API-RES] traceId={} method={} uri={} status={} duration={}ms slow", traceId, method, uri, status, duration);
             } else {
@@ -143,7 +137,7 @@ public class LoggingInterceptor implements HandlerInterceptor {
      * 判断是否是关键header
      */
     private boolean isImportantHeader(String name) {
-        String lower = name.toLowerCase();
+        String lower = name.toLowerCase(Locale.ROOT);
         return lower.equals("content-type") ||
                lower.equals("authorization") ||
                lower.equals("user-agent") ||
@@ -157,41 +151,16 @@ public class LoggingInterceptor implements HandlerInterceptor {
         if (value == null) {
             return null;
         }
-        String lower = name.toLowerCase();
-        if (lower.equals("authorization") && value.startsWith("Bearer ") && value.length() > 20) {
-            return "Bearer " + value.substring(7, 15) + "...";
+        String lower = name.toLowerCase(Locale.ROOT);
+        if (lower.equals("authorization")) {
+            return "Bearer ***";
         }
         return value;
     }
 
-    /**
-     * 判断是否为JSON请求
-     */
-    private boolean isJsonRequest(HttpServletRequest request) {
-        String contentType = request.getContentType();
-        return contentType != null && contentType.contains("application/json");
-    }
-
     private boolean isMultipartRequest(HttpServletRequest request) {
         String contentType = request.getContentType();
-        return contentType != null && contentType.toLowerCase().startsWith("multipart/");
-    }
-
-    /**
-     * 获取请求Body
-     */
-    private String getRequestBody(HttpServletRequest request) {
-        try {
-            if (request instanceof com.chen404.filter.RequestBodyCacheFilter.CachedBodyHttpServletRequest) {
-                com.chen404.filter.RequestBodyCacheFilter.CachedBodyHttpServletRequest cachedRequest =
-                    (com.chen404.filter.RequestBodyCacheFilter.CachedBodyHttpServletRequest) request;
-                byte[] cachedBody = cachedRequest.getCachedBody();
-                return new String(cachedBody, request.getCharacterEncoding());
-            }
-            return null;
-        } catch (IOException e) {
-            return null;
-        }
+        return contentType != null && contentType.toLowerCase(Locale.ROOT).startsWith("multipart/");
     }
 
     /**
@@ -201,12 +170,19 @@ public class LoggingInterceptor implements HandlerInterceptor {
         if (value == null) {
             return null;
         }
-        String lowerKey = key.toLowerCase();
-        if (lowerKey.contains("password") || lowerKey.contains("pwd") || lowerKey.contains("secret")) {
+        String lowerKey = key.toLowerCase(Locale.ROOT);
+        if (lowerKey.contains("password")
+                || lowerKey.contains("pwd")
+                || lowerKey.contains("secret")
+                || lowerKey.contains("credential")
+                || lowerKey.equals("code")) {
             return "******";
         }
         if (lowerKey.contains("token") || lowerKey.contains("authorization")) {
-            return value.length() > 10 ? value.substring(0, 10) + "..." : "***";
+            return "***";
+        }
+        if (lowerKey.endsWith("url")) {
+            return stripUrlSecrets(value);
         }
         if (lowerKey.contains("phone") && value.length() == 11) {
             return value.substring(0, 3) + "****" + value.substring(7);
@@ -220,16 +196,18 @@ public class LoggingInterceptor implements HandlerInterceptor {
         return value;
     }
 
-    /**
-     * 脱敏JSON中的敏感字段
-     */
-    private String maskSensitiveJson(String json) {
-        try {
-            return json.replaceAll("(\"password\\s*\"\\s*:\\s*\")([^\"]*)(\")", "$1******$3")
-                       .replaceAll("(\"token\\s*\"\\s*:\\s*\")([^\"]{10})[^\"]*(\")", "$1$2...$3")
-                       .replaceAll("(\"phone\\s*\"\\s*:\\s*\")(\\d{3})\\d{4}(\\d{4})(\")", "$1$2****$4");
-        } catch (Exception e) {
-            return json;
+    private String stripUrlSecrets(String value) {
+        int queryIndex = value.indexOf('?');
+        int fragmentIndex = value.indexOf('#');
+        int secretIndex;
+        if (queryIndex < 0) {
+            secretIndex = fragmentIndex;
+        } else if (fragmentIndex < 0) {
+            secretIndex = queryIndex;
+        } else {
+            secretIndex = Math.min(queryIndex, fragmentIndex);
         }
+        return secretIndex < 0 ? value : value.substring(0, secretIndex) + "?***";
     }
+
 }

@@ -76,7 +76,7 @@ public class PublicApiRequestMatcher implements RequestMatcher {
                 || path.startsWith("/home/")
                 || path.equals("/site")
                 || path.startsWith("/site/")
-                || path.equals("/trust-requests/email-approve")
+                || ("GET".equalsIgnoreCase(method) && path.equals("/trust-requests/email-approve"))
                 || path.equals("/tags")
                 || path.startsWith("/tags/")
                 || path.equals("/archives")

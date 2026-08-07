@@ -4,15 +4,12 @@ import com.chen404.domain.Result;
 import com.chen404.domain.dto.AiChatRequest;
 import com.chen404.domain.dto.AiChatResponse;
 import com.chen404.domain.dto.AiChatSessionDetailResponse;
-import com.chen404.exception.BadRequestException;
 import com.chen404.security.AuthenticatedUser;
 import com.chen404.service.AiChatService;
 import com.chen404.util.CurrentUserUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,9 +30,6 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @RestController
 public class AiChatController {
 
-    private static final Logger log = LoggerFactory.getLogger(AiChatController.class);
-    private static final int HTTP_BAD_REQUEST = 400;
-
     private final AiChatService aiChatService;
 
     public AiChatController(AiChatService aiChatService) {
@@ -47,16 +41,8 @@ public class AiChatController {
     public Result<AiChatResponse> chat(
             @Valid @RequestBody AiChatRequest request,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
-        try {
-            Long requesterId = CurrentUserUtil.getUserId(currentUser);
-            return Result.success(aiChatService.chat(request, requesterId));
-        } catch (BadRequestException e) {
-            return Result.error(HTTP_BAD_REQUEST, e.getMessage());
-        } catch (IllegalStateException e) {
-            log.warn("[AI_CHAT_BAD_STATE] pageContext={} articleId={} message={}",
-                    request.getPageContext(), request.getCurrentArticleId(), e.getMessage(), e);
-            return Result.error(HTTP_BAD_REQUEST, e.getMessage());
-        }
+        Long requesterId = CurrentUserUtil.getUserId(currentUser);
+        return Result.success(aiChatService.chat(request, requesterId));
     }
 
     @Operation(summary = "女仆流式聊天", description = "以 SSE 方式逐步返回 Lyra 回复，支持前端停止生成")
@@ -74,11 +60,7 @@ public class AiChatController {
             @PathVariable String sessionId,
             @RequestParam(required = false) String visitorId,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
-        try {
-            Long requesterId = CurrentUserUtil.getUserId(currentUser);
-            return Result.success(aiChatService.getSessionDetail(sessionId, requesterId, visitorId));
-        } catch (BadRequestException e) {
-            return Result.error(HTTP_BAD_REQUEST, e.getMessage());
-        }
+        Long requesterId = CurrentUserUtil.getUserId(currentUser);
+        return Result.success(aiChatService.getSessionDetail(sessionId, requesterId, visitorId));
     }
 }

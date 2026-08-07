@@ -7,6 +7,7 @@ import com.chen404.domain.Result;
 import com.chen404.domain.entity.User;
 import com.chen404.domain.enums.UserRoleEnum;
 import com.chen404.security.AuthenticatedUser;
+import com.chen404.service.AuthSessionService;
 import com.chen404.service.UserService;
 import com.chen404.util.JwtUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -28,6 +29,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+/**
+ * 仅接受当前会话版本的访问令牌，并把有效用户身份写入 Spring Security 上下文。
+ */
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
@@ -37,16 +41,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final int USER_ENABLED_STATUS = 1;
 
     private final JwtUtil jwtUtil;
+    private final AuthSessionService authSessionService;
     private final UserService userService;
     private final PublicApiRequestMatcher publicApiRequestMatcher;
     private final ObjectMapper objectMapper;
 
     public JwtAuthenticationFilter(
             JwtUtil jwtUtil,
+            AuthSessionService authSessionService,
             UserService userService,
             PublicApiRequestMatcher publicApiRequestMatcher,
             ObjectMapper objectMapper) {
         this.jwtUtil = jwtUtil;
+        this.authSessionService = authSessionService;
         this.userService = userService;
         this.publicApiRequestMatcher = publicApiRequestMatcher;
         this.objectMapper = objectMapper;
@@ -72,8 +79,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         try {
-            var decoded = jwtUtil.verifyToken(token);
-            Long userId = jwtUtil.getUserIdFromToken(token);
+            var decoded = jwtUtil.verifyAccessToken(token);
+            Long userId = jwtUtil.getUserId(decoded);
+            if (!authSessionService.isCurrent(userId, decoded)) {
+                writeUnauthorized(response, "登录状态已失效，请重新登录");
+                return;
+            }
             User user = userService.getCurrentUser(userId);
             if (user == null || user.getStatus() == null || user.getStatus() != USER_ENABLED_STATUS) {
                 writeUnauthorized(response, "用户不存在或已被禁用");

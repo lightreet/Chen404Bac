@@ -1,5 +1,10 @@
 server:
   port: 10404
+  forward-headers-strategy: native
+  tomcat:
+    remoteip:
+      remote-ip-header: x-forwarded-for
+      protocol-header: x-forwarded-proto
   servlet:
     context-path: /api
 

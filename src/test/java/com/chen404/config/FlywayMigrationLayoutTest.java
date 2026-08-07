@@ -19,7 +19,6 @@ class FlywayMigrationLayoutTest {
     private static final Path MIGRATION_DIR = Path.of("src", "main", "resources", "db", "migration");
     private static final Path MULTI_USER_MIGRATION = MIGRATION_DIR.resolve(
             "V2026072701__multi_user_creator_platform.sql");
-
     private static final List<String> EXPECTED_MIGRATIONS = List.of(
             "V2026032601__baseline_schema.sql",
             "V2026032801__interaction_like_tables.sql",
@@ -43,7 +42,8 @@ class FlywayMigrationLayoutTest {
             "V2026072901__create_reader_library.sql",
             "V2026073001__add_reader_book_visibility.sql",
             "V2026073002__add_reader_book_custom_cover.sql",
-            "V2026073003__default_reader_book_visibility_public.sql"
+            "V2026073003__default_reader_book_visibility_public.sql",
+            "V2026080302__allow_reader_book_reimport_after_delete.sql"
     );
 
     @Test

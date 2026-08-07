@@ -1,19 +1,21 @@
 package com.chen404.service.impl;
 
 import com.chen404.domain.enums.VerificationCodeTypeEnum;
+import com.chen404.exception.BadRequestException;
+import com.chen404.exception.TooManyRequestsException;
 import com.chen404.service.EmailService;
 import com.chen404.service.VerificationCodeService;
 import com.chen404.util.AuthConstants;
 import com.chen404.util.RedisKeys;
 import com.chen404.util.RedisUtil;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
+import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.Locale;
 
 /**
  * 验证码服务实现类
@@ -25,113 +27,133 @@ public class VerificationCodeServiceImpl implements VerificationCodeService {
     private static final long CODE_EXPIRE_MINUTES = AuthConstants.SEND_CODE_EXPIRE_SECONDS / 60L;
     private static final long SEND_INTERVAL_SECONDS = AuthConstants.SEND_CODE_INTERVAL_SECONDS;
     private static final int MAX_DAILY_SEND_COUNT = AuthConstants.MAX_DAILY_SEND_CODE_COUNT;
+    private static final int MAX_VERIFY_ATTEMPTS = 5;
     private static final int DECIMAL_RADIX = 10;
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
-    @Autowired
-    private RedisUtil redisUtil;
+    private final RedisUtil redisUtil;
+    private final EmailService emailService;
 
-    @Autowired
-    private EmailService emailService;
+    public VerificationCodeServiceImpl(RedisUtil redisUtil, EmailService emailService) {
+        this.redisUtil = redisUtil;
+        this.emailService = emailService;
+    }
 
     @Override
     public String generateAndSendCode(String target, VerificationCodeTypeEnum type) {
-        // 检查发送频率
-        if (!canSend(target, type)) {
-            throw new RuntimeException("发送过于频繁，请稍后再试");
+        String normalizedTarget = requireSupportedTarget(target);
+        if (type == null) {
+            throw new BadRequestException("验证码类型不能为空");
         }
 
-        // 生成6位数字验证码
-        String code = generateCode();
+        String intervalKey = RedisKeys.verifyInterval(type, normalizedTarget);
+        boolean intervalReserved = redisUtil.setIfAbsent(
+                intervalKey,
+                AuthConstants.REDIS_FLAG_VALUE,
+                Duration.ofSeconds(SEND_INTERVAL_SECONDS)
+        );
+        if (!intervalReserved) {
+            throw new TooManyRequestsException("发送过于频繁，请稍后再试");
+        }
 
-        // 存储到Redis
-        String codeKey = RedisKeys.verifyCode(type, target);
+        Long dailyCount = redisUtil.incrementWithInitialTtl(
+                RedisKeys.verifyDailyCount(type, normalizedTarget),
+                durationUntilEndOfDay()
+        );
+        if (dailyCount == null) {
+            redisUtil.delete(intervalKey);
+            throw new IllegalStateException("验证码发送计数失败");
+        }
+        if (dailyCount > MAX_DAILY_SEND_COUNT) {
+            redisUtil.delete(intervalKey);
+            throw new TooManyRequestsException("今日发送次数已达上限，请明天再试");
+        }
+
+        String code = generateCode();
+        String codeKey = RedisKeys.verifyCode(type, normalizedTarget);
         redisUtil.setString(codeKey, code, Duration.ofMinutes(CODE_EXPIRE_MINUTES));
 
-        // 记录发送次数
-        recordSendCount(target, type);
-
-        // 发送邮件
-        if (target.contains(AuthConstants.EMAIL_TARGET_SYMBOL)) {
-            emailService.sendVerificationCode(target, code, type);
+        try {
+            emailService.sendVerificationCode(normalizedTarget, code, type);
+        } catch (RuntimeException ex) {
+            redisUtil.delete(codeKey);
+            redisUtil.delete(intervalKey);
+            throw ex;
         }
-        // 手机号短信发送（后续实现）
 
-        log.info("验证码已发送至：{}，类型：{}", target, type.getCode());
+        log.info("[VERIFICATION_CODE_SENT] channel=email type={}", type.getCode());
         return code;
     }
 
     @Override
     public boolean verifyCode(String target, VerificationCodeTypeEnum type, String code) {
-        if (!target.contains(AuthConstants.EMAIL_TARGET_SYMBOL)) {
-            // 手机号验证码验证（后续实现）
-            return true;
-        }
-
-        String codeKey = RedisKeys.verifyCode(type, target);
-        String storedCode = redisUtil.getString(codeKey);
-
-        if (storedCode == null) {
+        String normalizedTarget = requireSupportedTarget(target);
+        if (type == null || !StringUtils.hasText(code)) {
             return false;
         }
 
-        boolean valid = storedCode.equals(code);
-        if (valid) {
-            // 验证成功后删除验证码
-            redisUtil.delete(codeKey);
+        long result = redisUtil.verifyAndConsumeCode(
+                RedisKeys.verifyCode(type, normalizedTarget),
+                RedisKeys.verifyAttempts(type, normalizedTarget),
+                code.trim(),
+                MAX_VERIFY_ATTEMPTS,
+                Duration.ofMinutes(CODE_EXPIRE_MINUTES)
+        );
+        if (result == -2L) {
+            log.warn("[VERIFICATION_CODE_LOCKED] channel=email type={} maxAttempts={}",
+                    type.getCode(), MAX_VERIFY_ATTEMPTS);
         }
-
-        return valid;
+        return result == 1L;
     }
 
     @Override
     public void deleteCode(String target, VerificationCodeTypeEnum type) {
-        String codeKey = RedisKeys.verifyCode(type, target);
-        redisUtil.delete(codeKey);
+        if (!StringUtils.hasText(target) || type == null) {
+            return;
+        }
+        String normalizedTarget = target.trim().toLowerCase(Locale.ROOT);
+        redisUtil.delete(RedisKeys.verifyCode(type, normalizedTarget));
+        redisUtil.delete(RedisKeys.verifyAttempts(type, normalizedTarget));
     }
 
     @Override
     public boolean canSend(String target, VerificationCodeTypeEnum type) {
-        // 检查发送间隔
-        String intervalKey = RedisKeys.verifyInterval(type, target);
+        String normalizedTarget = requireSupportedTarget(target);
+        if (type == null) {
+            throw new BadRequestException("验证码类型不能为空");
+        }
+        String intervalKey = RedisKeys.verifyInterval(type, normalizedTarget);
         if (redisUtil.exists(intervalKey)) {
             return false;
         }
 
-        // 检查每日发送次数
-        String dailyKey = RedisKeys.verifyDailyCount(type, target);
+        String dailyKey = RedisKeys.verifyDailyCount(type, normalizedTarget);
         String countStr = redisUtil.getString(dailyKey);
         if (countStr != null) {
             int count = Integer.parseInt(countStr);
             if (count >= MAX_DAILY_SEND_COUNT) {
-                throw new RuntimeException("今日发送次数已达上限，请明天再试");
+                throw new TooManyRequestsException("今日发送次数已达上限，请明天再试");
             }
         }
 
         return true;
     }
 
-    /**
-     * 记录发送次数
-     */
-    private void recordSendCount(String target, VerificationCodeTypeEnum type) {
-        // 记录发送间隔
-        String intervalKey = RedisKeys.verifyInterval(type, target);
-        redisUtil.setString(intervalKey, AuthConstants.REDIS_FLAG_VALUE, Duration.ofSeconds(SEND_INTERVAL_SECONDS));
-
-        // 记录每日次数
-        String dailyKey = RedisKeys.verifyDailyCount(type, target);
-        Long count = redisUtil.increment(dailyKey);
-        if (count != null && count == 1) {
-            // 设置过期到当天结束（更符合 “daily” 语义）
-            redisUtil.expire(dailyKey, durationUntilEndOfDay());
+    private String requireSupportedTarget(String target) {
+        if (!StringUtils.hasText(target)) {
+            throw new BadRequestException("验证码接收邮箱不能为空");
         }
+        String normalized = target.trim().toLowerCase(Locale.ROOT);
+        if (!normalized.contains(AuthConstants.EMAIL_TARGET_SYMBOL)) {
+            throw new BadRequestException("手机号验证码暂未开放，请使用邮箱");
+        }
+        return normalized;
     }
 
     private static Duration durationUntilEndOfDay() {
         LocalDateTime now = LocalDateTime.now();
-        LocalDateTime end = now.toLocalDate().atTime(23, 59, 59);
-        long seconds = end.atZone(ZoneId.systemDefault()).toEpochSecond() - now.atZone(ZoneId.systemDefault()).toEpochSecond();
-        return Duration.ofSeconds(Math.max(seconds, 1));
+        LocalDateTime nextDay = now.toLocalDate().plusDays(1).atStartOfDay();
+        return Duration.between(now, nextDay);
     }
 
     /**
@@ -140,7 +162,7 @@ public class VerificationCodeServiceImpl implements VerificationCodeService {
     private String generateCode() {
         StringBuilder code = new StringBuilder();
         for (int i = 0; i < AuthConstants.VERIFY_CODE_LENGTH; i++) {
-            code.append(ThreadLocalRandom.current().nextInt(DECIMAL_RADIX));
+            code.append(SECURE_RANDOM.nextInt(DECIMAL_RADIX));
         }
         return code.toString();
     }

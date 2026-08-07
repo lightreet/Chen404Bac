@@ -479,7 +479,7 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
             }
             return sb.toString();
         } catch (Exception e) {
-            throw new RuntimeException("hash 计算失败");
+            throw new IllegalStateException("hash 计算失败", e);
         }
     }
 

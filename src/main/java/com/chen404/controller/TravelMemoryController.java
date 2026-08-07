@@ -2,13 +2,13 @@ package com.chen404.controller;
 
 import com.chen404.annotation.RequireAdmin;
 import com.chen404.converter.TravelMemoryConverter;
-import com.chen404.domain.ApiErrorCode;
 import com.chen404.domain.Result;
 import com.chen404.domain.dto.CreateTravelMemoryCommand;
 import com.chen404.domain.dto.TravelMemoryLocationDetailVO;
 import com.chen404.domain.dto.TravelMemoryLocationListItemVO;
 import com.chen404.domain.dto.UpdateTravelMemoryCommand;
 import com.chen404.domain.entity.TravelMemoryLocation;
+import com.chen404.exception.ResourceNotFoundException;
 import com.chen404.security.AuthenticatedUser;
 import com.chen404.service.TravelMemoryService;
 import com.chen404.util.CurrentUserUtil;
@@ -86,7 +86,7 @@ public class TravelMemoryController {
         Long userId = CurrentUserUtil.getUserId(currentUser);
         TravelMemoryLocation location = travelMemoryService.getVisibleLocationDetail(id, userId);
         if (location == null) {
-            return Result.error(ApiErrorCode.NOT_FOUND, "旅行记忆地点不存在");
+            throw new ResourceNotFoundException("旅行记忆地点不存在");
         }
         return Result.success(travelMemoryConverter.toDetailVO(location));
     }

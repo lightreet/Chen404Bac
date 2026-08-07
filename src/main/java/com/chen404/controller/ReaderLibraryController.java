@@ -11,12 +11,15 @@ import com.chen404.domain.dto.ReaderProgressCommand;
 import com.chen404.domain.dto.ReaderProgressVO;
 import com.chen404.domain.dto.ReaderSearchResultVO;
 import com.chen404.domain.dto.ReaderTocItemVO;
+import com.chen404.exception.ForbiddenException;
 import com.chen404.security.AuthenticatedUser;
+import com.chen404.service.AccessService;
 import com.chen404.service.ReaderLibraryService;
 import com.chen404.util.CurrentUserUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -44,13 +47,18 @@ import java.util.concurrent.TimeUnit;
  * <p>公开书籍可匿名浏览和阅读；导入、编辑、删除、进度与偏好仍只对登录用户开放。</p>
  */
 @Tag(name = "小说阅读", description = "小说导入、目录、正文、阅读进度与阅读偏好")
+@Slf4j
 @RestController
 public class ReaderLibraryController {
 
     private final ReaderLibraryService readerLibraryService;
+    private final AccessService accessService;
 
-    public ReaderLibraryController(ReaderLibraryService readerLibraryService) {
+    public ReaderLibraryController(
+            ReaderLibraryService readerLibraryService,
+            AccessService accessService) {
         this.readerLibraryService = readerLibraryService;
+        this.accessService = accessService;
     }
 
     @Operation(summary = "导入小说", description = "支持 TXT、EPUB、HTML、Markdown 与 FB2")
@@ -65,6 +73,7 @@ public class ReaderLibraryController {
             @RequestParam(required = false) Long coverFileId,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
         Long userId = CurrentUserUtil.requireUserId(currentUser);
+        ensureReaderBookImportPermission(userId);
         return Result.success("小说已导入书架",
                 readerLibraryService.importBook(file, title, author, description, encoding, visibility, coverFileId, userId));
     }
@@ -75,8 +84,9 @@ public class ReaderLibraryController {
             @RequestParam("file") MultipartFile file,
             @RequestParam(required = false) String encoding,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
-        return Result.success(readerLibraryService.previewBook(
-                file, encoding, CurrentUserUtil.requireUserId(currentUser)));
+        Long userId = CurrentUserUtil.requireUserId(currentUser);
+        ensureReaderBookImportPermission(userId);
+        return Result.success(readerLibraryService.previewBook(file, encoding, userId));
     }
 
     @Operation(summary = "获取公开书架", description = "匿名访客仅看到公开书籍；登录用户还会看到自己的私密书籍。")
@@ -206,4 +216,15 @@ public class ReaderLibraryController {
                 "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:");
         return ResponseEntity.ok().headers(headers).body(asset.data());
     }
+
+    /**
+     * 预解析和导入必须保持同一权限边界，防止普通登录用户绕过前端占用小说资源。
+     */
+    private void ensureReaderBookImportPermission(Long userId) {
+        if (!accessService.canImportReaderBook(userId)) {
+            log.warn("[READER_BOOK_IMPORT_FORBIDDEN] userId={}", userId);
+            throw new ForbiddenException("仅知友或管理员可导入小说");
+        }
+    }
+
 }

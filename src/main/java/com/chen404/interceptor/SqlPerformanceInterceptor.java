@@ -15,8 +15,7 @@ import java.util.List;
 import java.util.Properties;
 
 /**
- * SQL性能拦截器
- * 记录 SQL 执行耗时和影响行数；完整 SQL 由 MybatisCompleteSqlLogInterceptor 负责。
+ * SQL 性能拦截器，只记录语句标识、执行耗时和影响行数，不输出 SQL 参数或业务数据。
  */
 @Intercepts({
     @Signature(type = StatementHandler.class, method = "query", args = {Statement.class, ResultHandler.class}),

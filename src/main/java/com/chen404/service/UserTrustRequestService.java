@@ -18,5 +18,8 @@ public interface UserTrustRequestService extends IService<UserTrustRequest> {
 
     TrustRequestVO rejectRequest(Long requestId, Long adminId, String reviewNote);
 
-    String approveByEmailToken(String token);
+    /**
+     * 管理员登录后使用邮件中的一次性令牌确认审批。
+     */
+    TrustRequestVO approveByEmailToken(String token, Long adminId);
 }

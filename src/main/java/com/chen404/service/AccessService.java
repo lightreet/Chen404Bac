@@ -40,6 +40,11 @@ public interface AccessService {
 
     boolean canCreateArticle(Long userId);
 
+    /**
+     * 当前用户是否可将小说导入个人书架。
+     */
+    boolean canImportReaderBook(Long userId);
+
     boolean canCurateArticle(Long userId);
 
     /**

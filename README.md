@@ -18,7 +18,7 @@ Chen404Bac 是 Chen404 的 Spring Boot 后端服务，负责 REST API、认证�
 ## 环境要求
 
 - JDK 17+
-- Maven 3.9+
+- Maven 3.6.3+
 - MySQL 8+
 - Redis 7+
 - MinIO 或兼容对象存储
@@ -48,7 +48,7 @@ mvn spring-boot:run "-Dspring-boot.run.profiles=local" "-Dspring-boot.run.jvmArg
 ### 打包
 
 ```bash
-mvn clean package -DskipTests
+mvn clean verify
 java -jar target/chen404bac-1.0.0.jar --spring.profiles.active=prod
 ```
 
@@ -198,8 +198,10 @@ src/main/resources/db/migration/
 全量测试：
 
 ```bash
-mvn test
+mvn clean verify
 ```
+
+`verify` 会执行 Maven/JDK 版本校验、全量测试，并在 `target/site/jacoco/` 生成 JaCoCo 报告；当前行覆盖率门禁为 40%。
 
 AI 相关改动建议至少覆盖：
 
@@ -230,4 +232,5 @@ mvn "-Dtest=MusicRadioControllerTest,MusicRadioServiceImplTest,LlmMusicTrackAiSu
 - AI 配置专题：[`doc/architecture/AI女仆后台配置设计.md`](./doc/architecture/AI女仆后台配置设计.md)
 - 音乐馆专题：[`doc/architecture/音乐电台功能需求与界面设计.md`](./doc/architecture/音乐电台功能需求与界面设计.md)
 - 旅行纪念地图专题：[`doc/architecture/旅行纪念地图设计与改造方案.md`](./doc/architecture/旅行纪念地图设计与改造方案.md)
+- Java 质量债务：[`doc/architecture/java-quality-debt.md`](./doc/architecture/java-quality-debt.md)
 - 阶段快照：[`doc/architecture/后端功能审查与优化清单.md`](./doc/architecture/后端功能审查与优化清单.md)、[`功能审查总结_2026-03-27.md`](./功能审查总结_2026-03-27.md)
