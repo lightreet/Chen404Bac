@@ -47,24 +47,36 @@ jobs:
             -o ServerAliveCountMax=3
           )
 
+          if ! command -v rsync >/dev/null; then
+            echo "rsync is not installed on the GitHub Actions runner" >&2
+            exit 1
+          fi
+
           ssh "${SSH_OPTS[@]}" \
             -p "${{ secrets.SERVER_PORT }}" \
             "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
-            "echo ssh-ready"
+            "command -v rsync >/dev/null && echo rsync-ready"
+
+          export RSYNC_RSH="ssh ${SSH_OPTS[*]} -p ${{ secrets.SERVER_PORT }}"
 
           for attempt in {1..5}; do
-            if scp -v \
-              "${SSH_OPTS[@]}" \
-              -P "${{ secrets.SERVER_PORT }}" \
+            if rsync \
+              --times \
+              --no-whole-file \
+              --partial \
+              --partial-dir=.rsync-partial \
+              --timeout=300 \
+              --info=progress2 \
+              --stats \
               target/chen404bac-1.0.0.jar \
               "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/home/deploy/chen404bac.jar"; then
               exit 0
             fi
-            echo "scp upload failed on attempt ${attempt}/5; retrying in 10 seconds..."
+            echo "rsync upload failed on attempt ${attempt}/5; retrying in 10 seconds..."
             sleep 10
           done
 
-          echo "scp upload failed after 5 attempts" >&2
+          echo "rsync upload failed after 5 attempts" >&2
           exit 1
 
       - name: Deploy backend
