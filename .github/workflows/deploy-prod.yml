@@ -78,4 +78,5 @@ jobs:
             -o ServerAliveCountMax=3 \
             -p "${{ secrets.SERVER_PORT }}" \
             "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
-            "/srv/chen404/scripts/deploy-backend.sh /home/deploy/chen404bac.jar"
+            "bash -s -- /home/deploy/chen404bac.jar" \
+            < .github/scripts/deploy-backend.sh
