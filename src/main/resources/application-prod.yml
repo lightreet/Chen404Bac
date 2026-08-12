@@ -69,12 +69,6 @@ app:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS}
   frontend-base-url: ${APP_FRONTEND_BASE_URL}
   backend-base-url: ${APP_BACKEND_BASE_URL}
-  multi-user:
-    article-creation-enabled: ${MULTI_USER_ARTICLE_CREATION_ENABLED:false}
-    travel-creation-enabled: ${MULTI_USER_TRAVEL_CREATION_ENABLED:false}
-    music-creation-enabled: ${MULTI_USER_MUSIC_CREATION_ENABLED:false}
-  admin-notification:
-    enabled: ${ADMIN_NOTIFICATION_ENABLED:false}
 
 logging:
   level:

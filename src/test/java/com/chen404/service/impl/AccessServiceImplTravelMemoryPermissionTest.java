@@ -1,8 +1,9 @@
 package com.chen404.service.impl;
 
-import com.chen404.config.MultiUserFeatureProperties;
 import com.chen404.domain.entity.User;
 import com.chen404.domain.entity.TravelMemoryLocation;
+import com.chen404.domain.enums.UserCapabilityEnum;
+import com.chen404.service.FeatureToggleService;
 import com.chen404.service.support.UserAccessProfileSupport;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -19,7 +20,7 @@ class AccessServiceImplTravelMemoryPermissionTest {
         UserAccessProfileSupport support = mock(UserAccessProfileSupport.class);
         AccessServiceImpl service = new AccessServiceImpl();
         ReflectionTestUtils.setField(service, "userAccessProfileSupport", support);
-        ReflectionTestUtils.setField(service, "multiUserFeatureProperties", enabledFeatures());
+        ReflectionTestUtils.setField(service, "featureToggleService", enabledFeatures());
 
         when(support.loadUserProfile(1L)).thenReturn(buildUser("admin", 0));
         when(support.loadUserProfile(2L)).thenReturn(buildUser("user", 1));
@@ -36,7 +37,7 @@ class AccessServiceImplTravelMemoryPermissionTest {
         UserAccessProfileSupport support = mock(UserAccessProfileSupport.class);
         AccessServiceImpl service = new AccessServiceImpl();
         ReflectionTestUtils.setField(service, "userAccessProfileSupport", support);
-        ReflectionTestUtils.setField(service, "multiUserFeatureProperties", enabledFeatures());
+        ReflectionTestUtils.setField(service, "featureToggleService", enabledFeatures());
 
         when(support.loadUserProfile(1L)).thenReturn(buildUser("admin", 0));
         when(support.loadUserProfile(2L)).thenReturn(buildUser("user", 1));
@@ -62,11 +63,10 @@ class AccessServiceImplTravelMemoryPermissionTest {
         return user;
     }
 
-    private MultiUserFeatureProperties enabledFeatures() {
-        MultiUserFeatureProperties properties = new MultiUserFeatureProperties();
-        properties.setArticleCreationEnabled(true);
-        properties.setTravelCreationEnabled(true);
-        properties.setMusicCreationEnabled(true);
-        return properties;
+    private FeatureToggleService enabledFeatures() {
+        FeatureToggleService featureToggleService = mock(FeatureToggleService.class);
+        when(featureToggleService.resolveAvailableCapabilities(org.mockito.ArgumentMatchers.any(User.class)))
+                .thenAnswer(invocation -> UserCapabilityEnum.resolveCodes(invocation.getArgument(0)));
+        return featureToggleService;
     }
 }

@@ -45,6 +45,32 @@ import static org.mockito.Mockito.when;
 class TravelMemoryServiceImplTest {
 
     @Test
+    void shouldKeepOwnTravelHistoryReadableWhenCreationIsDisabled() {
+        initTableInfo(TravelMemoryLocation.class);
+        TravelMemoryLocationMapper locationMapper = mock(TravelMemoryLocationMapper.class);
+        AccessService accessService = mock(AccessService.class);
+        TravelMemoryLocation history = buildLocation(9L, "历史地点", LocalDateTime.of(2026, 5, 1, 10, 0));
+        history.setCreatedBy(7L);
+        when(locationMapper.selectList(any())).thenReturn(List.of(history));
+        TravelMemoryServiceImpl service = new TravelMemoryServiceImpl(
+                locationMapper,
+                mock(TravelMemoryStopMapper.class),
+                mock(TravelMemoryEntryMapper.class),
+                accessService,
+                mock(SysFileService.class),
+                mock(FileReferenceService.class),
+                mock(UserMapper.class),
+                mock(UserAccessProfileSupport.class),
+                mock(AdminContentEventPublisher.class));
+        configureProtectedFileAccess(service);
+
+        List<TravelMemoryLocation> result = service.listMyLocations(7L);
+
+        assertSame(history, result.get(0));
+        verify(accessService, never()).canCreateTravelMemory(7L);
+    }
+
+    @Test
     void shouldQueryLocationsBySortOrderThenVisitedAtThenId() {
         initTableInfo(TravelMemoryLocation.class);
         TravelMemoryLocationMapper locationMapper = mock(TravelMemoryLocationMapper.class);

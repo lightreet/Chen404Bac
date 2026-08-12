@@ -43,7 +43,8 @@ class FlywayMigrationLayoutTest {
             "V2026073001__add_reader_book_visibility.sql",
             "V2026073002__add_reader_book_custom_cover.sql",
             "V2026073003__default_reader_book_visibility_public.sql",
-            "V2026080302__allow_reader_book_reimport_after_delete.sql"
+            "V2026080302__allow_reader_book_reimport_after_delete.sql",
+            "V2026081001__admin_managed_feature_toggles.sql"
     );
 
     @Test

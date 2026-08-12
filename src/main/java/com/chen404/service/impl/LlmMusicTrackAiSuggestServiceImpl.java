@@ -1,9 +1,10 @@
 package com.chen404.service.impl;
 
-import com.chen404.config.AiRuntimeProperties;
 import com.chen404.domain.dto.MusicTrackAiCandidate;
 import com.chen404.domain.dto.MusicTrackAiSuggestRequest;
 import com.chen404.domain.dto.MusicTrackAiSuggestResponse;
+import com.chen404.domain.enums.RuntimeFeatureEnum;
+import com.chen404.service.FeatureToggleService;
 import com.chen404.service.MusicTrackAiSuggestService;
 import com.chen404.service.support.scenario.AiScenarioCode;
 import com.chen404.service.support.scenario.AiScenarioExecutor;
@@ -23,17 +24,19 @@ public class LlmMusicTrackAiSuggestServiceImpl implements MusicTrackAiSuggestSer
     private static final String EMPTY_RESULT_ERROR = "LLM 服务返回空的歌曲补全结果";
 
     private final AiScenarioExecutor aiScenarioExecutor;
-    private final AiRuntimeProperties aiRuntimeProperties;
+    private final FeatureToggleService featureToggleService;
 
-    public LlmMusicTrackAiSuggestServiceImpl(AiScenarioExecutor aiScenarioExecutor, AiRuntimeProperties aiRuntimeProperties) {
+    public LlmMusicTrackAiSuggestServiceImpl(
+            AiScenarioExecutor aiScenarioExecutor,
+            FeatureToggleService featureToggleService) {
         this.aiScenarioExecutor = aiScenarioExecutor;
-        this.aiRuntimeProperties = aiRuntimeProperties;
+        this.featureToggleService = featureToggleService;
     }
 
     @Override
     public MusicTrackAiSuggestResponse suggest(MusicTrackAiSuggestRequest request) {
-        if (!aiRuntimeProperties.getMusicAssist().isEnabled()) {
-            throw new IllegalStateException("当前环境未开启 AI 音乐补全能力");
+        if (!featureToggleService.isEnabled(RuntimeFeatureEnum.AI_MUSIC_ASSIST)) {
+            throw new IllegalStateException("AI 音乐补全当前已在管理后台关闭");
         }
 
         AiScenarioResult<MusicTrackSuggestScenarioResult> scenarioExecution = aiScenarioExecutor.execute(

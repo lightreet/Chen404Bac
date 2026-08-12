@@ -1,6 +1,5 @@
 package com.chen404.service.support;
 
-import com.chen404.config.MultiUserFeatureProperties;
 import com.chen404.domain.enums.UserRoleEnum;
 import com.chen404.domain.enums.UserTrustLevelEnum;
 import com.chen404.domain.entity.Role;
@@ -9,6 +8,7 @@ import com.chen404.domain.entity.User;
 import com.chen404.mapper.RoleMapper;
 import com.chen404.mapper.SysFileMapper;
 import com.chen404.mapper.UserMapper;
+import com.chen404.service.FeatureToggleService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -31,7 +31,7 @@ public class UserAccessProfileSupport {
     private SysFileMapper sysFileMapper;
 
     @Autowired
-    private MultiUserFeatureProperties multiUserFeatureProperties;
+    private FeatureToggleService featureToggleService;
 
     /**
      * 根据用户 ID 加载用户并补齐权限相关信息。
@@ -58,7 +58,7 @@ public class UserAccessProfileSupport {
             user.setTrustLevel(UserTrustLevelEnum.NORMAL.getLevel());
         }
         applyIdentityLabels(user);
-        user.setCapabilities(multiUserFeatureProperties.resolveAvailableCapabilities(user));
+        user.setCapabilities(featureToggleService.resolveAvailableCapabilities(user));
         return user;
     }
 

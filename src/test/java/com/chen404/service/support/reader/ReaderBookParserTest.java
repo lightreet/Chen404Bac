@@ -49,6 +49,72 @@ class ReaderBookParserTest {
     }
 
     @Test
+    void shouldTreatEachNonBlankTextLineAsParagraph() {
+        ParsedReaderBook parsed = parseUtf8Text("""
+                第一章 单换行
+                第一段正文。
+                第二段正文。
+                """);
+
+        ParsedReaderBook.Chapter chapter = parsed.getChapters().get(0);
+        assertEquals(
+                "<p data-reader-block=\"0\">第一段正文。</p>"
+                        + "<p data-reader-block=\"1\">第二段正文。</p>",
+                chapter.getContentHtml()
+        );
+        assertEquals("第一段正文。\n\n第二段正文。", chapter.getContentText());
+        assertFalse(chapter.getContentHtml().contains("<br>"));
+    }
+
+    @Test
+    void shouldIgnoreMultipleBlankLinesBetweenTextParagraphs() {
+        ParsedReaderBook parsed = parseUtf8Text("""
+                第一章 多空行
+                第一段正文。
+
+
+
+                第二段正文。
+                """);
+
+        ParsedReaderBook.Chapter chapter = parsed.getChapters().get(0);
+        assertEquals(2, countOccurrences(chapter.getContentHtml(), "<p data-reader-block="));
+        assertEquals("第一段正文。\n\n第二段正文。", chapter.getContentText());
+    }
+
+    @Test
+    void shouldRemoveExistingHalfWidthAndFullWidthParagraphIndent() {
+        ParsedReaderBook parsed = parseUtf8Text("""
+                第一章 原文缩进
+                  半角空格缩进。
+                　　全角空格缩进。
+                """);
+
+        ParsedReaderBook.Chapter chapter = parsed.getChapters().get(0);
+        assertEquals("半角空格缩进。\n\n全角空格缩进。", chapter.getContentText());
+        assertFalse(chapter.getContentHtml().contains(">  半角"));
+        assertFalse(chapter.getContentHtml().contains(">　　全角"));
+    }
+
+    @Test
+    void shouldKeepChapterHeadingRecognitionWithSingleNewlines() {
+        ParsedReaderBook parsed = parseUtf8Text("""
+                第一卷 初见
+                第一章 雨夜
+                雨声落在窗外。
+                第二章 来信
+                信纸上只有一行字。
+                """);
+
+        assertEquals(2, parsed.getChapters().size());
+        assertEquals("第一章 雨夜", parsed.getChapters().get(0).getTitle());
+        assertEquals("第二章 来信", parsed.getChapters().get(1).getTitle());
+        assertEquals("第一卷 初见", parsed.getChapters().get(0).getVolumeTitle());
+        assertEquals("雨声落在窗外。", parsed.getChapters().get(0).getContentText());
+        assertEquals("信纸上只有一行字。", parsed.getChapters().get(1).getContentText());
+    }
+
+    @Test
     void shouldParseEpub3SpineNestedTocAndCoverAsset() throws Exception {
         Map<String, byte[]> entries = new LinkedHashMap<>();
         entries.put("mimetype", "application/epub+zip".getBytes(StandardCharsets.US_ASCII));
@@ -220,5 +286,13 @@ class ReaderBookParserTest {
             }
         }
         return output.toByteArray();
+    }
+
+    private ParsedReaderBook parseUtf8Text(String content) {
+        return parser.parse("paragraphs.txt", content.getBytes(StandardCharsets.UTF_8), "UTF-8");
+    }
+
+    private int countOccurrences(String value, String target) {
+        return (value.length() - value.replace(target, "").length()) / target.length();
     }
 }

@@ -376,9 +376,6 @@ public class AiChatServiceImpl implements AiChatService {
         if (context.scene() != AiMaidPromptScene.HELPER) {
             return List.of();
         }
-        if (!aiRuntimeProperties.getRecommend().isEnabled()) {
-            return List.of();
-        }
         if (isRequireRecommendIntent(context.aiConfig())
                 && !containsRecommendIntent(context.latestUserMessage())) {
             return List.of();

@@ -4,9 +4,11 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.chen404.config.AiRuntimeProperties;
 import com.chen404.domain.entity.Article;
 import com.chen404.domain.entity.ArticleTag;
+import com.chen404.domain.enums.RuntimeFeatureEnum;
 import com.chen404.mapper.ArticleMapper;
 import com.chen404.mapper.ArticleTagMapper;
 import com.chen404.service.AccessService;
+import com.chen404.service.FeatureToggleService;
 import com.chen404.service.support.scenario.AiScenarioCode;
 import com.chen404.service.support.scenario.AiScenarioDefinition;
 import com.chen404.service.support.scenario.AiScenarioRequest;
@@ -37,16 +39,19 @@ public class ArticleRecommendScenarioDefinition implements AiScenarioDefinition<
     private final ArticleTagMapper articleTagMapper;
     private final AccessService accessService;
     private final AiRuntimeProperties aiRuntimeProperties;
+    private final FeatureToggleService featureToggleService;
 
     public ArticleRecommendScenarioDefinition(
             ArticleMapper articleMapper,
             ArticleTagMapper articleTagMapper,
             AccessService accessService,
-            AiRuntimeProperties aiRuntimeProperties) {
+            AiRuntimeProperties aiRuntimeProperties,
+            FeatureToggleService featureToggleService) {
         this.articleMapper = articleMapper;
         this.articleTagMapper = articleTagMapper;
         this.accessService = accessService;
         this.aiRuntimeProperties = aiRuntimeProperties;
+        this.featureToggleService = featureToggleService;
     }
 
     @Override
@@ -56,7 +61,7 @@ public class ArticleRecommendScenarioDefinition implements AiScenarioDefinition<
 
     @Override
     public AiScenarioResult<ArticleRecommendScenarioResult> execute(AiScenarioRequest<ArticleRecommendScenarioRequest> request) {
-        if (!aiRuntimeProperties.getRecommend().isEnabled()) {
+        if (!featureToggleService.isEnabled(RuntimeFeatureEnum.AI_ARTICLE_RECOMMEND)) {
             return AiScenarioResult.of(new ArticleRecommendScenarioResult(
                     List.of(),
                     "相关文章推荐能力未开启。",

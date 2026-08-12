@@ -1,10 +1,11 @@
 package com.chen404.service.impl;
 
-import com.chen404.config.AiRuntimeProperties;
 import com.chen404.domain.dto.AiAdminConfigDTO;
 import com.chen404.domain.dto.MusicTrackAiSuggestRequest;
 import com.chen404.domain.dto.MusicTrackAiSuggestResponse;
+import com.chen404.domain.enums.RuntimeFeatureEnum;
 import com.chen404.service.AiConfigService;
+import com.chen404.service.FeatureToggleService;
 import com.chen404.service.support.AiLlmRequestFactory;
 import com.chen404.service.support.LlmClient;
 import com.chen404.service.support.LlmTextRequest;
@@ -15,12 +16,31 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class LlmMusicTrackAiSuggestServiceImplTest {
+
+    @Test
+    void shouldRejectBeforeScenarioExecutionWhenFeatureIsDisabled() {
+        AiScenarioExecutor executor = mock(AiScenarioExecutor.class);
+        LlmMusicTrackAiSuggestServiceImpl service = new LlmMusicTrackAiSuggestServiceImpl(
+                executor,
+                mock(FeatureToggleService.class)
+        );
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                () -> service.suggest(new MusicTrackAiSuggestRequest())
+        );
+
+        assertEquals("AI 音乐补全当前已在管理后台关闭", exception.getMessage());
+        verifyNoInteractions(executor);
+    }
 
     @Test
     void shouldReturnMusicSuggestionFromScenarioExecutor() {
@@ -45,9 +65,10 @@ class LlmMusicTrackAiSuggestServiceImplTest {
                   ]
                 }
                 """);
-        AiRuntimeProperties properties = new AiRuntimeProperties();
         AiScenarioExecutor executor = new AiScenarioExecutor(List.of(new MusicTrackSuggestScenarioDefinition(llmClient, requestFactory())));
-        LlmMusicTrackAiSuggestServiceImpl service = new LlmMusicTrackAiSuggestServiceImpl(executor, properties);
+        FeatureToggleService featureToggleService = mock(FeatureToggleService.class);
+        when(featureToggleService.isEnabled(RuntimeFeatureEnum.AI_MUSIC_ASSIST)).thenReturn(true);
+        LlmMusicTrackAiSuggestServiceImpl service = new LlmMusicTrackAiSuggestServiceImpl(executor, featureToggleService);
         MusicTrackAiSuggestRequest request = new MusicTrackAiSuggestRequest();
         request.setTitle("夜に駆ける");
 

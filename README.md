@@ -73,6 +73,7 @@ src/main/resources/db/migration/
 - 文章封面文件引用
 - 好友申请
 - 站点运行时配置
+- 管理后台运行时功能开关
 - AI 会话与文章知识切片
 - 旅行纪念地图（含停留片段 `stop` 分组与结束时间）
 - 统一文件引用
@@ -114,6 +115,16 @@ src/main/resources/db/migration/
 - `llm.*`：OpenAI-compatible 模型调用配置
 - `xxl.job.*`：后台任务执行器配置
 
+### 管理后台运行时功能
+
+需要管理员在日常运营中即时调整的业务开关存放在 `site_config` 私有配置项中，通过后台“站点配置 → 功能开关”维护，无需修改服务器环境变量或重启服务。当前包括：
+
+- 知友文章、旅行、音乐创作
+- 管理员消息中心
+- AI 文章摘要与标签、音乐信息补全、相关文章推荐
+
+数据库、Redis、MinIO、JWT、CORS、上传硬限制、图片编码参数、XXL-JOB 和 Swagger 仍属于部署或启动期配置，不允许从业务后台修改。
+
 ## 当前控制器边界
 
 | 控制器 | 路径 | 说明 |
@@ -137,6 +148,7 @@ src/main/resources/db/migration/
 | `MusicRadioController` | `/music/**`, `/admin/music/**` | Sakura Radio 公开播放、歌曲/歌单维护、AI 曲目信息补全 |
 | `ReaderLibraryController` | `/reader/**` | 私人小说导入、书架、目录、章节、全文搜索、资源、进度与阅读偏好 |
 | `AdminAiConfigController` | `/admin/ai/config/**` | AI 后台配置读取、保存、连接测试 |
+| `AdminFeatureToggleController` | `/admin/feature-toggles` | 运行时业务功能开关读取与保存 |
 
 ## 当前能力
 

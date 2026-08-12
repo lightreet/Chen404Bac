@@ -1,13 +1,14 @@
 package com.chen404.service.impl;
 
 import com.chen404.config.SiteOwnerProperties;
-import com.chen404.config.AdminNotificationProperties;
 import com.chen404.domain.entity.AdminNotification;
 import com.chen404.domain.entity.User;
 import com.chen404.domain.enums.AdminNotificationEventTypeEnum;
 import com.chen404.domain.event.AdminContentEvent;
 import com.chen404.mapper.AdminNotificationMapper;
 import com.chen404.mapper.UserMapper;
+import com.chen404.domain.enums.RuntimeFeatureEnum;
+import com.chen404.service.FeatureToggleService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Component;
@@ -29,23 +30,23 @@ public class AdminContentEventListener {
     private final AdminNotificationMapper adminNotificationMapper;
     private final UserMapper userMapper;
     private final SiteOwnerProperties siteOwnerProperties;
-    private final AdminNotificationProperties adminNotificationProperties;
+    private final FeatureToggleService featureToggleService;
 
     public AdminContentEventListener(
             AdminNotificationMapper adminNotificationMapper,
             UserMapper userMapper,
             SiteOwnerProperties siteOwnerProperties,
-            AdminNotificationProperties adminNotificationProperties) {
+            FeatureToggleService featureToggleService) {
         this.adminNotificationMapper = adminNotificationMapper;
         this.userMapper = userMapper;
         this.siteOwnerProperties = siteOwnerProperties;
-        this.adminNotificationProperties = adminNotificationProperties;
+        this.featureToggleService = featureToggleService;
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void handle(AdminContentEvent event) {
-        if (!adminNotificationProperties.isEnabled()) {
+        if (!featureToggleService.isEnabled(RuntimeFeatureEnum.ADMIN_NOTIFICATION)) {
             return;
         }
         if (event == null || event.eventType() == null || event.resourceType() == null || event.resourceId() == null) {
