@@ -63,6 +63,7 @@ public class ReaderBookParser {
     private static final long MAX_ASSET_TOTAL_SIZE = 48L * 1024 * 1024;
     private static final int FALLBACK_CHUNK_SIZE = 20_000;
     private static final int ENCODING_SAMPLE_SIZE = 256 * 1024;
+    private static final Pattern LEADING_TEXT_PARAGRAPH_SPACES = Pattern.compile("^[ \u3000]+");
 
     private static final Pattern CHAPTER_HEADING = Pattern.compile(
             "^(?:第[0-9０-９零〇○一二三四五六七八九十百千万两]+[章节回篇幕集](?:\\s+|[:：、.-])?.*"
@@ -335,14 +336,16 @@ public class ReaderBookParser {
 
     private List<ParsedReaderBook.Chapter> splitLongPlainText(String text) {
         List<ParsedReaderBook.Chapter> chapters = new ArrayList<>();
-        String[] paragraphs = text.split("\\n\\s*\\n");
         StringBuilder chunk = new StringBuilder();
-        for (String paragraph : paragraphs) {
-            if (chunk.length() > 0 && chunk.length() + paragraph.length() > FALLBACK_CHUNK_SIZE) {
+        for (String line : text.split("\\n", -1)) {
+            if (!StringUtils.hasText(line)) {
+                continue;
+            }
+            if (chunk.length() > 0 && chunk.length() + line.length() + 1 > FALLBACK_CHUNK_SIZE) {
                 chapters.add(plainChapter("正文 " + (chapters.size() + 1), null, chunk.toString()));
                 chunk.setLength(0);
             }
-            chunk.append(paragraph.strip()).append("\n\n");
+            chunk.append(line).append('\n');
         }
         if (chunk.length() > 0) {
             chapters.add(plainChapter(
@@ -372,23 +375,22 @@ public class ReaderBookParser {
         StringBuilder html = new StringBuilder(content.length() + 256);
         StringBuilder text = new StringBuilder(content.length());
         int blockIndex = 0;
-        for (String paragraph : content.split("\\n\\s*\\n")) {
-            if (!StringUtils.hasText(paragraph)) {
+        for (String line : content.split("\\n", -1)) {
+            if (!StringUtils.hasText(line)) {
                 continue;
             }
-            String normalizedParagraph = paragraph.strip();
+            String normalizedParagraph = LEADING_TEXT_PARAGRAPH_SPACES
+                    .matcher(line.stripTrailing())
+                    .replaceFirst("");
+            if (!StringUtils.hasText(normalizedParagraph)) {
+                continue;
+            }
             if (text.length() > 0) {
                 text.append("\n\n");
             }
             text.append(normalizedParagraph);
             html.append("<p data-reader-block=\"").append(blockIndex++).append("\">");
-            String[] lines = paragraph.strip().split("\\n");
-            for (int index = 0; index < lines.length; index++) {
-                if (index > 0) {
-                    html.append("<br>");
-                }
-                html.append(org.jsoup.nodes.Entities.escape(lines[index].stripTrailing()));
-            }
+            html.append(org.jsoup.nodes.Entities.escape(normalizedParagraph));
             html.append("</p>");
         }
         return new ParsedReaderBook.Chapter(
