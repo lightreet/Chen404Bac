@@ -1,10 +1,11 @@
 package com.chen404.service.impl;
 
-import com.chen404.config.MultiUserFeatureProperties;
 import com.chen404.domain.entity.Article;
 import com.chen404.domain.entity.MusicTrack;
 import com.chen404.domain.entity.TravelMemoryLocation;
 import com.chen404.domain.entity.User;
+import com.chen404.domain.enums.UserCapabilityEnum;
+import com.chen404.service.FeatureToggleService;
 import com.chen404.service.support.UserAccessProfileSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,11 +28,10 @@ class AccessServiceImplPermissionRevocationTest {
         support = mock(UserAccessProfileSupport.class);
         accessService = new AccessServiceImpl();
         ReflectionTestUtils.setField(accessService, "userAccessProfileSupport", support);
-        MultiUserFeatureProperties properties = new MultiUserFeatureProperties();
-        properties.setArticleCreationEnabled(true);
-        properties.setTravelCreationEnabled(true);
-        properties.setMusicCreationEnabled(true);
-        ReflectionTestUtils.setField(accessService, "multiUserFeatureProperties", properties);
+        FeatureToggleService featureToggleService = mock(FeatureToggleService.class);
+        when(featureToggleService.resolveAvailableCapabilities(org.mockito.ArgumentMatchers.any(User.class)))
+                .thenAnswer(invocation -> UserCapabilityEnum.resolveCodes(invocation.getArgument(0)));
+        ReflectionTestUtils.setField(accessService, "featureToggleService", featureToggleService);
     }
 
     @Test

@@ -108,7 +108,6 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
 
     @Override
     public List<TravelMemoryLocation> listMyLocations(Long userId) {
-        ensureCanCreate(userId);
         LambdaQueryWrapper<TravelMemoryLocation> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(TravelMemoryLocation::getCreatedBy, userId)
                 .orderByDesc(TravelMemoryLocation::getUpdateTime)

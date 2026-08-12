@@ -112,7 +112,6 @@ public class MusicRadioServiceImpl implements MusicRadioService {
 
     @Override
     public List<MusicTrackVO> listMyTracks(Long userId) {
-        ensureCanCreateMusic(userId);
         LambdaQueryWrapper<MusicTrack> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(MusicTrack::getContributorId, userId)
                 .orderByDesc(MusicTrack::getUpdateTime)

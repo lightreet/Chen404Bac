@@ -43,6 +43,29 @@ import static org.mockito.Mockito.when;
 class MusicRadioServiceImplTest {
 
     @Test
+    void shouldKeepOwnMusicHistoryReadableWhenCreationIsDisabled() {
+        initTableInfo(MusicTrack.class);
+        MusicTrackMapper trackMapper = mock(MusicTrackMapper.class);
+        AccessService accessService = mock(AccessService.class);
+        MusicTrack history = buildTrack(8L, "历史音乐", MusicTrack.STATUS_DRAFT, "夜读");
+        history.setContributorId(7L);
+        when(trackMapper.selectList(any())).thenReturn(List.of(history));
+        MusicRadioServiceImpl service = buildService(
+                trackMapper,
+                mock(MusicPlaylistMapper.class),
+                mock(MusicPlaylistTrackMapper.class),
+                mock(SysFileService.class),
+                accessService);
+
+        List<MusicTrackVO> result = service.listMyTracks(7L);
+
+        assertEquals(1, result.size());
+        assertEquals("历史音乐", result.get(0).getTitle());
+        assertFalse(Boolean.TRUE.equals(result.get(0).getCanEdit()));
+        verify(accessService, never()).canCreateMusicTrack(7L);
+    }
+
+    @Test
     void shouldListOnlyPublishedTracksForPublicPage() {
         initTableInfo(MusicTrack.class);
         MusicTrackMapper trackMapper = mock(MusicTrackMapper.class);
@@ -318,6 +341,15 @@ class MusicRadioServiceImplTest {
         AccessService accessService = mock(AccessService.class);
         when(accessService.canCreateMusicTrack(1L)).thenReturn(true);
         when(accessService.canManageMusicTrack(eq(1L), any(MusicTrack.class))).thenReturn(true);
+        return buildService(trackMapper, playlistMapper, playlistTrackMapper, sysFileService, accessService);
+    }
+
+    private MusicRadioServiceImpl buildService(
+            MusicTrackMapper trackMapper,
+            MusicPlaylistMapper playlistMapper,
+            MusicPlaylistTrackMapper playlistTrackMapper,
+            SysFileService sysFileService,
+            AccessService accessService) {
         MusicRadioServiceImpl service = new MusicRadioServiceImpl(
                 trackMapper,
                 playlistMapper,

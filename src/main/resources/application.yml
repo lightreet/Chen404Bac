@@ -32,12 +32,6 @@ app:
   site-owner-user-id: ${APP_SITE_OWNER_USER_ID:1}
   music:
     player-state-ttl: ${MUSIC_PLAYER_STATE_TTL:7d}
-  multi-user:
-    article-creation-enabled: true
-    travel-creation-enabled: true
-    music-creation-enabled: true
-  admin-notification:
-    enabled: true
   cors:
     allowed-origins: "http://localhost:20204,http://127.0.0.1:20204,http://192.168.1.6:20204,http://localhost:5173,http://127.0.0.1:5173,http://192.168.1.6:5173"
   frontend-base-url: "http://localhost:20204"
@@ -84,13 +78,11 @@ app:
         related-article-limit: 2
         require-recommend-intent-for-related-articles: true
       article-assist:
-        enabled: true
         max-input-chars: 12000
         max-summary-length: 180
         preferred-tag-count: 3
         max-tag-count: 5
       recommend:
-        enabled: true
         default-limit: 3
         scan-limit: 30
     maid:

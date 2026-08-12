@@ -1,9 +1,10 @@
 package com.chen404.service.impl;
 
-import com.chen404.config.AiRuntimeProperties;
 import com.chen404.domain.dto.AiArticleAssistRequest;
 import com.chen404.domain.dto.AiArticleAssistResponse;
+import com.chen404.domain.enums.RuntimeFeatureEnum;
 import com.chen404.service.AiArticleAssistService;
+import com.chen404.service.FeatureToggleService;
 import com.chen404.service.support.scenario.AiScenarioCode;
 import com.chen404.service.support.scenario.AiScenarioExecutor;
 import com.chen404.service.support.scenario.AiScenarioRequest;
@@ -29,17 +30,19 @@ public class LlmArticleAssistServiceImpl implements AiArticleAssistService {
     private static final String EMPTY_RESULT_ERROR = "LLM 服务返回空结果";
 
     private final AiScenarioExecutor aiScenarioExecutor;
-    private final AiRuntimeProperties aiRuntimeProperties;
+    private final FeatureToggleService featureToggleService;
 
-    public LlmArticleAssistServiceImpl(AiScenarioExecutor aiScenarioExecutor, AiRuntimeProperties aiRuntimeProperties) {
+    public LlmArticleAssistServiceImpl(
+            AiScenarioExecutor aiScenarioExecutor,
+            FeatureToggleService featureToggleService) {
         this.aiScenarioExecutor = aiScenarioExecutor;
-        this.aiRuntimeProperties = aiRuntimeProperties;
+        this.featureToggleService = featureToggleService;
     }
 
     @Override
     public AiArticleAssistResponse generateAssist(AiArticleAssistRequest request) {
-        if (!aiRuntimeProperties.getArticleAssist().isEnabled()) {
-            throw new IllegalStateException("当前环境未开启 AI 文章助手能力");
+        if (!featureToggleService.isEnabled(RuntimeFeatureEnum.AI_ARTICLE_ASSIST)) {
+            throw new IllegalStateException("AI 文章助手当前已在管理后台关闭");
         }
         AiScenarioResult<ArticleAssistScenarioResult> scenarioExecution = aiScenarioExecutor.execute(
                 AiScenarioRequest.of(

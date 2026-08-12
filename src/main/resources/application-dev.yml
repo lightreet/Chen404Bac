@@ -67,12 +67,6 @@ jwt:
 app:
   frontend-base-url: ${APP_FRONTEND_BASE_URL:http://localhost:20204}
   backend-base-url: ${APP_BACKEND_BASE_URL:http://localhost:10404/api}
-  multi-user:
-    article-creation-enabled: ${MULTI_USER_ARTICLE_CREATION_ENABLED:true}
-    travel-creation-enabled: ${MULTI_USER_TRAVEL_CREATION_ENABLED:true}
-    music-creation-enabled: ${MULTI_USER_MUSIC_CREATION_ENABLED:true}
-  admin-notification:
-    enabled: ${ADMIN_NOTIFICATION_ENABLED:true}
 
 logging:
   level:

@@ -1,6 +1,5 @@
 package com.chen404.service.impl;
 
-import com.chen404.config.MultiUserFeatureProperties;
 import com.chen404.domain.enums.ArticleCommentPolicyEnum;
 import com.chen404.domain.enums.ArticleStatusEnum;
 import com.chen404.domain.enums.ArticleVisibilityEnum;
@@ -15,6 +14,7 @@ import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.entity.TravelMemoryLocation;
 import com.chen404.domain.entity.User;
 import com.chen404.service.AccessService;
+import com.chen404.service.FeatureToggleService;
 import com.chen404.service.support.UserAccessProfileSupport;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -29,7 +29,7 @@ public class AccessServiceImpl implements AccessService {
     private UserAccessProfileSupport userAccessProfileSupport;
 
     @Autowired
-    private MultiUserFeatureProperties multiUserFeatureProperties;
+    private FeatureToggleService featureToggleService;
 
     @Override
     public User getUserOrNull(Long userId) {
@@ -54,7 +54,7 @@ public class AccessServiceImpl implements AccessService {
 
     @Override
     public List<String> listCapabilities(Long userId) {
-        return multiUserFeatureProperties.resolveAvailableCapabilities(getUserOrNull(userId));
+        return featureToggleService.resolveAvailableCapabilities(getUserOrNull(userId));
     }
 
     @Override

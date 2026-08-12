@@ -4,7 +4,9 @@ import com.chen404.config.AiRuntimeProperties;
 import com.chen404.domain.dto.AiArticleAssistRequest;
 import com.chen404.domain.dto.AiArticleAssistResponse;
 import com.chen404.domain.dto.AiAdminConfigDTO;
+import com.chen404.domain.enums.RuntimeFeatureEnum;
 import com.chen404.service.AiConfigService;
+import com.chen404.service.FeatureToggleService;
 import com.chen404.service.support.AiLlmRequestFactory;
 import com.chen404.service.support.LlmClient;
 import com.chen404.service.support.LlmTextRequest;
@@ -17,13 +19,32 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertIterableEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class LlmArticleAssistServiceImplTest {
+
+    @Test
+    void generateAssistShouldRejectBeforeScenarioExecutionWhenFeatureIsDisabled() {
+        AiScenarioExecutor executor = mock(AiScenarioExecutor.class);
+        LlmArticleAssistServiceImpl service = new LlmArticleAssistServiceImpl(
+                executor,
+                mock(FeatureToggleService.class)
+        );
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                () -> service.generateAssist(new AiArticleAssistRequest())
+        );
+
+        assertEquals("AI 文章助手当前已在管理后台关闭", exception.getMessage());
+        verifyNoInteractions(executor);
+    }
 
     @Test
     void generateAssistShouldReuseLlmClientAndNormalizeJsonResult() {
@@ -39,7 +60,7 @@ class LlmArticleAssistServiceImplTest {
 
         AiRuntimeProperties aiRuntimeProperties = new AiRuntimeProperties();
         AiScenarioExecutor executor = new AiScenarioExecutor(List.of(new ArticleAssistScenarioDefinition(llmClient, aiRuntimeProperties, requestFactory())));
-        LlmArticleAssistServiceImpl service = new LlmArticleAssistServiceImpl(executor, aiRuntimeProperties);
+        LlmArticleAssistServiceImpl service = new LlmArticleAssistServiceImpl(executor, enabledFeatures());
         AiArticleAssistRequest request = new AiArticleAssistRequest();
         request.setTitle("Spring Boot 接入大模型");
         request.setContent("# 标题\n这是一段用于测试的正文内容。");
@@ -74,7 +95,7 @@ class LlmArticleAssistServiceImplTest {
 
         AiRuntimeProperties aiRuntimeProperties = new AiRuntimeProperties();
         AiScenarioExecutor executor = new AiScenarioExecutor(List.of(new ArticleAssistScenarioDefinition(llmClient, aiRuntimeProperties, requestFactory())));
-        LlmArticleAssistServiceImpl service = new LlmArticleAssistServiceImpl(executor, aiRuntimeProperties);
+        LlmArticleAssistServiceImpl service = new LlmArticleAssistServiceImpl(executor, enabledFeatures());
         AiArticleAssistRequest request = new AiArticleAssistRequest();
         request.setTitle("Spring Boot 接入大模型");
         request.setContent("正文内容");
@@ -107,5 +128,11 @@ class LlmArticleAssistServiceImplTest {
         AiConfigService aiConfigService = mock(AiConfigService.class);
         when(aiConfigService.getEffectiveConfig()).thenReturn(config);
         return new AiLlmRequestFactory(aiConfigService);
+    }
+
+    private FeatureToggleService enabledFeatures() {
+        FeatureToggleService featureToggleService = mock(FeatureToggleService.class);
+        when(featureToggleService.isEnabled(RuntimeFeatureEnum.AI_ARTICLE_ASSIST)).thenReturn(true);
+        return featureToggleService;
     }
 }

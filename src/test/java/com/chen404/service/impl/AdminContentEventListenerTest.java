@@ -1,14 +1,15 @@
 package com.chen404.service.impl;
 
 import com.chen404.config.SiteOwnerProperties;
-import com.chen404.config.AdminNotificationProperties;
 import com.chen404.domain.entity.AdminNotification;
 import com.chen404.domain.entity.User;
 import com.chen404.domain.enums.AdminNotificationEventTypeEnum;
 import com.chen404.domain.enums.AdminNotificationResourceTypeEnum;
+import com.chen404.domain.enums.RuntimeFeatureEnum;
 import com.chen404.domain.event.AdminContentEvent;
 import com.chen404.mapper.AdminNotificationMapper;
 import com.chen404.mapper.UserMapper;
+import com.chen404.service.FeatureToggleService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DuplicateKeyException;
@@ -18,10 +19,35 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.doThrow;
 
 class AdminContentEventListenerTest {
+
+    @Test
+    void shouldSkipNotificationPersistenceWhenFeatureIsDisabled() {
+        AdminNotificationMapper notificationMapper = mock(AdminNotificationMapper.class);
+        UserMapper userMapper = mock(UserMapper.class);
+        SiteOwnerProperties ownerProperties = new SiteOwnerProperties();
+        ownerProperties.setSiteOwnerUserId(1L);
+        AdminContentEventListener listener = new AdminContentEventListener(
+                notificationMapper,
+                userMapper,
+                ownerProperties,
+                mock(FeatureToggleService.class)
+        );
+
+        listener.handle(new AdminContentEvent(
+                AdminNotificationEventTypeEnum.ARTICLE_PUBLISHED,
+                7L,
+                AdminNotificationResourceTypeEnum.ARTICLE,
+                99L,
+                "关闭开关后的文章"
+        ));
+
+        verifyNoInteractions(notificationMapper, userMapper);
+    }
 
     @Test
     void shouldCreateUnreadOwnerNotificationForNewArticle() {
@@ -29,8 +55,7 @@ class AdminContentEventListenerTest {
         UserMapper userMapper = mock(UserMapper.class);
         SiteOwnerProperties ownerProperties = new SiteOwnerProperties();
         ownerProperties.setSiteOwnerUserId(1L);
-        AdminNotificationProperties notificationProperties = new AdminNotificationProperties();
-        notificationProperties.setEnabled(true);
+        FeatureToggleService featureToggleService = enabledFeatures();
         User actor = new User();
         actor.setNickname("知友小陈");
         when(userMapper.selectById(7L)).thenReturn(actor);
@@ -39,7 +64,7 @@ class AdminContentEventListenerTest {
                 notificationMapper,
                 userMapper,
                 ownerProperties,
-                notificationProperties
+                featureToggleService
         );
         listener.handle(new AdminContentEvent(
                 AdminNotificationEventTypeEnum.ARTICLE_PUBLISHED,
@@ -64,8 +89,7 @@ class AdminContentEventListenerTest {
         UserMapper userMapper = mock(UserMapper.class);
         SiteOwnerProperties ownerProperties = new SiteOwnerProperties();
         ownerProperties.setSiteOwnerUserId(1L);
-        AdminNotificationProperties notificationProperties = new AdminNotificationProperties();
-        notificationProperties.setEnabled(true);
+        FeatureToggleService featureToggleService = enabledFeatures();
         User actor = new User();
         actor.setNickname("知友小陈");
         when(userMapper.selectById(7L)).thenReturn(actor);
@@ -74,7 +98,7 @@ class AdminContentEventListenerTest {
                 notificationMapper,
                 userMapper,
                 ownerProperties,
-                notificationProperties
+                featureToggleService
         );
         listener.handle(new AdminContentEvent(
                 AdminNotificationEventTypeEnum.READER_BOOK_IMPORTED,
@@ -112,15 +136,20 @@ class AdminContentEventListenerTest {
         doThrow(failure).when(notificationMapper).insert(org.mockito.ArgumentMatchers.any());
         SiteOwnerProperties ownerProperties = new SiteOwnerProperties();
         ownerProperties.setSiteOwnerUserId(1L);
-        AdminNotificationProperties notificationProperties = new AdminNotificationProperties();
-        notificationProperties.setEnabled(true);
+        FeatureToggleService featureToggleService = enabledFeatures();
         AdminContentEventListener listener = new AdminContentEventListener(
                 notificationMapper,
                 userMapper,
                 ownerProperties,
-                notificationProperties
+                featureToggleService
         );
 
         assertDoesNotThrow(() -> listener.handle(event));
+    }
+
+    private FeatureToggleService enabledFeatures() {
+        FeatureToggleService featureToggleService = mock(FeatureToggleService.class);
+        when(featureToggleService.isEnabled(RuntimeFeatureEnum.ADMIN_NOTIFICATION)).thenReturn(true);
+        return featureToggleService;
     }
 }

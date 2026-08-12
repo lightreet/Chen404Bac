@@ -7,8 +7,8 @@ import org.springframework.stereotype.Component;
 /**
  * AI 运行时配置。
  * <p>
- * 统一承载聊天、文章助手、相关文章推荐等 AI 功能的开关与阈值，
- * 便于在不修改业务代码的前提下调整运行策略。
+ * 统一承载聊天、文章助手、相关文章推荐等 AI 功能的启动默认值与技术阈值。
+ * 面向管理员的业务开关由 {@code FeatureToggleService} 在运行期提供。
  */
 @Data
 @Component
@@ -24,11 +24,6 @@ public class AiRuntimeProperties {
      * 文章助手运行参数。
      */
     private ArticleAssist articleAssist = new ArticleAssist();
-
-    /**
-     * 音乐曲目补全运行参数。
-     */
-    private MusicAssist musicAssist = new MusicAssist();
 
     /**
      * 相关文章推荐运行参数。
@@ -83,11 +78,6 @@ public class AiRuntimeProperties {
     public static class ArticleAssist {
 
         /**
-         * 是否开启文章摘要/标签助手。
-         */
-        private boolean enabled = true;
-
-        /**
          * 文章正文最大输入长度。
          */
         private int maxInputChars = 12_000;
@@ -109,22 +99,7 @@ public class AiRuntimeProperties {
     }
 
     @Data
-    public static class MusicAssist {
-
-        /**
-         * 是否开启音乐曲目信息补全能力。
-         */
-        private boolean enabled = true;
-    }
-
-    @Data
     public static class Recommend {
-
-        /**
-         * 是否开启相关文章推荐。
-         */
-        private boolean enabled = true;
-
         /**
          * 默认返回数量。
          */
