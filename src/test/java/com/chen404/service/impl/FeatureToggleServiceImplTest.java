@@ -43,6 +43,17 @@ class FeatureToggleServiceImplTest {
     }
 
     @Test
+    void shouldEnableAdminNotificationWhenPersistedValueIsMissing() {
+        SiteConfigMapper mapper = mock(SiteConfigMapper.class);
+        when(mapper.selectAllConfigs()).thenReturn(List.of());
+        FeatureToggleServiceImpl service = new FeatureToggleServiceImpl(mapper);
+
+        FeatureToggleConfigDTO config = service.getAdminConfig();
+
+        assertTrue(config.getAdminNotificationEnabled());
+    }
+
+    @Test
     void shouldFilterFriendCreationCapabilitiesButKeepAdminCapabilities() {
         SiteConfigMapper mapper = mock(SiteConfigMapper.class);
         when(mapper.selectAllConfigs()).thenReturn(List.of(
