@@ -10,6 +10,7 @@ import com.chen404.domain.enums.UserRoleEnum;
 import com.chen404.domain.enums.UserTrustLevelEnum;
 import com.chen404.domain.entity.Article;
 import com.chen404.domain.entity.MusicTrack;
+import com.chen404.domain.entity.ReaderBook;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.entity.TravelMemoryLocation;
 import com.chen404.domain.entity.User;
@@ -70,6 +71,20 @@ public class AccessServiceImpl implements AccessService {
     @Override
     public boolean canImportReaderBook(Long userId) {
         return hasCapability(userId, UserCapabilityEnum.FRIEND_CONTENT_VIEW.getCode());
+    }
+
+    @Override
+    public boolean canManageReaderBook(Long userId, ReaderBook book) {
+        if (book == null || userId == null) {
+            return false;
+        }
+        User user = getUserOrNull(userId);
+        if (!isEnabled(user)) {
+            return false;
+        }
+        return isAdmin(user)
+                || (Objects.equals(book.getOwnerUserId(), userId)
+                && canImportReaderBook(userId));
     }
 
     @Override

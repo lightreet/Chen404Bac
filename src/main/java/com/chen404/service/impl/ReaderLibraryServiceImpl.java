@@ -437,7 +437,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ReaderBookVO updateBook(Long bookId, ReaderBookUpdateCommand command, Long userId) {
-        ReaderBook book = requireOwnedBook(bookId, userId);
+        ReaderBook book = requireManageableBook(bookId, userId);
         if (!ReaderBook.STATUS_READY.equals(book.getStatus())) {
             throw new BadRequestException("小说尚未导入完成，暂时不能编辑");
         }
@@ -463,7 +463,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void deleteBook(Long bookId, Long userId) {
-        ReaderBook book = requireOwnedBook(bookId, userId);
+        ReaderBook book = requireManageableBook(bookId, userId);
         if (ReaderBook.STATUS_IMPORTING.equals(book.getStatus())) {
             throw new BadRequestException("小说正在后台导入，完成后才能删除");
         }
@@ -703,14 +703,16 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
         }
     }
 
-    private ReaderBook requireOwnedBook(Long bookId, Long userId) {
+    private ReaderBook requireManageableBook(Long bookId, Long userId) {
         requireUser(userId);
         ReaderBook book = bookId == null ? null : bookMapper.selectById(bookId);
         if (book == null) {
             throw new ResourceNotFoundException("小说不存在");
         }
-        if (!Objects.equals(book.getOwnerUserId(), userId)) {
-            throw new ForbiddenException("只能访问自己书架中的小说");
+        if (!accessService.canManageReaderBook(userId, book)) {
+            log.warn("[READER_MANAGE_DENIED] operatorId={} bookId={} ownerUserId={}",
+                    userId, bookId, book.getOwnerUserId());
+            throw new ForbiddenException("只能管理自己上传的小说");
         }
         return book;
     }
@@ -739,6 +741,9 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
      */
     private boolean canReadBook(ReaderBook book, Long userId) {
         if (Objects.equals(book.getOwnerUserId(), userId)) {
+            return true;
+        }
+        if (accessService.canManageReaderBook(userId, book)) {
             return true;
         }
         if (!ReaderBook.STATUS_READY.equals(book.getStatus())) {

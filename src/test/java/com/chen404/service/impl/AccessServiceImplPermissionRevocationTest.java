@@ -2,6 +2,7 @@ package com.chen404.service.impl;
 
 import com.chen404.domain.entity.Article;
 import com.chen404.domain.entity.MusicTrack;
+import com.chen404.domain.entity.ReaderBook;
 import com.chen404.domain.entity.TravelMemoryLocation;
 import com.chen404.domain.entity.User;
 import com.chen404.domain.enums.UserCapabilityEnum;
@@ -45,10 +46,13 @@ class AccessServiceImplPermissionRevocationTest {
         track.setContributorId(USER_ID);
         TravelMemoryLocation location = new TravelMemoryLocation();
         location.setCreatedBy(USER_ID);
+        ReaderBook book = new ReaderBook();
+        book.setOwnerUserId(USER_ID);
 
         assertFalse(accessService.canManageArticle(USER_ID, article));
         assertFalse(accessService.canManageMusicTrack(USER_ID, track));
         assertFalse(accessService.canManageTravelMemory(USER_ID, location));
+        assertFalse(accessService.canManageReaderBook(USER_ID, book));
         assertTrue(accessService.canViewTravelMemory(USER_ID, location), "降级后仍可查看自己的旅行记录");
     }
 
@@ -63,11 +67,50 @@ class AccessServiceImplPermissionRevocationTest {
         track.setContributorId(99L);
         TravelMemoryLocation location = new TravelMemoryLocation();
         location.setCreatedBy(99L);
+        ReaderBook book = new ReaderBook();
+        book.setOwnerUserId(99L);
 
         assertFalse(accessService.canCurateArticle(USER_ID));
         assertFalse(accessService.canManageArticle(USER_ID, article));
         assertFalse(accessService.canManageMusicTrack(USER_ID, track));
         assertFalse(accessService.canManageTravelMemory(USER_ID, location));
+        assertFalse(accessService.canManageReaderBook(USER_ID, book));
+    }
+
+    @Test
+    void shouldAllowOnlyEnabledAdminOrCurrentOwnerToManageContent() {
+        Article ownArticle = new Article();
+        ownArticle.setAuthorId(USER_ID);
+        Article otherArticle = new Article();
+        otherArticle.setAuthorId(99L);
+        MusicTrack ownTrack = new MusicTrack();
+        ownTrack.setContributorId(USER_ID);
+        MusicTrack otherTrack = new MusicTrack();
+        otherTrack.setContributorId(99L);
+        TravelMemoryLocation ownLocation = new TravelMemoryLocation();
+        ownLocation.setCreatedBy(USER_ID);
+        TravelMemoryLocation otherLocation = new TravelMemoryLocation();
+        otherLocation.setCreatedBy(99L);
+        ReaderBook ownBook = new ReaderBook();
+        ownBook.setOwnerUserId(USER_ID);
+        ReaderBook otherBook = new ReaderBook();
+        otherBook.setOwnerUserId(99L);
+
+        when(support.loadUserProfile(USER_ID)).thenReturn(buildUser("user", 1, 1));
+        assertTrue(accessService.canManageArticle(USER_ID, ownArticle));
+        assertTrue(accessService.canManageMusicTrack(USER_ID, ownTrack));
+        assertTrue(accessService.canManageTravelMemory(USER_ID, ownLocation));
+        assertTrue(accessService.canManageReaderBook(USER_ID, ownBook));
+        assertFalse(accessService.canManageArticle(USER_ID, otherArticle));
+        assertFalse(accessService.canManageMusicTrack(USER_ID, otherTrack));
+        assertFalse(accessService.canManageTravelMemory(USER_ID, otherLocation));
+        assertFalse(accessService.canManageReaderBook(USER_ID, otherBook));
+
+        when(support.loadUserProfile(USER_ID)).thenReturn(buildUser("admin", 0, 1));
+        assertTrue(accessService.canManageArticle(USER_ID, otherArticle));
+        assertTrue(accessService.canManageMusicTrack(USER_ID, otherTrack));
+        assertTrue(accessService.canManageTravelMemory(USER_ID, otherLocation));
+        assertTrue(accessService.canManageReaderBook(USER_ID, otherBook));
     }
 
     @Test
