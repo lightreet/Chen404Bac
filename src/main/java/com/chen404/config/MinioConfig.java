@@ -7,6 +7,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.util.StringUtils;
 
+import java.net.URI;
+
 /**
  * MinIO 配置类
  */
@@ -65,6 +67,27 @@ public class MinioConfig {
     public String getFileUrl(String targetBucketName, String objectName) {
         String baseUrl = StringUtils.hasText(externalUrl) ? externalUrl : endpoint;
         return baseUrl + "/" + targetBucketName + "/" + objectName;
+    }
+
+    /**
+     * 将使用内网 MinIO 地址生成的预签名 URL 转换为浏览器可访问地址。
+     *
+     * <p>签名参数和对象路径必须保持原样，仅替换访问入口。这样服务端仍可通过
+     * {@link #endpoint} 访问 MinIO，浏览器则经由 {@link #externalUrl} 对应的反向代理读取文件。</p>
+     */
+    public String externalizePresignedUrl(String presignedUrl) {
+        if (!StringUtils.hasText(externalUrl) || !StringUtils.hasText(presignedUrl)) {
+            return presignedUrl;
+        }
+
+        URI signedUri = URI.create(presignedUrl);
+        String baseUrl = externalUrl.trim().replaceFirst("/+$", "");
+        StringBuilder externalizedUrl = new StringBuilder(baseUrl)
+                .append(signedUri.getRawPath());
+        if (StringUtils.hasText(signedUri.getRawQuery())) {
+            externalizedUrl.append('?').append(signedUri.getRawQuery());
+        }
+        return externalizedUrl.toString();
     }
 
     private void validateRequiredConfig() {

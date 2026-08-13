@@ -21,7 +21,7 @@ public enum RuntimeFeatureEnum {
             "知友音乐创作开关"),
     ADMIN_NOTIFICATION(
             "feature.admin_notification.enabled",
-            false,
+            true,
             "管理员消息中心开关"),
     AI_ARTICLE_ASSIST(
             "feature.ai.article_assist_enabled",

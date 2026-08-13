@@ -130,7 +130,7 @@ public class MinioStorageServiceImpl implements FileStorageService {
     public String getPresignedGetUrl(String bucketName, String objectName, int expiresMinutes) {
         try {
             ensureBucketExists(bucketName, minioConfig.getBucketName().equals(bucketName));
-            return minioClient.getPresignedObjectUrl(
+            String presignedUrl = minioClient.getPresignedObjectUrl(
                     GetPresignedObjectUrlArgs.builder()
                             .bucket(bucketName)
                             .object(objectName)
@@ -138,6 +138,7 @@ public class MinioStorageServiceImpl implements FileStorageService {
                             .expiry(expiresMinutes, TimeUnit.MINUTES)
                             .build()
             );
+            return minioConfig.externalizePresignedUrl(presignedUrl);
         } catch (Exception e) {
             log.error("获取文件下载链接失败: bucket={}, object={}", bucketName, objectName, e);
             throw new IllegalStateException("获取文件下载链接失败", e);
@@ -174,7 +175,7 @@ public class MinioStorageServiceImpl implements FileStorageService {
     public String getPresignedUploadUrl(String objectName, int expires) {
         try {
             ensureBucketExists(minioConfig.getBucketName(), true);
-            return minioClient.getPresignedObjectUrl(
+            String presignedUrl = minioClient.getPresignedObjectUrl(
                     GetPresignedObjectUrlArgs.builder()
                             .bucket(minioConfig.getBucketName())
                             .object(objectName)
@@ -182,6 +183,7 @@ public class MinioStorageServiceImpl implements FileStorageService {
                             .expiry(expires, TimeUnit.MINUTES)
                             .build()
             );
+            return minioConfig.externalizePresignedUrl(presignedUrl);
         } catch (Exception e) {
             log.error("获取预签名URL失败", e);
             throw new IllegalStateException("获取上传链接失败", e);
