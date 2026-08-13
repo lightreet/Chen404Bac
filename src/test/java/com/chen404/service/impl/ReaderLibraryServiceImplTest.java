@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.chen404.domain.dto.ReaderBookVO;
 import com.chen404.domain.dto.ReaderBookPreviewVO;
+import com.chen404.domain.dto.ReaderBookUpdateCommand;
 import com.chen404.domain.entity.ReaderBook;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.enums.ReaderBookVisibilityEnum;
@@ -97,6 +98,24 @@ class ReaderLibraryServiceImplTest {
 
         assertTrue(result.getId().equals(friendBook.getId()));
         assertFalse(result.getOwnedByCurrentUser());
+    }
+
+    @Test
+    void shouldRejectUpdatingOrDeletingAnotherUsersBook() {
+        ReaderBookMapper bookMapper = mock(ReaderBookMapper.class);
+        AccessService accessService = mock(AccessService.class);
+        ReaderBook otherUsersBook = book(10L, 12L, ReaderBookVisibilityEnum.PUBLIC.getCode());
+        when(bookMapper.selectById(10L)).thenReturn(otherUsersBook);
+        when(accessService.canManageReaderBook(18L, otherUsersBook)).thenReturn(false);
+        ReaderLibraryServiceImpl service = service(bookMapper, mock(ReaderBookParser.class), accessService);
+        ReaderBookUpdateCommand command = new ReaderBookUpdateCommand();
+        command.setTitle("越权修改");
+        command.setVisibility(ReaderBookVisibilityEnum.PUBLIC.getCode());
+
+        assertThrows(ForbiddenException.class, () -> service.updateBook(10L, command, 18L));
+        assertThrows(ForbiddenException.class, () -> service.deleteBook(10L, 18L));
+        verify(bookMapper, never()).updateById(any(ReaderBook.class));
+        verify(bookMapper, never()).deleteById(10L);
     }
 
     @Test

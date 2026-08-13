@@ -2,6 +2,7 @@ package com.chen404.service;
 
 import com.chen404.domain.entity.Article;
 import com.chen404.domain.entity.MusicTrack;
+import com.chen404.domain.entity.ReaderBook;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.entity.TravelMemoryLocation;
 import com.chen404.domain.entity.User;
@@ -44,6 +45,11 @@ public interface AccessService {
      * 当前用户是否可将小说导入个人书架。
      */
     boolean canImportReaderBook(Long userId);
+
+    /**
+     * 当前用户是否可管理指定书籍：启用中的管理员，或仍具备书架能力的书籍所有者。
+     */
+    boolean canManageReaderBook(Long userId, ReaderBook book);
 
     boolean canCurateArticle(Long userId);
 
