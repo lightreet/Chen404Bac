@@ -27,8 +27,6 @@ public class GitHubDevelopmentProperties {
 
     private int cacheMinutes = 30;
 
-    private int apiCommitLimit = 100;
-
     private int requestTimeoutSeconds = 12;
 
     private String apiBaseUrl = "https://api.github.com";

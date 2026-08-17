@@ -21,7 +21,6 @@ public class GitHubDevelopmentAdminConfigDTO {
     private String tokenPreview;
     private Boolean clearToken;
     private Integer cacheMinutes;
-    private Integer apiCommitLimit;
     private Integer requestTimeoutSeconds;
     private String apiBaseUrl;
     private String webBaseUrl;

@@ -56,7 +56,6 @@ app:
     branch: ${GITHUB_BRANCH:main}
     token: ${GITHUB_TOKEN:}
     cache-minutes: ${GITHUB_HISTORY_CACHE_MINUTES:30}
-    api-commit-limit: ${GITHUB_HISTORY_COMMIT_LIMIT:100}
     request-timeout-seconds: ${GITHUB_HISTORY_TIMEOUT_SECONDS:12}
   # 上传图片压缩为 WebP（动图 GIF 不处理）；依赖 webp-imageio 自带 win/linux/mac x64 原生库
   image-processing:

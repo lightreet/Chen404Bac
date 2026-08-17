@@ -57,8 +57,8 @@ public class DevelopmentHistoryServiceImpl implements DevelopmentHistoryService 
     private static final String LABEL_PROJECT = "项目";
     private static final int MIN_CACHE_MINUTES = 1;
     private static final int MIN_TIMEOUT_SECONDS = 3;
-    private static final int MIN_API_LIMIT = 1;
-    private static final int MAX_API_LIMIT = 100;
+    private static final int GITHUB_API_PAGE_SIZE = 100;
+    private static final int FIRST_API_PAGE = 1;
     private static final int SHORT_SHA_LENGTH = 7;
     private static final int FAILURE_CACHE_MINUTES = 5;
 
@@ -184,10 +184,45 @@ public class DevelopmentHistoryServiceImpl implements DevelopmentHistoryService 
     private List<DevelopmentCommitVO> fetchFromApi(
             String repository,
             GitHubDevelopmentAdminConfigDTO settings) throws Exception {
-        int limit = Math.max(MIN_API_LIMIT, Math.min(settings.getApiCommitLimit(), MAX_API_LIMIT));
+        List<DevelopmentCommitVO> commits = new ArrayList<>();
+        Set<String> collectedShas = new LinkedHashSet<>();
+        int page = FIRST_API_PAGE;
+
+        while (true) {
+            JSONArray items = fetchApiPage(repository, settings, page);
+            if (items.isEmpty()) {
+                break;
+            }
+
+            int previousSize = commits.size();
+            for (DevelopmentCommitVO commit : parseApiCommits(repository, items)) {
+                if (!StringUtils.hasText(commit.getSha()) || collectedShas.add(commit.getSha())) {
+                    commits.add(commit);
+                }
+            }
+
+            if (items.size() < GITHUB_API_PAGE_SIZE) {
+                break;
+            }
+            if (commits.size() == previousSize) {
+                log.warn("[GITHUB_HISTORY_API_PAGE_REPEAT] owner={} repository={} page={}",
+                        settings.getOwner(), repository, page);
+                break;
+            }
+            page++;
+        }
+        return commits;
+    }
+
+    private JSONArray fetchApiPage(
+            String repository,
+            GitHubDevelopmentAdminConfigDTO settings,
+            int page) throws Exception {
         String endpoint = normalizeBaseUrl(settings.getApiBaseUrl())
                 + "/repos/" + settings.getOwner() + "/" + repository
-                + "/commits?sha=" + encode(settings.getBranch()) + "&per_page=" + limit;
+                + "/commits?sha=" + encode(settings.getBranch())
+                + "&per_page=" + GITHUB_API_PAGE_SIZE
+                + "&page=" + page;
 
         HttpRequest request = baseRequest(endpoint, settings)
                 .header("Accept", "application/vnd.github+json")
@@ -195,8 +230,7 @@ public class DevelopmentHistoryServiceImpl implements DevelopmentHistoryService 
                 .header("X-GitHub-Api-Version", "2022-11-28")
                 .GET()
                 .build();
-        String body = send(request);
-        return parseApiCommits(repository, JSON.parseArray(body));
+        return JSON.parseArray(send(request));
     }
 
     private List<DevelopmentCommitVO> fetchFromAtom(
@@ -385,7 +419,6 @@ public class DevelopmentHistoryServiceImpl implements DevelopmentHistoryService 
                 settings.getBranch(),
                 settings.getToken(),
                 settings.getCacheMinutes(),
-                settings.getApiCommitLimit(),
                 settings.getRequestTimeoutSeconds(),
                 settings.getApiBaseUrl(),
                 settings.getWebBaseUrl()));

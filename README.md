@@ -1,6 +1,6 @@
 # Chen404 博客系统 - 后端
 
-Chen404Bac 是 Chen404 的 Spring Boot 后端服务，负责 REST API、认证鉴权、内容数据、站点配置、文件与对象存储、私人小说书架、旅行纪念地图、Sakura Radio、AI 场景编排以及后台任务。
+Chen404Bac 是 Chen404 的 Spring Boot 后端服务，负责 REST API、认证鉴权、内容数据、多用户共创、站点配置、文件与对象存储、小说书架与阅读器、旅行纪念地图、Sakura Radio、管理员消息、GitHub 开发历程、AI 场景编排以及后台任务。
 
 ## 技术栈
 
@@ -79,7 +79,8 @@ src/main/resources/db/migration/
 - 统一文件引用
 - AI 后台配置
 - Sakura Radio 歌曲与歌单
-- 私人小说书架、章节目录与阅读进度
+- 小说书架与阅读器（公开/知友/私有可见性、章节目录、资源、阅读进度与偏好）
+- 管理员消息中心与 GitHub 开发历程配置
 
 当前 `application.yml` 已启用：
 
@@ -109,6 +110,9 @@ src/main/resources/db/migration/
 - `app.frontend-base-url` / `app.backend-base-url`：前后端对外基础地址
 - `app.site-runtime.*`：文章分页、上传限制等运行时默认值
 - `app.music.player-state-ttl`：登录用户播放现场在 Redis 中的滑动过期时间，默认 7 天
+- `app.site-owner-user-id`：站点所有者用户 ID，默认 1
+- `app.protected-file.ticket-expire-minutes`：受保护文件访问票据有效期，默认 5 分钟
+- `app.github-development.*`：GitHub 开发历程拉取、回退与缓存默认策略
 - `app.image-processing.*`：上传图片压缩、WebP 转换与尺寸限制
 - `app.ai.runtime.*`：聊天、文章辅助、推荐默认策略
 - `app.ai.maid.*`：Lyra 默认 prompt 与人设资源
@@ -136,19 +140,23 @@ src/main/resources/db/migration/
 | `CategoryController` | `/categories/**` | 分类公开查询与管理员 CRUD |
 | `AdminCategoryController` | `/admin/categories` | 后台分类分页列表 |
 | `TagController` | `/tags/**` | 标签列表、标签详情 |
-| `CommentController` | `/comments/**`, `/admin/comments/**` | 评论、留言板、最新评论、点赞、审核 |
+| `CommentController` | `/comments/**` | 评论、留言板、最新评论、点赞、删除 |
+| `AdminCommentController` | `/admin/comments/**` | 评论分页、统计与审核 |
 | `SiteController` | `/site/**` | 站点配置、Banner、站点成员与用户资料 |
 | `HomeController` | `/home/**` | 首页聚合数据、站点统计 |
 | `UploadController` | `/upload/**` | 图片、封面、头像、站点资源、旅行图片、音乐音频/封面、附件上传与文件删除 |
+| `FileAccessController` | `/files/{id}` | 通过短期票据或当前用户身份读取受保护文件 |
 | `AdminFileController` | `/admin/files/**` | 文件列表、详情、统计 |
 | `EmojiController` | `/emoji/**`, `/admin/emoji/**` | 表情包公开下发、后台维护、ZIP 导入 |
 | `TrustRequestController` | `/trust-requests/**`, `/admin/trust-requests/**` | 好友申请提交、查询、审批、邮件审批入口 |
 | `AdminUserController` | `/admin/users/**` | 用户信任等级维护 |
 | `TravelMemoryController` | `/travel-memories/**`, `/admin/travel-memories/**` | 旅行纪念地图查询与管理 |
 | `MusicRadioController` | `/music/**`, `/admin/music/**` | Sakura Radio 公开播放、歌曲/歌单维护、AI 曲目信息补全 |
-| `ReaderLibraryController` | `/reader/**` | 私人小说导入、书架、目录、章节、全文搜索、资源、进度与阅读偏好 |
+| `ReaderLibraryController` | `/reader/**` | 小说导入、公开/知友/私有书架、目录、章节、全文搜索、资源、进度与阅读偏好 |
 | `AdminAiConfigController` | `/admin/ai/config/**` | AI 后台配置读取、保存、连接测试 |
 | `AdminFeatureToggleController` | `/admin/feature-toggles` | 运行时业务功能开关读取与保存 |
+| `AdminNotificationController` | `/admin/notifications/**` | 管理员消息列表、未读数、已读和删除 |
+| `AdminGitHubDevelopmentConfigController` | `/admin/development-history/config/**` | GitHub 开发历程私有配置与手动刷新 |
 
 ## 当前能力
 
@@ -163,8 +171,10 @@ src/main/resources/db/migration/
 - 好友申请、后台审批、邮件审批入口
 - 旅行纪念地图、地点/片段/照片结构、图片 EXIF 解析、权限校验、文件转永久与引用同步
 - Sakura Radio 公开播放、歌曲与歌单维护、默认播放集、登录用户 Redis 临时播放现场恢复
-- 私人小说书架，支持 TXT、EPUB、HTML、Markdown、FB2 导入、多级目录和书内插图
+- 小说书架，支持 TXT、EPUB、HTML、Markdown、FB2 异步导入、多级目录、书内插图以及公开/知友/私有可见性
 - 阅读进度按章节、段落与字符偏移持久化，阅读偏好支持跨设备恢复
+- 管理员消息在业务事务提交后独立创建，支持去重、轮询未读数、批量已读与删除
+- GitHub 开发历程在 API 模式下分页同步完整提交历史，并支持 Atom 回退、缓存、私有配置和手动刷新
 - AI 文章辅助、AI 音乐曲目信息补全
 - Lyra 同步/流式聊天、会话恢复、站内知识检索、相关推荐
 - AI 后台配置、API Key 脱敏、连接测试
@@ -213,7 +223,7 @@ src/main/resources/db/migration/
 mvn clean verify
 ```
 
-`verify` 会执行 Maven/JDK 版本校验、全量测试，并在 `target/site/jacoco/` 生成 JaCoCo 报告；当前行覆盖率门禁为 40%。
+`verify` 会执行 Maven/JDK 版本校验、全量测试，并在 `target/site/jacoco/` 生成 JaCoCo 报告；当前行覆盖率门禁为 40%。2026-08-14 扫描基线为 213 个测试全部通过、JAR 构建成功。`MusicRadioServiceImplTest` 仍有 unchecked/unsafe operations 编译警告，属于待清理质量项，不影响当前验证结果。
 
 AI 相关改动建议至少覆盖：
 
@@ -244,5 +254,7 @@ mvn "-Dtest=MusicRadioControllerTest,MusicRadioServiceImplTest,LlmMusicTrackAiSu
 - AI 配置专题：[`doc/architecture/AI女仆后台配置设计.md`](./doc/architecture/AI女仆后台配置设计.md)
 - 音乐馆专题：[`doc/architecture/音乐电台功能需求与界面设计.md`](./doc/architecture/音乐电台功能需求与界面设计.md)
 - 旅行纪念地图专题：[`doc/architecture/旅行纪念地图设计与改造方案.md`](./doc/architecture/旅行纪念地图设计与改造方案.md)
+- 小说书架与阅读器专题：[`doc/architecture/小说书架与阅读器设计与实现.md`](./doc/architecture/小说书架与阅读器设计与实现.md)
 - Java 质量债务：[`doc/architecture/java-quality-debt.md`](./doc/architecture/java-quality-debt.md)
+- 前后端扫描与缺陷台账：[`doc/architecture/前后端代码与文档扫描报告_2026-08-14.md`](./doc/architecture/前后端代码与文档扫描报告_2026-08-14.md)
 - 阶段快照：[`doc/architecture/后端功能审查与优化清单.md`](./doc/architecture/后端功能审查与优化清单.md)、[`功能审查总结_2026-03-27.md`](./功能审查总结_2026-03-27.md)

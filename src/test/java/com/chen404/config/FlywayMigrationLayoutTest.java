@@ -45,7 +45,8 @@ class FlywayMigrationLayoutTest {
             "V2026073003__default_reader_book_visibility_public.sql",
             "V2026080302__allow_reader_book_reimport_after_delete.sql",
             "V2026081001__admin_managed_feature_toggles.sql",
-            "V2026081301__enable_admin_notification_by_default.sql"
+            "V2026081301__enable_admin_notification_by_default.sql",
+            "V2026081701__remove_github_development_commit_limit.sql"
     );
 
     @Test

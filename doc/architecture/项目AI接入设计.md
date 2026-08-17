@@ -1,6 +1,6 @@
 # Chen404 项目 AI 设计与接入文档
 
-本文档描述 Chen404 当前已经落地的 AI 能力、运行链路、数据结构和前后端协作方式。最后同步时间：2026-05-28。
+本文档描述 Chen404 当前已经落地的 AI 能力、运行链路、数据结构和前后端协作方式。最后同步时间：2026-08-14。
 
 ## 1. 当前 AI 能力总览
 
@@ -115,11 +115,23 @@ flowchart TB
 - `AiConfigServiceImpl`
 - `site_config` 中 `ai.*` 且 `is_public = 0` 的配置项
 
+当前 `application.yml` 的默认模型为 `gpt-5.4-mini`，实际运行值仍可被 profile、环境变量或后台私有配置覆盖，文档中的默认值不能替代部署环境核对。
+
 敏感字段：
 
 - `ai.llm.api_key` 只在服务端使用。
 - admin 查询接口只返回 `apiKeyConfigured` 和 `apiKeyPreview`。
 - 保存时空字符串表示保留旧 key，非空字符串表示替换 key。
+
+### 4.1 运行时功能开关
+
+模型配置与功能开放是两层独立边界：
+
+- `feature.ai.article_assist_enabled`：控制文章摘要与标签生成。
+- `feature.ai.music_assist_enabled`：控制音乐信息补全。
+- `feature.ai.article_recommend_enabled`：控制相关文章推荐。
+
+三项默认开启，由 `FeatureToggleService` 从私有 `site_config` 读取并缓存。即使 LLM 配置有效，关闭对应运行时开关也会阻止该场景执行；反之，功能开关开启但 provider 不可用时仍按场景降级策略处理。Lyra 聊天本身继续由 AI 后台配置中的 `enabled` 与聊天策略控制。
 
 ## 5. 场景设计
 
