@@ -29,15 +29,12 @@ public class GitHubDevelopmentConfigServiceImpl implements GitHubDevelopmentConf
     private static final String KEY_BRANCH = "development.github.branch";
     private static final String KEY_TOKEN = "development.github.token";
     private static final String KEY_CACHE_MINUTES = "development.github.cache_minutes";
-    private static final String KEY_API_COMMIT_LIMIT = "development.github.api_commit_limit";
     private static final String KEY_REQUEST_TIMEOUT_SECONDS = "development.github.request_timeout_seconds";
     private static final String KEY_API_BASE_URL = "development.github.api_base_url";
     private static final String KEY_WEB_BASE_URL = "development.github.web_base_url";
 
     private static final int MIN_CACHE_MINUTES = 1;
     private static final int MAX_CACHE_MINUTES = 1440;
-    private static final int MIN_API_COMMIT_LIMIT = 1;
-    private static final int MAX_API_COMMIT_LIMIT = 100;
     private static final int MIN_TIMEOUT_SECONDS = 3;
     private static final int MAX_TIMEOUT_SECONDS = 120;
 
@@ -84,7 +81,6 @@ public class GitHubDevelopmentConfigServiceImpl implements GitHubDevelopmentConf
         config.setBranch(defaultText(properties.getBranch(), "main"));
         config.setToken(defaultText(properties.getToken(), ""));
         config.setCacheMinutes(properties.getCacheMinutes());
-        config.setApiCommitLimit(properties.getApiCommitLimit());
         config.setRequestTimeoutSeconds(properties.getRequestTimeoutSeconds());
         config.setApiBaseUrl(defaultText(properties.getApiBaseUrl(), "https://api.github.com"));
         config.setWebBaseUrl(defaultText(properties.getWebBaseUrl(), "https://github.com"));
@@ -110,7 +106,6 @@ public class GitHubDevelopmentConfigServiceImpl implements GitHubDevelopmentConf
             config.setToken(trimToEmpty(rows.get(KEY_TOKEN)));
         }
         config.setCacheMinutes(parseInt(rows.get(KEY_CACHE_MINUTES), config.getCacheMinutes()));
-        config.setApiCommitLimit(parseInt(rows.get(KEY_API_COMMIT_LIMIT), config.getApiCommitLimit()));
         config.setRequestTimeoutSeconds(parseInt(
                 rows.get(KEY_REQUEST_TIMEOUT_SECONDS), config.getRequestTimeoutSeconds()));
         config.setApiBaseUrl(textOrDefault(rows.get(KEY_API_BASE_URL), config.getApiBaseUrl()));
@@ -134,9 +129,6 @@ public class GitHubDevelopmentConfigServiceImpl implements GitHubDevelopmentConf
         next.setCacheMinutes(patch.getCacheMinutes() == null
                 ? current.getCacheMinutes()
                 : patch.getCacheMinutes());
-        next.setApiCommitLimit(patch.getApiCommitLimit() == null
-                ? current.getApiCommitLimit()
-                : patch.getApiCommitLimit());
         next.setRequestTimeoutSeconds(patch.getRequestTimeoutSeconds() == null
                 ? current.getRequestTimeoutSeconds()
                 : patch.getRequestTimeoutSeconds());
@@ -164,9 +156,6 @@ public class GitHubDevelopmentConfigServiceImpl implements GitHubDevelopmentConf
 
         config.setCacheMinutes(clampInt(
                 config.getCacheMinutes(), properties.getCacheMinutes(), MIN_CACHE_MINUTES, MAX_CACHE_MINUTES));
-        config.setApiCommitLimit(clampInt(
-                config.getApiCommitLimit(), properties.getApiCommitLimit(),
-                MIN_API_COMMIT_LIMIT, MAX_API_COMMIT_LIMIT));
         config.setRequestTimeoutSeconds(clampInt(
                 config.getRequestTimeoutSeconds(), properties.getRequestTimeoutSeconds(),
                 MIN_TIMEOUT_SECONDS, MAX_TIMEOUT_SECONDS));
@@ -216,8 +205,6 @@ public class GitHubDevelopmentConfigServiceImpl implements GitHubDevelopmentConf
         upsertValue(existing, KEY_TOKEN, config.getToken(), "GitHub access token", 1);
         upsertValue(existing, KEY_CACHE_MINUTES, String.valueOf(config.getCacheMinutes()),
                 "GitHub history cache minutes", 2);
-        upsertValue(existing, KEY_API_COMMIT_LIMIT, String.valueOf(config.getApiCommitLimit()),
-                "GitHub API commit limit", 2);
         upsertValue(existing, KEY_REQUEST_TIMEOUT_SECONDS, String.valueOf(config.getRequestTimeoutSeconds()),
                 "GitHub request timeout seconds", 2);
         upsertValue(existing, KEY_API_BASE_URL, config.getApiBaseUrl(), "GitHub API base URL", 1);

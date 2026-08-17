@@ -71,7 +71,6 @@ class GitHubDevelopmentConfigServiceImplTest {
         SiteConfigMapper mapper = mapperWithSeed(Map.of(
                 "development.github.repositories", "[\"RepoOne\",\"RepoTwo\"]",
                 "development.github.cache_minutes", "0",
-                "development.github.api_commit_limit", "999",
                 "development.github.request_timeout_seconds", "1"
         ));
         GitHubDevelopmentConfigServiceImpl service = buildService(mapper);
@@ -80,7 +79,6 @@ class GitHubDevelopmentConfigServiceImplTest {
 
         assertEquals(List.of("RepoOne", "RepoTwo"), config.getRepositories());
         assertEquals(1, config.getCacheMinutes());
-        assertEquals(100, config.getApiCommitLimit());
         assertEquals(3, config.getRequestTimeoutSeconds());
     }
 
