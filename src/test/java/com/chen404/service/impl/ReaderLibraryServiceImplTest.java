@@ -16,6 +16,7 @@ import com.chen404.mapper.ReaderBookMapper;
 import com.chen404.mapper.ReaderChapterMapper;
 import com.chen404.mapper.ReaderPreferenceMapper;
 import com.chen404.mapper.ReaderProgressMapper;
+import com.chen404.mapper.ReaderNoteMapper;
 import com.chen404.mapper.ReaderTocItemMapper;
 import com.chen404.service.FileReferenceService;
 import com.chen404.service.ProtectedFileAccessService;
@@ -256,6 +257,7 @@ class ReaderLibraryServiceImplTest {
                 mock(ReaderTocItemMapper.class),
                 mock(ReaderBookAssetMapper.class),
                 mock(ReaderProgressMapper.class),
+                mock(ReaderNoteMapper.class),
                 mock(ReaderPreferenceMapper.class),
                 parser,
                 sysFileService,

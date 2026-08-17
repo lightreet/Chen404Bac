@@ -16,6 +16,7 @@ import com.chen404.domain.entity.ReaderBookAsset;
 import com.chen404.domain.entity.ReaderChapter;
 import com.chen404.domain.entity.ReaderPreference;
 import com.chen404.domain.entity.ReaderProgress;
+import com.chen404.domain.entity.ReaderNote;
 import com.chen404.domain.entity.ReaderTocItem;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.enums.ReaderBookVisibilityEnum;
@@ -28,6 +29,7 @@ import com.chen404.mapper.ReaderBookMapper;
 import com.chen404.mapper.ReaderChapterMapper;
 import com.chen404.mapper.ReaderPreferenceMapper;
 import com.chen404.mapper.ReaderProgressMapper;
+import com.chen404.mapper.ReaderNoteMapper;
 import com.chen404.mapper.ReaderTocItemMapper;
 import com.chen404.service.FileClaim;
 import com.chen404.service.FileReferenceService;
@@ -89,6 +91,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
     private final ReaderTocItemMapper tocItemMapper;
     private final ReaderBookAssetMapper assetMapper;
     private final ReaderProgressMapper progressMapper;
+    private final ReaderNoteMapper noteMapper;
     private final ReaderPreferenceMapper preferenceMapper;
     private final ReaderBookParser parser;
     private final SysFileService sysFileService;
@@ -104,6 +107,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
             ReaderTocItemMapper tocItemMapper,
             ReaderBookAssetMapper assetMapper,
             ReaderProgressMapper progressMapper,
+            ReaderNoteMapper noteMapper,
             ReaderPreferenceMapper preferenceMapper,
             ReaderBookParser parser,
             SysFileService sysFileService,
@@ -117,6 +121,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
         this.tocItemMapper = tocItemMapper;
         this.assetMapper = assetMapper;
         this.progressMapper = progressMapper;
+        this.noteMapper = noteMapper;
         this.preferenceMapper = preferenceMapper;
         this.parser = parser;
         this.sysFileService = sysFileService;
@@ -468,6 +473,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
             throw new BadRequestException("小说正在后台导入，完成后才能删除");
         }
         progressMapper.delete(new LambdaQueryWrapper<ReaderProgress>().eq(ReaderProgress::getBookId, bookId));
+        noteMapper.delete(new LambdaQueryWrapper<ReaderNote>().eq(ReaderNote::getBookId, bookId));
         tocItemMapper.delete(new LambdaQueryWrapper<ReaderTocItem>().eq(ReaderTocItem::getBookId, bookId));
         chapterMapper.delete(new LambdaQueryWrapper<ReaderChapter>().eq(ReaderChapter::getBookId, bookId));
         assetMapper.delete(new LambdaQueryWrapper<ReaderBookAsset>().eq(ReaderBookAsset::getBookId, bookId));
