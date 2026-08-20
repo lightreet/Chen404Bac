@@ -24,6 +24,7 @@ public class ReaderPreference implements Serializable {
     private Integer paragraphSpacing;
     private String theme;
     private String fontFamily;
+    private String readingMode;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
     @TableField(fill = FieldFill.INSERT_UPDATE)

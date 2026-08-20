@@ -6,9 +6,13 @@ import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.chen404.domain.dto.ReaderBookVO;
 import com.chen404.domain.dto.ReaderBookPreviewVO;
 import com.chen404.domain.dto.ReaderBookUpdateCommand;
+import com.chen404.domain.dto.ReaderPreferenceCommand;
+import com.chen404.domain.dto.ReaderPreferenceVO;
 import com.chen404.domain.entity.ReaderBook;
+import com.chen404.domain.entity.ReaderPreference;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.enums.ReaderBookVisibilityEnum;
+import com.chen404.domain.enums.ReaderReadingModeEnum;
 import com.chen404.domain.enums.UserCapabilityEnum;
 import com.chen404.exception.ForbiddenException;
 import com.chen404.mapper.ReaderBookAssetMapper;
@@ -220,6 +224,34 @@ class ReaderLibraryServiceImplTest {
         verify(taskRunner).runAsync(eq(21L));
     }
 
+    @Test
+    void shouldDefaultReaderPreferenceToPagedMode() {
+        ReaderPreferenceMapper preferenceMapper = mock(ReaderPreferenceMapper.class);
+        when(preferenceMapper.selectOne(any())).thenReturn(null);
+
+        ReaderPreferenceVO result = serviceWithPreferenceMapper(preferenceMapper).getPreference(12L);
+
+        assertEquals(ReaderReadingModeEnum.PAGED.getCode(), result.getReadingMode());
+    }
+
+    @Test
+    void shouldPersistContinuousReaderMode() {
+        ReaderPreferenceMapper preferenceMapper = mock(ReaderPreferenceMapper.class);
+        ReaderPreference preference = new ReaderPreference();
+        preference.setId(41L);
+        preference.setUserId(12L);
+        preference.setReadingMode(ReaderReadingModeEnum.PAGED.getCode());
+        when(preferenceMapper.selectOne(any())).thenReturn(preference);
+        ReaderPreferenceCommand command = new ReaderPreferenceCommand();
+        command.setReadingMode(ReaderReadingModeEnum.CONTINUOUS.getCode());
+
+        ReaderPreferenceVO result = serviceWithPreferenceMapper(preferenceMapper)
+                .savePreference(command, 12L);
+
+        assertEquals(ReaderReadingModeEnum.CONTINUOUS.getCode(), result.getReadingMode());
+        verify(preferenceMapper).updateById(preference);
+    }
+
     private ReaderLibraryServiceImpl service(ReaderBookMapper bookMapper) {
         return service(bookMapper, mock(ReaderBookParser.class));
     }
@@ -266,6 +298,24 @@ class ReaderLibraryServiceImplTest {
                 mock(ProtectedFileAccessService.class),
                 taskRunner,
                 importProcessor);
+    }
+
+    private ReaderLibraryServiceImpl serviceWithPreferenceMapper(ReaderPreferenceMapper preferenceMapper) {
+        return new ReaderLibraryServiceImpl(
+                mock(ReaderBookMapper.class),
+                mock(ReaderChapterMapper.class),
+                mock(ReaderTocItemMapper.class),
+                mock(ReaderBookAssetMapper.class),
+                mock(ReaderProgressMapper.class),
+                mock(ReaderNoteMapper.class),
+                preferenceMapper,
+                mock(ReaderBookParser.class),
+                mock(SysFileService.class),
+                mock(FileReferenceService.class),
+                mock(AccessService.class),
+                mock(ProtectedFileAccessService.class),
+                mock(ReaderImportTaskRunner.class),
+                mock(ReaderBookImportProcessor.class));
     }
 
     private ReaderBook book(Long id, Long ownerUserId, String visibility) {

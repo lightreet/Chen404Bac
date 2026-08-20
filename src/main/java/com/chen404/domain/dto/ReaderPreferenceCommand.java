@@ -33,4 +33,7 @@ public class ReaderPreferenceCommand {
 
     @Pattern(regexp = "serif|sans", message = "阅读字体不合法")
     private String fontFamily;
+
+    @Pattern(regexp = "paged|continuous", message = "阅读方式不合法")
+    private String readingMode;
 }

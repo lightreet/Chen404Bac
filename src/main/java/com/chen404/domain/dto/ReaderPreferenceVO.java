@@ -13,4 +13,5 @@ public class ReaderPreferenceVO {
     private Integer paragraphSpacing;
     private String theme;
     private String fontFamily;
+    private String readingMode;
 }

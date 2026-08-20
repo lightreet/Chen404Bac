@@ -20,6 +20,7 @@ import com.chen404.domain.entity.ReaderNote;
 import com.chen404.domain.entity.ReaderTocItem;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.enums.ReaderBookVisibilityEnum;
+import com.chen404.domain.enums.ReaderReadingModeEnum;
 import com.chen404.domain.enums.UserCapabilityEnum;
 import com.chen404.exception.BadRequestException;
 import com.chen404.exception.ForbiddenException;
@@ -651,6 +652,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
         if (command.getParagraphSpacing() != null) preference.setParagraphSpacing(command.getParagraphSpacing());
         if (StringUtils.hasText(command.getTheme())) preference.setTheme(command.getTheme());
         if (StringUtils.hasText(command.getFontFamily())) preference.setFontFamily(command.getFontFamily());
+        if (StringUtils.hasText(command.getReadingMode())) preference.setReadingMode(command.getReadingMode());
         if (preference.getId() == null) {
             preferenceMapper.insert(preference);
         } else {
@@ -852,6 +854,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
         preference.setParagraphSpacing(DEFAULT_PARAGRAPH_SPACING);
         preference.setTheme("light");
         preference.setFontFamily("serif");
+        preference.setReadingMode(ReaderReadingModeEnum.PAGED.getCode());
         return preference;
     }
 
@@ -863,6 +866,9 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
         vo.setParagraphSpacing(preference.getParagraphSpacing());
         vo.setTheme(preference.getTheme());
         vo.setFontFamily(preference.getFontFamily());
+        vo.setReadingMode(preference.getReadingMode() == null
+                ? ReaderReadingModeEnum.PAGED.getCode()
+                : preference.getReadingMode());
         return vo;
     }
 
