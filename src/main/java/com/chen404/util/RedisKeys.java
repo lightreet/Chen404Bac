@@ -12,6 +12,14 @@ public final class RedisKeys {
 
     public static final String PREFIX = "chen404:";
 
+    public static String travelMobileSession(String sessionId) {
+        return PREFIX + "travel:mobile:session:" + sessionId;
+    }
+
+    public static String travelMobileCreateRate(Long userId) {
+        return PREFIX + "travel:mobile:create:" + userId;
+    }
+
     public static String verifyCode(VerificationCodeTypeEnum type, String target) {
         return PREFIX + "verify:code:" + type.getCode() + ":" + target;
     }

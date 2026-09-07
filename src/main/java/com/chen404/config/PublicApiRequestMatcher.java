@@ -14,6 +14,17 @@ public class PublicApiRequestMatcher implements RequestMatcher {
         String method = request.getMethod();
         String path = normalizePath(request.getRequestURI());
 
+        if (path.matches("/upload/travel-mobile/public/[a-f0-9-]{36}/batches/[a-zA-Z0-9-]{16,64}")) {
+            return "POST".equalsIgnoreCase(method) || "DELETE".equalsIgnoreCase(method);
+        }
+
+        if (path.matches("/upload/travel-mobile/public/[a-f0-9-]{36}")) {
+            return "GET".equalsIgnoreCase(method);
+        }
+        if (path.matches("/upload/travel-mobile/public/[a-f0-9-]{36}/images")) {
+            return "POST".equalsIgnoreCase(method);
+        }
+
         if (isSwaggerPath(path) || isStaticPath(path)) {
             return true;
         }

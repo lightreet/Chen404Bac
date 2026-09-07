@@ -145,6 +145,7 @@ src/main/resources/db/migration/
 | `SiteController` | `/site/**` | 站点配置、Banner、站点成员与用户资料 |
 | `HomeController` | `/home/**` | 首页聚合数据、站点统计 |
 | `UploadController` | `/upload/**` | 图片、封面、头像、站点资源、旅行图片、音乐音频/封面、附件上传与文件删除 |
+| `TravelMobileUploadController` | `/upload/travel-mobile/**` | 旅行照片短时扫码授权、匿名手机上传与桌面回填；[设计与验证](doc/architecture/travel-mobile-upload.md) |
 | `FileAccessController` | `/files/{id}` | 通过短期票据或当前用户身份读取受保护文件 |
 | `AdminFileController` | `/admin/files/**` | 文件列表、详情、统计 |
 | `EmojiController` | `/emoji/**`, `/admin/emoji/**` | 表情包公开下发、后台维护、ZIP 导入 |

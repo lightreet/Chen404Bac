@@ -17,6 +17,13 @@ class GlobalExceptionHandlerTest {
     private final GlobalExceptionHandler handler = new GlobalExceptionHandler();
 
     @Test
+    void multipartSizeLimitShouldReturnActionable413InsteadOfServerError() {
+        var response = handler.handleMaxUploadSizeExceeded(new org.springframework.web.multipart.MaxUploadSizeExceededException(12_000_000));
+        assertEquals(HttpStatus.PAYLOAD_TOO_LARGE, response.getStatusCode());
+        assertEquals(ApiErrorCode.PAYLOAD_TOO_LARGE, response.getBody().getCode());
+    }
+
+    @Test
     void bindExceptionShouldReturnUnprocessableEntity() {
         BeanPropertyBindingResult bindingResult = new BeanPropertyBindingResult(new Object(), "request");
         bindingResult.addError(new FieldError("request", "name", "分类名称不能为空"));

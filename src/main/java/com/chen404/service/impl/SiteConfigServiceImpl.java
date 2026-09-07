@@ -14,6 +14,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
+import com.chen404.service.support.SiteFrontendAddress;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
@@ -44,6 +46,7 @@ public class SiteConfigServiceImpl implements SiteConfigService {
     private static final String LEGACY_SITE_FAVICON = "/favicon.ico";
 
     private static final String KEY_SITE_NAME = "site.name";
+    private static final String KEY_FRONTEND_BASE_URL = "app.frontend-base-url";
     private static final String KEY_SITE_DESCRIPTION = "site.description";
     private static final String KEY_SITE_LOGO = "site.logo";
     private static final String KEY_SITE_FAVICON = "site.favicon";
@@ -68,6 +71,9 @@ public class SiteConfigServiceImpl implements SiteConfigService {
     private final SysFileService sysFileService;
     private final FileReferenceService fileReferenceService;
 
+    @Value("${app.frontend-base-url:http://localhost:20204}")
+    private String configuredFrontendBaseUrl = "http://localhost:20204";
+
     public SiteConfigServiceImpl(
             ObjectMapper objectMapper,
             SiteConfigMapper siteConfigMapper,
@@ -87,8 +93,13 @@ public class SiteConfigServiceImpl implements SiteConfigService {
     @Override
     @Transactional
     public synchronized SiteConfigDTO updateConfig(SiteConfigDTO patch) {
-        SiteConfigDTO current = getConfig();
+        SiteConfigDTO stored = loadFromDatabase();
+        SiteConfigDTO current = mergeWithDefaults(stored);
         applyPatch(current, patch);
+        // 未显式修改地址时保留原覆盖值，不能把环境配置的回退值持久化成覆盖值。
+        if (patch == null || patch.getFrontendBaseUrl() == null) {
+            current.setFrontendBaseUrl(stored.getFrontendBaseUrl());
+        }
         normalize(current);
         writeToDatabase(current);
         persistSiteAssets(current);
@@ -99,7 +110,7 @@ public class SiteConfigServiceImpl implements SiteConfigService {
                 current.getSiteFavicon(),
                 current.getHeroImages()
         );
-        return current;
+        return mergeWithDefaults(current);
     }
 
     private SiteConfigDTO loadFromDatabase() {
@@ -127,6 +138,7 @@ public class SiteConfigServiceImpl implements SiteConfigService {
             String value = row.getConfigValue();
             switch (key) {
                 case KEY_SITE_NAME -> dto.setSiteName(value);
+                case KEY_FRONTEND_BASE_URL -> dto.setFrontendBaseUrl(value);
                 case KEY_SITE_DESCRIPTION -> dto.setSiteDescription(value);
                 case KEY_SITE_LOGO -> dto.setSiteLogo(value);
                 case KEY_SITE_FAVICON -> dto.setSiteFavicon(value);
@@ -160,6 +172,9 @@ public class SiteConfigServiceImpl implements SiteConfigService {
                 ));
 
         upsertValue(existing, KEY_SITE_NAME, config.getSiteName(), "Site name", 1);
+        if (config.getFrontendBaseUrl() != null) {
+            upsertValue(existing, KEY_FRONTEND_BASE_URL, config.getFrontendBaseUrl(), "Frontend public base URL", 1);
+        }
         upsertValue(existing, KEY_SITE_DESCRIPTION, config.getSiteDescription(), "Site description", 1);
         upsertValue(existing, KEY_SITE_LOGO, config.getSiteLogo(), "Site logo", 1);
         upsertValue(existing, KEY_SITE_FAVICON, config.getSiteFavicon(), "Site favicon", 1);
@@ -226,9 +241,10 @@ public class SiteConfigServiceImpl implements SiteConfigService {
         );
     }
 
-    private static SiteConfigDTO mergeWithDefaults(SiteConfigDTO source) {
+    private SiteConfigDTO mergeWithDefaults(SiteConfigDTO source) {
         SiteConfigDTO merged = defaults();
         applyPatch(merged, source);
+        if (!StringUtils.hasText(merged.getFrontendBaseUrl())) merged.setFrontendBaseUrl(configuredFrontendBaseUrl);
         normalize(merged);
         return merged;
     }
@@ -308,6 +324,9 @@ public class SiteConfigServiceImpl implements SiteConfigService {
         if (patch.getSiteName() != null) {
             target.setSiteName(patch.getSiteName());
         }
+        if (patch.getFrontendBaseUrl() != null) {
+            target.setFrontendBaseUrl(patch.getFrontendBaseUrl());
+        }
         if (patch.getSiteDescription() != null) {
             target.setSiteDescription(patch.getSiteDescription());
         }
@@ -356,6 +375,7 @@ public class SiteConfigServiceImpl implements SiteConfigService {
     }
 
     private static void normalize(SiteConfigDTO config) {
+        config.setFrontendBaseUrl(SiteFrontendAddress.normalize(config.getFrontendBaseUrl()));
         config.setSiteName(trimToDefault(config.getSiteName(), "Chen404 Blog"));
         config.setSiteDescription(trimToDefault(config.getSiteDescription(), "一个写下技术，也收藏温柔日常的小小角落"));
         config.setSiteLogo(normalizeSiteLogo(config.getSiteLogo()));

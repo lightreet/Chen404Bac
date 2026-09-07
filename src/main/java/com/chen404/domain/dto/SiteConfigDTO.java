@@ -12,6 +12,8 @@ import java.util.Map;
 public class SiteConfigDTO {
 
     private String siteName;
+    /** 网站对外入口；未保存覆盖值时使用 app.frontend-base-url。 */
+    private String frontendBaseUrl;
     private String siteDescription;
     private String siteLogo;
     private String siteFavicon;
