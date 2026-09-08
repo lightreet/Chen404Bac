@@ -22,8 +22,6 @@ import com.chen404.service.support.UserAccessProfileSupport;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
@@ -201,7 +199,7 @@ class TravelMemoryServiceImplTest {
     }
 
     @Test
-    void shouldDeleteRemovedImagesOnlyAfterCommit() {
+    void shouldQueueRemovedImagesWithinBusinessTransaction() {
         initTableInfo(TravelMemoryLocation.class);
         initTableInfo(TravelMemoryStop.class);
         initTableInfo(TravelMemoryEntry.class);
@@ -258,21 +256,10 @@ class TravelMemoryServiceImplTest {
         commandLocation.setSortOrder(3);
         TravelMemoryEntry commandEntry = buildEntry(null, null, "https://cdn.example.com/keep.jpg", 0, 1);
 
-        TransactionSynchronizationManager.initSynchronization();
-        try {
-            service.updateLocation(7L, commandLocation, List.of(), List.of(commandEntry), 1L);
+        service.updateLocation(7L, commandLocation, List.of(), List.of(commandEntry), 1L);
 
-            verify(sysFileService, never()).deleteByUrl("https://cdn.example.com/remove.jpg", 1L);
-
-            for (TransactionSynchronization synchronization : TransactionSynchronizationManager.getSynchronizations()) {
-                synchronization.afterCommit();
-            }
-
-            verify(sysFileService, times(1)).deleteByUrl("https://cdn.example.com/remove.jpg", 1L);
-            verify(sysFileService, never()).deleteByUrl("https://cdn.example.com/keep.jpg", 1L);
-        } finally {
-            TransactionSynchronizationManager.clearSynchronization();
-        }
+        verify(sysFileService, times(1)).deleteByUrl("https://cdn.example.com/remove.jpg", 1L);
+        verify(sysFileService, never()).deleteByUrl("https://cdn.example.com/keep.jpg", 1L);
     }
 
     @Test

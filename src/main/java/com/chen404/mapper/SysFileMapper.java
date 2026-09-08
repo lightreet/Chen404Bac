@@ -16,6 +16,10 @@ import java.util.List;
 @Mapper
 public interface SysFileMapper extends BaseMapper<SysFile> {
 
+    /** 引用写入与删除任务共用的文件生命周期锁。 */
+    @Select("SELECT * FROM sys_file WHERE id = #{id} AND deleted = 0 FOR UPDATE")
+    SysFile selectByIdForUpdate(@Param("id") Long id);
+
     /**
      * 查询需要清理的过期临时文件
      */

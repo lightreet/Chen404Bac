@@ -534,6 +534,8 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
         }
 
         if (!dedup.isEmpty()) {
+            dedup.values().stream().map(FileReference::getFileId).distinct().sorted()
+                    .forEach(sysFileService::lockForReference);
             saveBatch(dedup.values());
         }
     }

@@ -32,8 +32,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
@@ -771,27 +769,9 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
             return;
         }
 
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            cleanupRemovedEntryImages(urlsToDelete, adminId);
-            return;
-        }
-
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                cleanupRemovedEntryImages(urlsToDelete, adminId);
-            }
-        });
-    }
-
-    private void cleanupRemovedEntryImages(List<String> urlsToDelete, Long adminId) {
+        // 删除意图必须在当前事务内落库；物理删除由持久化任务提交后执行。
         for (String oldUrl : urlsToDelete) {
-            try {
-                sysFileService.deleteByUrl(oldUrl, adminId);
-            } catch (Exception ex) {
-                log.warn("[TRAVEL_MEMORY_IMAGE_DELETE_FAIL] adminId={} url={} message={}",
-                        adminId, oldUrl, ex.getMessage(), ex);
-            }
+            sysFileService.deleteByUrl(oldUrl, adminId);
         }
     }
 

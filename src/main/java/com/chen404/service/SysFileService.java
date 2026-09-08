@@ -40,18 +40,21 @@ public interface SysFileService extends IService<SysFile> {
     );
 
     /**
-     * 根据URL删除文件
+     * 根据 URL 提交删除任务，与调用方业务事务一起提交；后台确认无引用后删除。
      *
      * @param fileUrl 文件URL
      * @param userId  操作用户ID
-     * @return 是否成功
+     * @return 是否已接受任务
      */
     boolean deleteByUrl(String fileUrl, Long userId);
+
+    /** 引用写入前锁定并确认文件可用，锁保持至业务事务结束。 */
+    void lockForReference(Long fileId);
 
     /**
      * 清理过期临时文件
      *
-     * @return 清理数量
+     * @return 已提交的清理任务数量
      */
     int cleanExpiredTempFiles();
 
@@ -69,7 +72,7 @@ public interface SysFileService extends IService<SysFile> {
      * @param articleId   文章ID
      * @param newContent  新文章内容
      * @param newCoverUrl 新封面URL
-     * @return 清理的文件数量
+     * @return 已提交的清理任务数量
      */
     int cleanUnusedFiles(Long articleId, String newContent, String newCoverUrl);
 

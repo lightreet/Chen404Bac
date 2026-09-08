@@ -6,6 +6,7 @@ import com.chen404.domain.entity.ReaderBook;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.enums.UserCapabilityEnum;
 import com.chen404.exception.ForbiddenException;
+import com.chen404.exception.ResourceNotFoundException;
 import com.chen404.mapper.ArticleMapper;
 import com.chen404.mapper.MusicTrackMapper;
 import com.chen404.mapper.ReaderBookMapper;
@@ -54,6 +55,17 @@ class ProtectedFileAccessServiceTest {
                 codec,
                 minioConfig
         );
+    }
+
+    @Test
+    void shouldRejectDownloadTicketForDeletingFile() {
+        SysFile file = buildProtectedArticleFile();
+        file.setStatus(SysFile.Status.DELETING);
+        when(sysFileMapper.selectById(12L)).thenReturn(file);
+        String ticket = URI.create(codec.ticketedUrl(12L)).getQuery().substring("ticket=".length());
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> protectedFileAccessService.resolveDownloadUrl(12L, null, ticket));
     }
 
     @Test

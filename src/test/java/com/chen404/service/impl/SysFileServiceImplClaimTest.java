@@ -59,6 +59,7 @@ class SysFileServiceImplClaimTest {
     void shouldRejectClaimFromAnotherUploader() {
         SysFile file = buildTempFile(1L, 8L, "https://cdn.example.com/audio.mp3");
         when(sysFileMapper.selectById(1L)).thenReturn(file);
+        when(sysFileMapper.selectByIdForUpdate(1L)).thenReturn(file);
 
         assertThrows(
                 ForbiddenException.class,
@@ -75,6 +76,7 @@ class SysFileServiceImplClaimTest {
     void shouldPermanentlyBindOwnedTemporaryFileToBusiness() {
         SysFile file = buildTempFile(1L, 7L, "https://cdn.example.com/audio.mp3");
         when(sysFileMapper.selectById(1L)).thenReturn(file);
+        when(sysFileMapper.selectByIdForUpdate(1L)).thenReturn(file);
 
         sysFileService.claimPermanentFiles(
                 7L,

@@ -63,6 +63,7 @@ public class SysFile implements Serializable {
         String TEMP = "TEMP";
         String PERMANENT = "PERMANENT";
         String DELETED = "DELETED";
+        String DELETING = "DELETING";
     }
 
     public interface StorageScope {

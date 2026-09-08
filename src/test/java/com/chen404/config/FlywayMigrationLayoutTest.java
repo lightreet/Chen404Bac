@@ -48,7 +48,8 @@ class FlywayMigrationLayoutTest {
             "V2026081301__enable_admin_notification_by_default.sql",
             "V2026081701__remove_github_development_commit_limit.sql",
             "V2026081702__create_reader_note.sql",
-            "V2026082001__add_reader_reading_mode.sql"
+            "V2026082001__add_reader_reading_mode.sql",
+            "V2026090801__create_file_deletion_task.sql"
     );
 
     @Test

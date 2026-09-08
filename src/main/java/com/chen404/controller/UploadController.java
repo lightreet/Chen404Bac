@@ -388,7 +388,7 @@ public class UploadController {
             boolean success = sysFileService.deleteByUrl(url, userId);
             if (success) {
                 log.info("[FILE_DELETE_OK] userId={}", userId);
-                return Result.success("删除成功");
+                return Result.success("已提交删除，引用检查通过后清理文件");
             }
             throw new IllegalStateException("删除失败");
         } catch (ForbiddenException | UnauthorizedException e) {

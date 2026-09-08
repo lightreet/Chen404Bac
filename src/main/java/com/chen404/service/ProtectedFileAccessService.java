@@ -141,7 +141,8 @@ public class ProtectedFileAccessService {
 
     private SysFile requireFile(Long fileId) {
         SysFile file = fileId == null ? null : sysFileMapper.selectById(fileId);
-        if (file == null || SysFile.Status.DELETED.equals(file.getStatus())) {
+        if (file == null || SysFile.Status.DELETED.equals(file.getStatus())
+                || SysFile.Status.DELETING.equals(file.getStatus())) {
             throw new ResourceNotFoundException("文件不存在");
         }
         return file;

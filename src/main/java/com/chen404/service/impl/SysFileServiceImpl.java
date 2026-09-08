@@ -8,6 +8,7 @@ import com.chen404.exception.BadRequestException;
 import com.chen404.mapper.SysFileMapper;
 import com.chen404.service.AccessService;
 import com.chen404.service.FileClaim;
+import com.chen404.service.FileDeletionService;
 import com.chen404.service.FileStorageService;
 import com.chen404.service.ImageProcessingService;
 import com.chen404.service.ManagedFileUrlCodec;
@@ -17,6 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -55,6 +57,9 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
 
     @Autowired
     private MinioConfig minioConfig;
+
+    @Autowired
+    private FileDeletionService fileDeletionService;
 
     // 临时文件过期时间（小时）
     private static final int TEMP_FILE_EXPIRE_HOURS = 24;
@@ -172,7 +177,8 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
             }
         }
 
-        for (SysFile file : filesById.values()) {
+        for (Long fileId : filesById.keySet().stream().sorted().toList()) {
+            SysFile file = baseMapper.selectByIdForUpdate(fileId);
             validateFileClaim(file, operatorId, expectedRefType, refId);
             if (isClaimedBySameBusiness(file, expectedRefType, refId)) {
                 continue;
@@ -204,44 +210,29 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
             throw new ForbiddenException("仅文件上传者本人或管理员可删除该文件");
         }
 
-        // 删除存储中的文件
-        boolean deleted = fileStorageService.deleteFile(resolveBucketName(file), file.getObjectName());
-        if (deleted) {
-            // 标记为已删除
-            file.setStatus(SysFile.Status.DELETED);
-            updateById(file);
-            log.info("用户 {} 删除文件成功: {}", userId, fileUrl);
-        }
+        fileDeletionService.enqueue(file.getId());
+        log.info("[FILE_DELETE_QUEUED] operatorId={} fileId={}", userId, file.getId());
+        return true;
+    }
 
-        return deleted;
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void lockForReference(Long fileId) {
+        SysFile file = baseMapper.selectByIdForUpdate(fileId);
+        if (file == null || SysFile.Status.DELETED.equals(file.getStatus())
+                || SysFile.Status.DELETING.equals(file.getStatus())) {
+            throw new BadRequestException("文件已删除或正在删除，请重新上传");
+        }
     }
 
     @Override
     @Transactional
     public int cleanExpiredTempFiles() {
         List<SysFile> expiredFiles = baseMapper.selectExpiredTempFiles();
-        int count = 0;
-
         for (SysFile file : expiredFiles) {
-            try {
-                // 删除存储中的文件
-                boolean deleted = fileStorageService.deleteFile(resolveBucketName(file), file.getObjectName());
-                if (deleted) {
-                    // 逻辑删除记录
-                    removeById(file.getId());
-                    count++;
-                    log.info("清理过期临时文件成功: {}", file.getFileUrl());
-                }
-            } catch (Exception e) {
-                log.error("清理过期临时文件失败: {}", file.getFileUrl(), e);
-            }
+            fileDeletionService.enqueue(file.getId());
         }
-
-        if (count > 0) {
-            log.info("本次共清理 {} 个过期临时文件", count);
-        }
-
-        return count;
+        return expiredFiles.size();
     }
 
     @Override
@@ -290,27 +281,11 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
                 .filter(file -> !usedUrls.contains(file.getFileUrl()))
                 .collect(Collectors.toList());
 
-        int count = 0;
         for (SysFile file : unusedFiles) {
-            try {
-                // 删除存储中的文件
-                boolean deleted = fileStorageService.deleteFile(resolveBucketName(file), file.getObjectName());
-                if (deleted) {
-                    // 逻辑删除记录
-                    removeById(file.getId());
-                    count++;
-                    log.info("清理文章 {} 的未使用文件成功: {}", articleId, file.getFileUrl());
-                }
-            } catch (Exception e) {
-                log.error("清理文章 {} 的未使用文件失败: {}", articleId, file.getFileUrl(), e);
-            }
+            fileDeletionService.enqueue(file.getId());
         }
-
-        if (count > 0) {
-            log.info("文章 {} 共清理 {} 个未使用文件", articleId, count);
-        }
-
-        return count;
+        log.info("[ARTICLE_FILE_DELETE_QUEUED] articleId={} fileCount={}", articleId, unusedFiles.size());
+        return unusedFiles.size();
     }
 
     @Override
@@ -410,7 +385,8 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
             Long operatorId,
             String expectedRefType,
             Long refId) {
-        if (file.getId() == null || SysFile.Status.DELETED.equals(file.getStatus())) {
+        if (file == null || file.getId() == null || SysFile.Status.DELETED.equals(file.getStatus())
+                || SysFile.Status.DELETING.equals(file.getStatus())) {
             throw new BadRequestException("文件不存在或已删除");
         }
         if (!Objects.equals(file.getRefType(), expectedRefType)) {
@@ -453,12 +429,6 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
         return managedFileId == null
                 ? baseMapper.selectByUrl(fileUrl.trim())
                 : getById(managedFileId);
-    }
-
-    private String resolveBucketName(SysFile file) {
-        return StringUtils.hasText(file.getBucketName())
-                ? file.getBucketName()
-                : minioConfig.getBucketName();
     }
 
     private boolean isProtectedRefType(String refType) {
