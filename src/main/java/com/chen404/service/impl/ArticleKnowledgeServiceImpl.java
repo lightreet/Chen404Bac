@@ -9,6 +9,7 @@ import com.chen404.mapper.ArticleMapper;
 import com.chen404.service.AccessService;
 import com.chen404.service.ArticleKnowledgeService;
 import com.chen404.service.support.chat.ArticleKnowledgeHit;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -32,6 +33,7 @@ import java.util.stream.Collectors;
  * 先做到“可同步、可过滤、可引用”，后续再演进向量召回。
  */
 @Service
+@Slf4j
 public class ArticleKnowledgeServiceImpl implements ArticleKnowledgeService {
 
     private static final Pattern MARKDOWN_DECORATION = Pattern.compile("[#>*`~\\[\\]()-]");
@@ -95,7 +97,7 @@ public class ArticleKnowledgeServiceImpl implements ArticleKnowledgeService {
         LinkedHashSet<ArticleKnowledgeHit> orderedHits = new LinkedHashSet<>();
 
         if (currentArticleId != null) {
-            orderedHits.addAll(searchCurrentArticleChunks(currentArticleId, query, safeLimit));
+            orderedHits.addAll(searchCurrentArticleChunks(currentArticleId, requesterId, query, safeLimit));
         }
 
         List<String> keywords = extractKeywords(query);
@@ -128,7 +130,7 @@ public class ArticleKnowledgeServiceImpl implements ArticleKnowledgeService {
         List<ArticleKnowledgeHit> rescored = new ArrayList<>();
         for (ArticleAiChunk chunk : candidates) {
             Article article = articlesById.get(chunk.getArticleId());
-            if (article == null || !accessService.canViewArticle(requesterId, article)) {
+            if (!canReadArticle(article, requesterId)) {
                 continue;
             }
             int score = scoreChunk(chunk, keywords, currentArticleId);
@@ -199,7 +201,13 @@ public class ArticleKnowledgeServiceImpl implements ArticleKnowledgeService {
         return chunk;
     }
 
-    private List<ArticleKnowledgeHit> searchCurrentArticleChunks(Long currentArticleId, String query, int limit) {
+    private List<ArticleKnowledgeHit> searchCurrentArticleChunks(Long currentArticleId, Long requesterId, String query, int limit) {
+        // 切片是派生数据，授权必须使用当前文章状态，不能依赖切片中可能已过期的可见性。
+        Article article = articleMapper.selectById(currentArticleId);
+        if (!canReadArticle(article, requesterId)) {
+            log.info("[AI_KNOWLEDGE_ACCESS_SKIP] requesterId={} articleId={}", requesterId, currentArticleId);
+            return List.of();
+        }
         List<ArticleAiChunk> chunks = articleAiChunkMapper.selectList(new LambdaQueryWrapper<ArticleAiChunk>()
                 .eq(ArticleAiChunk::getArticleId, currentArticleId)
                 .orderByAsc(ArticleAiChunk::getChunkIndex)
@@ -227,6 +235,12 @@ public class ArticleKnowledgeServiceImpl implements ArticleKnowledgeService {
                 .sorted(Comparator.comparingInt(ArticleKnowledgeHit::score).reversed())
                 .limit(limit)
                 .collect(Collectors.toList());
+    }
+
+    private boolean canReadArticle(Article article, Long requesterId) {
+        return article != null
+                && !Objects.equals(article.getDeleted(), 1)
+                && accessService.canViewArticle(requesterId, article);
     }
 
     private int scoreChunk(ArticleAiChunk chunk, List<String> keywords, Long currentArticleId) {

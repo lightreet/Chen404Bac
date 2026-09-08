@@ -208,7 +208,8 @@ public class AiChatServiceImpl implements AiChatService {
         Article currentArticle = loadCurrentArticle(request.getCurrentArticleId(), requesterId, traceId);
         int maxCitationCount = resolveMaxCitationCount(effectiveConfig);
         List<ArticleKnowledgeHit> knowledgeHits = scene == AiMaidPromptScene.HELPER && isRetrievalEnabled(effectiveConfig)
-                ? articleKnowledgeService.searchVisibleChunks(latestUserMessage, requesterId, request.getCurrentArticleId(), maxCitationCount)
+                ? articleKnowledgeService.searchVisibleChunks(latestUserMessage, requesterId,
+                        currentArticle == null ? null : currentArticle.getId(), maxCitationCount)
                 : List.of();
         AiMaidPromptContext promptContext = buildPromptContext(request, currentArticle, !knowledgeHits.isEmpty());
         String systemPrompt = maidPromptBuilder.buildSystemPrompt(scene, promptContext, effectiveConfig);

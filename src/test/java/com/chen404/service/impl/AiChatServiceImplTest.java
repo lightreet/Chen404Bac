@@ -133,6 +133,23 @@ class AiChatServiceImplTest {
     }
 
     @Test
+    void shouldNotForwardDeniedCurrentArticleToRetrievalOrModel() {
+        when(articleService.getArticleById(123L, false, 7L))
+                .thenThrow(new com.chen404.exception.ForbiddenException("denied"));
+        when(llmClient.generateText(any(LlmTextRequest.class)))
+                .thenReturn("{\"replyText\":\"没有可用依据\",\"mood\":\"happy\",\"suggestions\":[]}");
+
+        AiChatResponse response = aiChatService.chat(buildArticleHelperRequest(), 7L);
+
+        verify(articleKnowledgeService).searchVisibleChunks(anyString(), eq(7L), eq(null), anyInt());
+        assertTrue(response.getCitations().isEmpty());
+        ArgumentCaptor<LlmTextRequest> modelRequest = ArgumentCaptor.forClass(LlmTextRequest.class);
+        verify(llmClient).generateText(modelRequest.capture());
+        assertFalse(modelRequest.getValue().userPrompt().contains("### Retrieved knowledge"));
+        assertFalse(modelRequest.getValue().userPrompt().contains("### Current article"));
+    }
+
+    @Test
     void shouldAttachRelatedArticlesWhenUserExpressesRecommendIntent() {
         Article article = new Article();
         article.setId(123L);
