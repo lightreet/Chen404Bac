@@ -45,6 +45,7 @@ import com.chen404.service.ArticleService;
 import com.chen404.service.SysFileService;
 import com.chen404.service.TagService;
 import com.chen404.service.support.UserAccessProfileSupport;
+import com.chen404.service.support.ArticlePolicyValidator;
 import com.chen404.util.RedisKeys;
 import com.chen404.util.RedisUtil;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -256,6 +257,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Article createArticle(Article article) {
+        ArticlePolicyValidator.validate(article);
         User operator = accessService.getUserOrNull(article.getAuthorId());
         if (operator == null) {
             throw new UnauthorizedException();
@@ -328,6 +330,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Article updateArticle(Long id, Article article, Long operatorId) {
+        ArticlePolicyValidator.validate(article);
         Article existing = articleMapper.selectById(id);
         if (existing == null) {
             throw new ResourceNotFoundException("文章不存在");
@@ -345,14 +348,10 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         Integer expectedVersion = article.getVersion() == null ? existing.getVersion() : article.getVersion();
 
         if (article.getVisibility() == null) {
-            article.setVisibility(existing.getVisibility() == null
-                    ? ArticleVisibilityEnum.PUBLIC.getValue()
-                    : existing.getVisibility());
+            article.setVisibility(ArticleVisibilityEnum.fromValue(existing.getVisibility()).getValue());
         }
         if (article.getCommentPolicy() == null) {
-            article.setCommentPolicy(existing.getCommentPolicy() == null
-                    ? ArticleCommentPolicyEnum.REGISTERED.getValue()
-                    : existing.getCommentPolicy());
+            article.setCommentPolicy(ArticleCommentPolicyEnum.fromValue(existing.getCommentPolicy()).getValue());
         }
         if (!accessService.canCurateArticle(operatorId)) {
             article.setIsTop(existing.getIsTop());

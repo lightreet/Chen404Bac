@@ -16,6 +16,7 @@ public enum ArticleCommentPolicyEnum {
         this.value = value;
     }
 
+    /** 异常数据按禁止评论处理；创建默认值由写入服务明确设置。 */
     public static ArticleCommentPolicyEnum fromValue(Integer value) {
         if (value != null) {
             for (ArticleCommentPolicyEnum item : values()) {
@@ -24,6 +25,6 @@ public enum ArticleCommentPolicyEnum {
                 }
             }
         }
-        return REGISTERED;
+        return CLOSED;
     }
 }

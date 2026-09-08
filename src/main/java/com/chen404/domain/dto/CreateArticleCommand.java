@@ -4,6 +4,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Max;
 import lombok.Data;
 
 import java.util.List;
@@ -37,15 +39,23 @@ public class CreateArticleCommand {
 
     @Schema(description = "文章状态：0-草稿 1-已发布 2-回收站", example = "1")
     @NotNull(message = "文章状态不能为空")
+    @Min(value = 0, message = "文章状态无效")
+    @Max(value = 2, message = "文章状态无效")
     private Integer status;
 
     @Schema(description = "是否置顶：0-否 1-是", example = "0")
+    @Min(0)
+    @Max(1)
     private Integer isTop;
 
     @Schema(description = "是否推荐：0-否 1-是", example = "0")
+    @Min(0)
+    @Max(1)
     private Integer isRecommend;
 
     @Schema(description = "是否原创：0-转载 1-原创", example = "1")
+    @Min(0)
+    @Max(1)
     private Integer isOriginal;
 
     @Schema(description = "转载原文链接", example = "https://example.com/original-post")
@@ -55,9 +65,13 @@ public class CreateArticleCommand {
     private String password;
 
     @Schema(description = "可见性：0-公开 1-登录可见 2-好友可见 3-私密", example = "0")
+    @Min(value = 0, message = "文章可见性无效")
+    @Max(value = 3, message = "文章可见性无效")
     private Integer visibility;
 
     @Schema(description = "评论策略：0-关闭 1-登录可评论 2-好友可评论 3-游客可评论", example = "1")
+    @Min(value = 0, message = "文章评论策略无效")
+    @Max(value = 3, message = "文章评论策略无效")
     private Integer commentPolicy;
 
     @Schema(description = "已存在标签ID列表")

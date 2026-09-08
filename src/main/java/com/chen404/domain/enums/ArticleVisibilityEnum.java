@@ -16,6 +16,7 @@ public enum ArticleVisibilityEnum {
         this.value = value;
     }
 
+    /** 读取未知值或缺失值时收紧访问范围，不能将异常数据解释为公开。 */
     public static ArticleVisibilityEnum fromValue(Integer value) {
         if (value != null) {
             for (ArticleVisibilityEnum item : values()) {
@@ -24,6 +25,6 @@ public enum ArticleVisibilityEnum {
                 }
             }
         }
-        return PUBLIC;
+        return PRIVATE;
     }
 }
