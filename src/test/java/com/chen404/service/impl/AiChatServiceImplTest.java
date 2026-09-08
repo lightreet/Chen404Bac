@@ -1,6 +1,8 @@
 package com.chen404.service.impl;
 
 import com.chen404.config.AiRuntimeProperties;
+import com.chen404.config.AiStreamProperties;
+import com.chen404.service.support.chat.AiStreamCoordinator;
 import com.chen404.domain.dto.AiAdminConfigDTO;
 import com.chen404.domain.dto.AiChatMessageDTO;
 import com.chen404.domain.dto.AiChatRequest;
@@ -85,7 +87,9 @@ class AiChatServiceImplTest {
                 articleKnowledgeService,
                 promptBuilder,
                 aiChatSessionService,
-                aiConfigService
+                aiConfigService,
+                mock(AiStreamCoordinator.class),
+                new AiStreamProperties()
         );
 
         when(aiConfigService.getEffectiveConfig()).thenReturn(defaultAiConfig());

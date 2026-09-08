@@ -5,6 +5,7 @@ import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.chen404.domain.dto.AiAdminConfigDTO;
 import com.chen404.config.AiRuntimeProperties;
+import com.chen404.config.AiStreamProperties;
 import com.chen404.domain.dto.AiChatCitationDTO;
 import com.chen404.domain.dto.AiChatMessageDTO;
 import com.chen404.domain.dto.AiChatRelatedArticleDTO;
@@ -20,6 +21,9 @@ import com.chen404.service.AiConfigService;
 import com.chen404.service.ArticleKnowledgeService;
 import com.chen404.service.ArticleService;
 import com.chen404.service.support.LlmTextStreamHandler;
+import com.chen404.service.support.LlmStreamTimeoutException;
+import com.chen404.service.support.chat.AiStreamCoordinator;
+import com.chen404.service.support.chat.AiStreamSession;
 import com.chen404.service.support.chat.ArticleKnowledgeHit;
 import com.chen404.service.support.prompt.AiMaidPromptBuilder;
 import com.chen404.service.support.prompt.AiMaidPromptContext;
@@ -39,13 +43,11 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * AI 女仆聊天服务实现。
@@ -60,7 +62,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class AiChatServiceImpl implements AiChatService {
 
     private static final Logger log = LoggerFactory.getLogger(AiChatServiceImpl.class);
-    private static final ExecutorService STREAM_EXECUTOR = Executors.newCachedThreadPool();
 
     private static final String DEFAULT_FINISH_REASON = "stop";
     private static final String DEFAULT_MOOD = "happy";
@@ -81,6 +82,8 @@ public class AiChatServiceImpl implements AiChatService {
     private final AiMaidPromptBuilder maidPromptBuilder;
     private final AiChatSessionService aiChatSessionService;
     private final AiConfigService aiConfigService;
+    private final AiStreamCoordinator streamCoordinator;
+    private final AiStreamProperties streamProperties;
 
     public AiChatServiceImpl(
             AiScenarioExecutor aiScenarioExecutor,
@@ -90,7 +93,9 @@ public class AiChatServiceImpl implements AiChatService {
             ArticleKnowledgeService articleKnowledgeService,
             AiMaidPromptBuilder maidPromptBuilder,
             AiChatSessionService aiChatSessionService,
-            AiConfigService aiConfigService) {
+            AiConfigService aiConfigService,
+            AiStreamCoordinator streamCoordinator,
+            AiStreamProperties streamProperties) {
         this.aiScenarioExecutor = aiScenarioExecutor;
         this.aiRuntimeProperties = aiRuntimeProperties;
         this.maidChatScenarioDefinition = maidChatScenarioDefinition;
@@ -99,6 +104,8 @@ public class AiChatServiceImpl implements AiChatService {
         this.maidPromptBuilder = maidPromptBuilder;
         this.aiChatSessionService = aiChatSessionService;
         this.aiConfigService = aiConfigService;
+        this.streamCoordinator = streamCoordinator;
+        this.streamProperties = streamProperties;
     }
 
     @Override
@@ -125,74 +132,79 @@ public class AiChatServiceImpl implements AiChatService {
     public SseEmitter streamChat(AiChatRequest request, Long requesterId) {
         validateRequest(request);
         AiAdminConfigDTO effectiveConfig = aiConfigService.getEffectiveConfig();
+        ensureChatEnabled(effectiveConfig);
+        ensureLlmEnabled(effectiveConfig);
+        return streamCoordinator.start(requesterId, session -> runStream(request, requesterId, effectiveConfig, session));
+    }
+
+    /** 准入后才准备上下文和保存会话；取消贯穿准备、上游读取和结果持久化。 */
+    private void runStream(AiChatRequest request, Long requesterId, AiAdminConfigDTO effectiveConfig, AiStreamSession session) {
         ChatExecutionContext context = prepareExecutionContext(request, requesterId, effectiveConfig);
+        if (session.isCancelled()) {
+            return;
+        }
         MaidChatScenarioRequest scenarioRequest = buildScenarioRequest(request, context);
-        SseEmitter emitter = new SseEmitter(0L);
-        AtomicBoolean cancelled = new AtomicBoolean(false);
-
-        emitter.onCompletion(() -> cancelled.set(true));
-        emitter.onTimeout(() -> {
-            cancelled.set(true);
-            emitter.complete();
-        });
-
-        STREAM_EXECUTOR.execute(() -> {
-            try {
-                if (!isChatEnabled(context.aiConfig())) {
-                    sendEventQuietly(emitter, SSE_EVENT_ERROR, JSONObject.of("message", "当前环境未开启 AI 聊天能力"));
-                    emitter.complete();
-                    return;
-                }
-                if (!isLlmEnabled(context.aiConfig())) {
-                    sendEventQuietly(emitter, SSE_EVENT_ERROR, JSONObject.of("message", "LLM is disabled by admin config"));
-                    emitter.complete();
-                    return;
-                }
-                emitSessionStart(emitter, context);
-                StringBuilder streamedReply = new StringBuilder();
-                maidChatScenarioDefinition.stream(
-                        scenarioRequest,
-                        new LlmTextStreamHandler() {
-                            @Override
-                            public boolean isCancelled() {
-                                return cancelled.get();
-                            }
-
-                            @Override
-                            public void onTextDelta(String text) {
-                                streamedReply.append(text);
-                                sendEventQuietly(emitter, SSE_EVENT_DELTA, buildDeltaPayload(context.messageId(), text));
-                            }
-
-                            @Override
-                            public void onComplete() {
-                                // no-op, completion handled after stream returns
-                            }
+        SseEmitter emitter = session.emitter();
+        try {
+            emitSessionStart(emitter, context);
+            StringBuilder streamedReply = new StringBuilder();
+            maidChatScenarioDefinition.stream(
+                    scenarioRequest,
+                    new LlmTextStreamHandler() {
+                        @Override
+                        public boolean isCancelled() {
+                            return session.isCancelled();
                         }
-                );
-                if (cancelled.get()) {
-                    emitter.complete();
-                    return;
-                }
 
-                AiChatResponse response = buildChatResponse(
-                        context,
-                        maidChatScenarioDefinition.buildStreamResult(streamedReply.toString(), scenarioRequest)
-                );
-                aiChatSessionService.saveAssistantMessage(context.session().getSessionId(), response);
-                emitRelatedArticles(emitter, response);
-                emitSuggestions(emitter, response);
-                emitDone(emitter, response);
-                emitter.complete();
-            } catch (IllegalStateException ex) {
-                log.warn("[AI_CHAT_STREAM_FAIL] traceId={} message={}", context.traceId(), ex.getMessage(), ex);
-                emitErrorFallback(emitter, context, scenarioRequest, ex.getMessage(), cancelled);
-            } catch (Exception ex) {
-                log.error("[AI_CHAT_STREAM_ERROR] traceId={} message={}", context.traceId(), ex.getMessage(), ex);
-                emitErrorFallback(emitter, context, scenarioRequest, "女仆这次没接稳，请稍后再试。", cancelled);
+                        @Override
+                        public AutoCloseable onCancellation(Runnable action) {
+                            return session.onCancellation(action);
+                        }
+
+                        @Override
+                        public void onTextDelta(String text) {
+                            if (session.isCancelled()) {
+                                return;
+                            }
+                            if (streamedReply.length() + text.length() > streamProperties.getMaxResponseChars()) {
+                                throw new IllegalStateException("AI 回复超过长度限制");
+                            }
+                            streamedReply.append(text);
+                            sendEventQuietly(emitter, SSE_EVENT_DELTA, buildDeltaPayload(context.messageId(), text));
+                        }
+
+                        @Override
+                        public void onComplete() {
+                            // no-op, completion handled after stream returns
+                        }
+                    }
+            );
+            if (session.isCancelled()) {
+                return;
             }
-        });
-        return emitter;
+
+            AiChatResponse response = buildChatResponse(
+                    context,
+                    maidChatScenarioDefinition.buildStreamResult(streamedReply.toString(), scenarioRequest)
+            );
+            if (session.isCancelled()) {
+                return;
+            }
+            aiChatSessionService.saveAssistantMessage(context.session().getSessionId(), response);
+            emitRelatedArticles(emitter, response);
+            emitSuggestions(emitter, response);
+            emitDone(emitter, response);
+            emitter.complete();
+        } catch (LlmStreamTimeoutException | UncheckedIOException ex) {
+            log.info("[AI_CHAT_STREAM_CANCELLED] traceId={} reason={}", context.traceId(), ex.getClass().getSimpleName());
+            session.cancel();
+        } catch (IllegalStateException ex) {
+            log.warn("[AI_CHAT_STREAM_FAIL] traceId={} message={}", context.traceId(), ex.getMessage(), ex);
+            emitErrorFallback(emitter, context, scenarioRequest, ex.getMessage(), session);
+        } catch (Exception ex) {
+            log.error("[AI_CHAT_STREAM_ERROR] traceId={} message={}", context.traceId(), ex.getMessage(), ex);
+            emitErrorFallback(emitter, context, scenarioRequest, "女仆这次没接稳，请稍后再试。", session);
+        }
     }
 
     @Override
@@ -460,8 +472,8 @@ public class AiChatServiceImpl implements AiChatService {
             ChatExecutionContext context,
             MaidChatScenarioRequest scenarioRequest,
             String message,
-            AtomicBoolean cancelled) {
-        if (cancelled.get()) {
+            AiStreamSession session) {
+        if (session.isCancelled()) {
             emitter.complete();
             return;
         }
@@ -475,7 +487,9 @@ public class AiChatServiceImpl implements AiChatService {
         emitRelatedArticles(emitter, fallback);
         emitSuggestions(emitter, fallback);
         emitDone(emitter, fallback);
-        aiChatSessionService.saveAssistantMessage(context.session().getSessionId(), fallback);
+        if (!session.isCancelled()) {
+            aiChatSessionService.saveAssistantMessage(context.session().getSessionId(), fallback);
+        }
         sendEventQuietly(emitter, SSE_EVENT_ERROR, JSONObject.of("message", message));
         emitter.complete();
     }
@@ -493,7 +507,7 @@ public class AiChatServiceImpl implements AiChatService {
                     .name(eventName)
                     .data(payload.toJSONString()));
         } catch (IOException e) {
-            throw new IllegalStateException("SSE 事件发送失败", e);
+            throw new UncheckedIOException("SSE 事件发送失败", e);
         }
     }
 
@@ -503,7 +517,7 @@ public class AiChatServiceImpl implements AiChatService {
                     .name(eventName)
                     .data(payload.toJSONString()));
         } catch (IOException e) {
-            throw new IllegalStateException("SSE 事件发送失败", e);
+            throw new UncheckedIOException("SSE 事件发送失败", e);
         }
     }
 

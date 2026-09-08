@@ -1,9 +1,11 @@
 package com.chen404.service.support;
 
 import com.chen404.config.LlmProperties;
+import com.chen404.config.AiStreamProperties;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -15,6 +17,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OpenAiCompatibleLlmClientTest {
+
+    private final java.util.concurrent.ScheduledExecutorService scheduler = java.util.concurrent.Executors.newScheduledThreadPool(1);
+
+    @AfterEach
+    void stopScheduler() { scheduler.shutdownNow(); }
 
     @Test
     void shouldUsePerRequestOverridesForChatCompletionCall() throws Exception {
@@ -29,7 +36,7 @@ class OpenAiCompatibleLlmClientTest {
             properties.setApiKey("default-key");
             properties.setBaseUrl("http://127.0.0.1:1");
             properties.setModel("default-model");
-            OpenAiCompatibleLlmClient client = new OpenAiCompatibleLlmClient(properties);
+            OpenAiCompatibleLlmClient client = new OpenAiCompatibleLlmClient(properties, new AiStreamProperties(), scheduler);
 
             String text = client.generateText(new LlmTextRequest(
                     "override-model",
@@ -73,7 +80,7 @@ class OpenAiCompatibleLlmClientTest {
             properties.setApiKey("default-key");
             properties.setBaseUrl("http://127.0.0.1:" + server.getAddress().getPort());
             properties.setModel("default-model");
-            OpenAiCompatibleLlmClient client = new OpenAiCompatibleLlmClient(properties);
+            OpenAiCompatibleLlmClient client = new OpenAiCompatibleLlmClient(properties, new AiStreamProperties(), scheduler);
 
             String text = client.generateText(new LlmTextRequest(
                     null,
@@ -127,7 +134,7 @@ class OpenAiCompatibleLlmClientTest {
             properties.setApiKey("default-key");
             properties.setBaseUrl("http://127.0.0.1:" + server.getAddress().getPort());
             properties.setModel("default-model");
-            OpenAiCompatibleLlmClient client = new OpenAiCompatibleLlmClient(properties);
+            OpenAiCompatibleLlmClient client = new OpenAiCompatibleLlmClient(properties, new AiStreamProperties(), scheduler);
 
             String text = client.generateText(new LlmTextRequest(
                     null,

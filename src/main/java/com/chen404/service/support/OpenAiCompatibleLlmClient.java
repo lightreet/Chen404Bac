@@ -4,6 +4,8 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.chen404.config.LlmProperties;
+import com.chen404.config.AiStreamProperties;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -20,6 +22,9 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.ExecutionException;
 
 /**
  * OpenAI-compatible 文本客户端实现。
@@ -57,6 +62,8 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
     private static final String FIELD_DELTA = "delta";
     private static final String FIELD_STREAM = "stream";
     private static final int MIN_TIMEOUT_SECONDS = 5;
+    private static final int MAX_SSE_LINE_CHARS = 65_536;
+    private static final int MAX_STREAM_BODY_CHARS = 262_144;
     private static final String DEFAULT_ERROR_PREFIX = "LLM 服务调用失败：";
     private static final String EMPTY_TEXT_ERROR = "LLM 响应缺少文本内容";
     private static final String SSE_DONE_MARKER = "[DONE]";
@@ -65,9 +72,14 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
 
     private final LlmProperties llmProperties;
     private final HttpClient httpClient;
+    private final AiStreamProperties streamProperties;
+    private final ScheduledExecutorService streamScheduler;
 
-    public OpenAiCompatibleLlmClient(LlmProperties llmProperties) {
+    public OpenAiCompatibleLlmClient(LlmProperties llmProperties, AiStreamProperties streamProperties,
+            @Qualifier("aiStreamScheduler") ScheduledExecutorService streamScheduler) {
         this.llmProperties = llmProperties;
+        this.streamProperties = streamProperties;
+        this.streamScheduler = streamScheduler;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(resolveTimeoutSeconds()))
                 .build();
@@ -117,36 +129,48 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
             throw new IllegalArgumentException("LLM 流式回调不能为空");
         }
 
-        String apiStyle = normalizeApiStyle(resolveApiStyle(request));
-        if (!STYLE_CHAT_COMPLETIONS.equals(apiStyle)) {
-            streamByChunkingPlainText(request, handler);
+        if (handler.isCancelled()) {
             return;
         }
-
-        HttpRequest httpRequest = buildStreamRequest(request);
-        try {
+        String apiStyle = normalizeApiStyle(resolveApiStyle(request));
+        HttpRequest httpRequest = STYLE_CHAT_COMPLETIONS.equals(apiStyle) ? buildStreamRequest(request) : buildRequest(request);
+        long timeoutMs = Math.min(streamProperties.getTotalTimeoutMs(), Duration.ofSeconds(resolveTimeoutSeconds(request)).toMillis());
+        LlmStreamControl control = new LlmStreamControl(handler, streamScheduler, timeoutMs, streamProperties.getIdleTimeoutMs());
+        try (control) {
             log.info("[LLM_TEXT_STREAM_REQ] model={} style={}", resolveModel(request), apiStyle);
-            HttpResponse<InputStream> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                response.body().close();
-                log.warn("[LLM_TEXT_STREAM_FAIL] model={} status={}",
-                        resolveModel(request), response.statusCode());
-                throw new IllegalStateException(DEFAULT_ERROR_PREFIX + response.statusCode());
-            }
-            try (InputStream inputStream = response.body();
+            var pending = httpClient.sendAsync(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
+            control.track(pending);
+            HttpResponse<InputStream> response = pending.get();
+            try (InputStream inputStream = control.track(response.body());
                  BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
-                readChatCompletionStream(reader, handler);
+                if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                    throw new IllegalStateException(DEFAULT_ERROR_PREFIX + response.statusCode());
+                }
+                if (STYLE_CHAT_COMPLETIONS.equals(apiStyle)) {
+                    readChatCompletionStream(reader, handler);
+                } else {
+                    streamByChunkingPlainText(reader, handler);
+                }
+            }
+            if (control.timedOut()) {
+                throw new LlmStreamTimeoutException();
             }
             if (!handler.isCancelled()) {
                 handler.onComplete();
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            log.error("[LLM_TEXT_STREAM_INTERRUPTED] model={}", resolveModel(request), e);
-            throw new IllegalStateException(DEFAULT_ERROR_PREFIX + "请求被中断", e);
-        } catch (IOException e) {
-            log.error("[LLM_TEXT_STREAM_IO_FAIL] model={} message={}", resolveModel(request), e.getMessage(), e);
-            throw new IllegalStateException(DEFAULT_ERROR_PREFIX + "网络异常", e);
+            if (!handler.isCancelled()) {
+                throw new IllegalStateException(DEFAULT_ERROR_PREFIX + "请求被中断", e);
+            }
+        } catch (IOException | ExecutionException | CancellationException e) {
+            if (control.timedOut()) {
+                log.warn("[LLM_STREAM_TIMEOUT] model={}", resolveModel(request));
+                throw new LlmStreamTimeoutException();
+            }
+            if (!handler.isCancelled()) {
+                throw new IllegalStateException(DEFAULT_ERROR_PREFIX + "网络异常", e);
+            }
         }
     }
 
@@ -342,7 +366,8 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
 
     private void readChatCompletionStream(BufferedReader reader, LlmTextStreamHandler handler) throws IOException {
         String line;
-        while ((line = reader.readLine()) != null) {
+        int responseChars = 0;
+        while (!handler.isCancelled() && (line = readBoundedLine(reader)) != null) {
             if (handler.isCancelled()) {
                 return;
             }
@@ -356,6 +381,10 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
             }
             String deltaText = extractDeltaText(payload);
             if (StringUtils.hasText(deltaText)) {
+                responseChars += deltaText.length();
+                if (responseChars > streamProperties.getMaxResponseChars()) {
+                    throw new IllegalStateException("LLM 流式响应超过长度限制");
+                }
                 handler.onTextDelta(deltaText);
             }
         }
@@ -378,11 +407,26 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
         return delta.getString(FIELD_CONTENT);
     }
 
-    private void streamByChunkingPlainText(LlmTextRequest request, LlmTextStreamHandler handler) {
-        String plainText = generateText(request);
-        if (!StringUtils.hasText(plainText)) {
-            handler.onComplete();
+    /** Responses 兼容路径也使用相同的可取消读取，不能退回不可取消的同步调用。 */
+    private void streamByChunkingPlainText(BufferedReader reader, LlmTextStreamHandler handler) throws IOException {
+        StringBuilder body = new StringBuilder();
+        char[] buffer = new char[4096];
+        int count;
+        while (!handler.isCancelled() && (count = reader.read(buffer)) != -1) {
+            if (body.length() + count > MAX_STREAM_BODY_CHARS) {
+                throw new IllegalStateException("LLM 响应体超过长度限制");
+            }
+            body.append(buffer, 0, count);
+        }
+        if (handler.isCancelled()) {
             return;
+        }
+        String plainText = extractOutputText(body.toString());
+        if (!StringUtils.hasText(plainText)) {
+            return;
+        }
+        if (plainText.length() > streamProperties.getMaxResponseChars()) {
+            throw new IllegalStateException("LLM 流式响应超过长度限制");
         }
         for (String chunk : splitIntoDisplayChunks(plainText)) {
             if (handler.isCancelled()) {
@@ -390,7 +434,22 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
             }
             handler.onTextDelta(chunk);
         }
-        handler.onComplete();
+    }
+
+    /** 限制单行长度，防止上游持续发送不换行的数据使 BufferedReader.readLine 无限增长。 */
+    private String readBoundedLine(BufferedReader reader) throws IOException {
+        StringBuilder line = new StringBuilder();
+        int character;
+        while ((character = reader.read()) != -1) {
+            if (character == '\n') {
+                return line.toString();
+            }
+            if (line.length() >= MAX_SSE_LINE_CHARS) {
+                throw new IllegalStateException("LLM SSE 行超过长度限制");
+            }
+            line.append((char) character);
+        }
+        return line.isEmpty() ? null : line.toString();
     }
 
     private List<String> splitIntoDisplayChunks(String text) {

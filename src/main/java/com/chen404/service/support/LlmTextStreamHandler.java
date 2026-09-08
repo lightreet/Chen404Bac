@@ -14,6 +14,11 @@ public interface LlmTextStreamHandler {
      */
     boolean isCancelled();
 
+    /** 注册主动取消动作；返回的句柄用于请求结束时解除注册。 */
+    default AutoCloseable onCancellation(Runnable action) {
+        return () -> { };
+    }
+
     /**
      * 接收一段新增文本。
      *
