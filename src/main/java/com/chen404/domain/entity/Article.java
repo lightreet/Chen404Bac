@@ -73,6 +73,10 @@ public class Article implements Serializable {
      */
     private Integer status;
 
+    /** 内容编辑版本；计数更新不递增，避免浏览、点赞与编辑发生无意义冲突。 */
+    @Version
+    private Integer version;
+
     /**
      * 浏览量
      */

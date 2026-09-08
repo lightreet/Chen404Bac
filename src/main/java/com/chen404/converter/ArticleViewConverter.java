@@ -85,6 +85,7 @@ public interface ArticleViewConverter {
     @Mapping(target = "canComment", source = "canComment")
     @Mapping(target = "liked", source = "liked")
     @Mapping(target = "favorited", source = "favorited")
+    @Mapping(target = "version", source = "version")
     ArticleDetailVO toDetailVO(Article article);
 
     @BeanMapping(ignoreByDefault = true)

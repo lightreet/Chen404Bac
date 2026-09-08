@@ -12,6 +12,9 @@ import lombok.EqualsAndHashCode;
 @EqualsAndHashCode(callSuper = true)
 public class ArticleDetailVO extends ArticleListItemVO {
 
+    @Schema(description = "文章编辑版本，更新时原样传回以检测过期编辑")
+    private Integer version;
+
     @Schema(description = "Markdown 正文内容", example = "# 标题\\n正文内容")
     private String content;
 

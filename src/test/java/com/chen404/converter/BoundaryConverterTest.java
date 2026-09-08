@@ -5,6 +5,7 @@ import com.chen404.domain.dto.BannerVO;
 import com.chen404.domain.dto.CategoryVO;
 import com.chen404.domain.dto.CommentVO;
 import com.chen404.domain.dto.CreateArticleCommand;
+import com.chen404.domain.dto.UpdateArticleCommand;
 import com.chen404.domain.dto.CreateCategoryCommand;
 import com.chen404.domain.dto.EmojiImportResultDTO;
 import com.chen404.domain.dto.EmojiItemVO;
@@ -40,6 +41,15 @@ class BoundaryConverterTest {
     private final CommentConverter commentConverter = Mappers.getMapper(CommentConverter.class);
     private final UserConverter userConverter = Mappers.getMapper(UserConverter.class);
     private final EmojiConverter emojiConverter = Mappers.getMapper(EmojiConverter.class);
+
+    @Test
+    void articleEditVersionShouldSurviveRequestAndResponseMapping() {
+        UpdateArticleCommand command = new UpdateArticleCommand();
+        command.setVersion(5);
+        Article article = articleCommandConverter.toEntity(command);
+        assertEquals(5, article.getVersion());
+        assertEquals(5, articleViewConverter.toDetailVO(article).getVersion());
+    }
 
     @Test
     void articleCommandConverterShouldOnlyMapEditableFields() {

@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.PositiveOrZero;
 import lombok.Data;
 
 import java.util.List;
@@ -14,6 +15,10 @@ import java.util.List;
 @Schema(description = "更新文章命令对象")
 @Data
 public class UpdateArticleCommand {
+
+    @Schema(description = "读取文章时返回的编辑版本；旧客户端未传时检测本次请求期间的并发修改")
+    @PositiveOrZero(message = "文章版本不能为负数")
+    private Integer version;
 
     @Schema(description = "文章标题", example = "Spring Security 接入记录（更新版）")
     @NotBlank(message = "文章标题不能为空")

@@ -16,6 +16,23 @@ import java.util.List;
 @Mapper
 public interface ArticleMapper extends BaseMapper<Article> {
 
+    /** 仅保存编辑字段并比较版本，禁止把读取时的互动计数或作者信息写回。 */
+    @Update({"<script>",
+            "UPDATE article SET title=#{article.title}, summary=#{article.summary}, content=#{article.content},",
+            "content_html=NULL, cover_image=#{article.coverImage}, category_id=#{article.categoryId},",
+            "status=#{article.status}, visibility=#{article.visibility}, comment_policy=#{article.commentPolicy},",
+            "<if test='canCurate and article.isTop != null'>is_top=#{article.isTop},</if>",
+            "<if test='canCurate and article.isRecommend != null'>is_recommend=#{article.isRecommend},</if>",
+            "<if test='article.isOriginal != null'>is_original=#{article.isOriginal},</if>",
+            "<if test='article.originalUrl != null'>original_url=#{article.originalUrl},</if>",
+            "<if test='article.password != null'>password=#{article.password},</if>",
+            "<if test='article.publishTime != null'>publish_time=#{article.publishTime},</if>",
+            "version=version+1, update_time=CURRENT_TIMESTAMP",
+            "WHERE id=#{article.id} AND version=#{expectedVersion} AND deleted=0",
+            "</script>"})
+    int updateEditableFields(@Param("article") Article article, @Param("expectedVersion") Integer expectedVersion,
+            @Param("canCurate") boolean canCurate);
+
     /**
      * 分页查询文章列表（包含作者和分类信息）
      */

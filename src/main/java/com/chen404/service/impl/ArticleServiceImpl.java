@@ -24,6 +24,7 @@ import com.chen404.domain.entity.UserArticleFavorite;
 import com.chen404.domain.entity.UserArticleLike;
 import com.chen404.domain.event.AdminContentEvent;
 import com.chen404.exception.ForbiddenException;
+import com.chen404.exception.ConflictException;
 import com.chen404.exception.ResourceNotFoundException;
 import com.chen404.exception.TooManyRequestsException;
 import com.chen404.exception.UnauthorizedException;
@@ -264,6 +265,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         }
 
         // 设置默认值
+        article.setVersion(0);
         article.setViewCount(0);
         article.setLikeCount(0);
         article.setCommentCount(0);
@@ -340,9 +342,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
         article.setId(id);
         article.setAuthorId(existing.getAuthorId());
-        article.setViewCount(existing.getViewCount());
-        article.setLikeCount(existing.getLikeCount());
-        article.setCommentCount(existing.getCommentCount());
+        Integer expectedVersion = article.getVersion() == null ? existing.getVersion() : article.getVersion();
 
         if (article.getVisibility() == null) {
             article.setVisibility(existing.getVisibility() == null
@@ -374,7 +374,9 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
             article.setSummary(summary);
         }
 
-        articleMapper.updateById(article);
+        if (articleMapper.updateEditableFields(article, expectedVersion, accessService.canCurateArticle(operatorId)) != 1) {
+            throw new ConflictException("文章已被其他操作修改，请刷新后重试");
+        }
 
         // 解析 tagNames 并合并 tagIds，更新标签关联
         List<Long> resolvedTagIds = resolveTagIds(article);

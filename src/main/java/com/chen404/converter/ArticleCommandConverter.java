@@ -47,5 +47,6 @@ public interface ArticleCommandConverter {
     @Mapping(target = "commentPolicy", source = "commentPolicy")
     @Mapping(target = "tagIds", source = "tagIds")
     @Mapping(target = "tagNames", source = "tagNames")
+    @Mapping(target = "version", source = "version")
     Article toEntity(UpdateArticleCommand command);
 }

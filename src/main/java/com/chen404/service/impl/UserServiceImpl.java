@@ -128,12 +128,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new UnauthorizedException("用户不存在或密码错误");
         }
 
-        clearLoginFailureState(account, clientIp);
-
         // 更新最后登录时间
         user.setLastLoginTime(LocalDateTime.now());
         user.setLastLoginIp(normalizeClientIp(clientIp));
-        userMapper.updateById(user);
+        if (userMapper.updateLoginAudit(user.getId(), user.getPassword(), user.getLastLoginTime(), user.getLastLoginIp()) != 1) {
+            throw new UnauthorizedException("账号状态已变化，请重新登录");
+        }
+        clearLoginFailureState(account, clientIp);
 
         userAccessProfileSupport.enrichUserProfile(user);
 
@@ -294,7 +295,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     @Transactional(rollbackFor = Exception.class)
     public User updateProfile(Long userId, UpdateProfileDTO dto) {
-        User user = userMapper.selectById(userId);
+        User user = userMapper.selectByIdForUpdate(userId);
         if (user == null) {
             throw new ResourceNotFoundException("用户不存在");
         }
@@ -337,7 +338,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             }
         }
 
-        userMapper.updateById(user);
+        if (userMapper.updateProfileFields(user) != 1) {
+            throw new ResourceNotFoundException("用户不存在");
+        }
         fileReferenceService.syncUserAvatarReference(userId, user.getAvatar());
         return getCurrentUser(userId);
     }
@@ -354,8 +357,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new ResourceNotFoundException("用户不存在");
         }
 
-        user.setTrustLevel(trustLevel);
-        userMapper.updateById(user);
+        if (userMapper.updateTrustLevel(userId, trustLevel) != 1) {
+            throw new ResourceNotFoundException("用户不存在");
+        }
         return getCurrentUser(userId);
     }
 
@@ -372,8 +376,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (passwordEncoder.matches(dto.getNewPassword(), user.getPassword())) {
             throw new BadRequestException("新密码不能与当前密码相同");
         }
-        user.setPassword(passwordEncoder.encode(dto.getNewPassword()));
-        userMapper.updateById(user);
+        persistPasswordChange(user, dto.getNewPassword());
         authSessionService.revokeAll(userId);
         log.info("[USER_PASSWORD_CHANGED] userId={} via=auth-change clientIpPresent={}",
                 userId, StringUtils.hasText(clientIp));
@@ -395,8 +398,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new BadRequestException("新密码不能与当前密码相同");
         }
 
-        user.setPassword(passwordEncoder.encode(dto.getNewPassword()));
-        userMapper.updateById(user);
+        persistPasswordChange(user, dto.getNewPassword());
         authSessionService.revokeAll(user.getId());
         log.info("[USER_PASSWORD_RESET] userId={} clientIpPresent={}",
                 user.getId(), StringUtils.hasText(clientIp));
@@ -404,9 +406,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         sendPasswordChangeNotification(user, clientIp, userAgent, "邮箱找回");
     }
 
-    /**
-     * 若已绑定邮箱则发送密码修改提醒
-     */
+    /** 仅更新凭据，旧密码已变更或账号被禁用时回报冲突。 */
+    private void persistPasswordChange(User user, String newPassword) {
+        String encoded = passwordEncoder.encode(newPassword);
+        if (userMapper.updatePasswordIfUnchanged(user.getId(), user.getPassword(), encoded) != 1) {
+            throw new ConflictException("账号状态或密码已变化，请重新验证后重试");
+        }
+    }
+
+    /** 若已绑定邮箱则发送密码修改提醒。 */
     private void sendPasswordChangeNotification(User user, String clientIp, String userAgent, String scene) {
         if (StringUtils.hasText(user.getEmail())) {
             try {
