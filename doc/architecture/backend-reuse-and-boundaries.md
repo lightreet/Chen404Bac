@@ -17,6 +17,7 @@
 | AI 默认参数 | `LlmProperties`、`AiMaidProperties`、`AiRuntimeProperties.Chat` | 启动值、数据库配置回退及聊天场景；已有常量直接复用 |
 | AI 输出 JSON 围栏处理 | `AiJsonOutput` | 聊天、文章助手、音乐建议 |
 | 阅读器书籍字段长度 | `ReaderBookConstraints` | 预览、任务创建、后台持久化与解析中的相同字段 |
+| 文件删除受理语义 | `SysFileService.requestDeletionByUrl` | 业务提交删除任务；`FILE_DELETE_ACCEPTED` 表示受理，消费者 `FILE_DELETE_OK` 才表示物理清理完成 |
 | 保留原字符的截断 | `TextUtil.truncate` | 阅读器内原本相同的截断逻辑；需要去空白或加省略号的操作保留各自语义 |
 | 文章关联和权限视图组装 | `ArticleViewAssembler` | 列表、详情、热门、推荐、归档标签 |
 | 最新评论的公开文章标题组装 | `RecentCommentViewAssembler` | 首页与最新评论接口，统一按匿名范围获取标题 |

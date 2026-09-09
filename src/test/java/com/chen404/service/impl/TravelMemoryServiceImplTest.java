@@ -247,7 +247,7 @@ class TravelMemoryServiceImplTest {
         });
         when(entryMapper.update(any(), any())).thenReturn(1);
         when(entryMapper.insert(any(TravelMemoryEntry.class))).thenReturn(1);
-        when(sysFileService.deleteByUrl(any(), eq(1L))).thenReturn(true);
+        when(sysFileService.requestDeletionByUrl(any(), eq(1L))).thenReturn(true);
 
         TravelMemoryLocation commandLocation = buildLocation(null, "新地点", LocalDateTime.of(2026, 5, 11, 10, 0));
         commandLocation.setLatitude(existing.getLatitude());
@@ -258,8 +258,8 @@ class TravelMemoryServiceImplTest {
 
         service.updateLocation(7L, commandLocation, List.of(), List.of(commandEntry), 1L);
 
-        verify(sysFileService, times(1)).deleteByUrl("https://cdn.example.com/remove.jpg", 1L);
-        verify(sysFileService, never()).deleteByUrl("https://cdn.example.com/keep.jpg", 1L);
+        verify(sysFileService, times(1)).requestDeletionByUrl("https://cdn.example.com/remove.jpg", 1L);
+        verify(sysFileService, never()).requestDeletionByUrl("https://cdn.example.com/keep.jpg", 1L);
     }
 
     @Test

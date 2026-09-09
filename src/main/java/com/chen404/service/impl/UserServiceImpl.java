@@ -340,7 +340,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 user.setAvatarFileId(null);
             }
             if (StringUtils.hasText(oldAvatar) && !oldAvatar.startsWith("/")) {
-                sysFileService.deleteByUrl(oldAvatar, userId);
+                sysFileService.requestDeletionByUrl(oldAvatar, userId);
             }
         }
 

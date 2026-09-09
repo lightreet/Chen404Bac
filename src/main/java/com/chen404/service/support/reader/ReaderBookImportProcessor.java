@@ -231,7 +231,7 @@ public class ReaderBookImportProcessor {
         for (ParsedReaderBook.Asset parsed : assets) {
             ReaderBookAsset asset = new ReaderBookAsset();
             asset.setBookId(bookId);
-            asset.setSourcePath(TextUtil.truncate(parsed.getSourcePath(), 1_000));
+            asset.setSourcePath(TextUtil.truncate(parsed.getSourcePath(), ReaderBookConstraints.SOURCE_PATH_MAX_LENGTH));
             asset.setSourcePathHash(parser.sha256(parsed.getSourcePath().getBytes(StandardCharsets.UTF_8)));
             asset.setFileName(TextUtil.truncate(parsed.getFileName(), 255));
             asset.setMediaType(TextUtil.truncate(parsed.getMediaType(), 120));
@@ -267,9 +267,9 @@ public class ReaderBookImportProcessor {
             ReaderChapter chapter = new ReaderChapter();
             chapter.setBookId(bookId);
             chapter.setChapterOrder(index);
-            chapter.setTitle(TextUtil.truncate(parsed.getTitle(), 500));
-            chapter.setVolumeTitle(TextUtil.truncate(parsed.getVolumeTitle(), 500));
-            chapter.setSourceHref(TextUtil.truncate(parsed.getSourceHref(), 1_000));
+            chapter.setTitle(TextUtil.truncate(parsed.getTitle(), ReaderBookConstraints.HEADING_MAX_LENGTH));
+            chapter.setVolumeTitle(TextUtil.truncate(parsed.getVolumeTitle(), ReaderBookConstraints.HEADING_MAX_LENGTH));
+            chapter.setSourceHref(TextUtil.truncate(parsed.getSourceHref(), ReaderBookConstraints.SOURCE_PATH_MAX_LENGTH));
             chapter.setContentHtml(html);
             chapter.setContentText(parsed.getContentText());
             chapter.setCharCount(parsed.getContentText().length());
@@ -294,8 +294,8 @@ public class ReaderBookImportProcessor {
             item.setChapterId(validChapterId(parsed.getChapterIndex(), chapterIds));
             item.setItemOrder(index);
             item.setDepth(depth);
-            item.setLabel(TextUtil.truncate(parsed.getLabel(), 500));
-            item.setSourceHref(TextUtil.truncate(parsed.getSourceHref(), 1_000));
+            item.setLabel(TextUtil.truncate(parsed.getLabel(), ReaderBookConstraints.HEADING_MAX_LENGTH));
+            item.setSourceHref(TextUtil.truncate(parsed.getSourceHref(), ReaderBookConstraints.SOURCE_PATH_MAX_LENGTH));
             item.setFragment(TextUtil.truncate(parsed.getFragment(), 500));
             item.setCreateTime(LocalDateTime.now());
             tocItemMapper.insert(item);

@@ -771,7 +771,7 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
 
         // 删除意图必须在当前事务内落库；物理删除由持久化任务提交后执行。
         for (String oldUrl : urlsToDelete) {
-            sysFileService.deleteByUrl(oldUrl, adminId);
+            sysFileService.requestDeletionByUrl(oldUrl, adminId);
         }
     }
 

@@ -1265,7 +1265,7 @@ public class ReaderBookParser {
 
     private String safeTitle(String value) {
         String safe = firstNonBlank(value, "未命名章节").replaceAll("\\s+", " ").strip();
-        return TextUtil.truncate(safe, 500);
+        return TextUtil.truncate(safe, ReaderBookConstraints.HEADING_MAX_LENGTH);
     }
 
     private String safeMessage(Exception exception) {

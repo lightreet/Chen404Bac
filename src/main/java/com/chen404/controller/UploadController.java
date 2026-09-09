@@ -376,7 +376,7 @@ public class UploadController {
         return executeUpload(file, userId, refType, eventLabel);
     }
 
-    @Operation(summary = "删除文件", description = "根据文件 URL 删除已上传文件")
+    @Operation(summary = "删除文件", description = "根据文件 URL 提交删除任务，后台确认无引用后清理文件")
     @DeleteMapping("/file")
     public Result<Void> deleteFile(
             @Parameter(description = "文件 URL", required = true) @RequestParam("url") String url,
@@ -385,9 +385,9 @@ public class UploadController {
         Long userId = CurrentUserUtil.requireUserId(currentUser);
 
         try {
-            boolean success = sysFileService.deleteByUrl(url, userId);
-            if (success) {
-                log.info("[FILE_DELETE_OK] userId={}", userId);
+            boolean accepted = sysFileService.requestDeletionByUrl(url, userId);
+            if (accepted) {
+                log.info("[FILE_DELETE_ACCEPTED] userId={}", userId);
                 return Result.success("已提交删除，引用检查通过后清理文件");
             }
             throw new IllegalStateException("删除失败");

@@ -483,7 +483,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
         );
         bookMapper.deleteById(bookId);
         if (StringUtils.hasText(book.getSourceFileUrl())) {
-            sysFileService.deleteByUrl(book.getSourceFileUrl(), userId);
+            sysFileService.requestDeletionByUrl(book.getSourceFileUrl(), userId);
         }
         deleteCoverFile(book.getCoverFileId(), userId);
         log.info("[READER_DELETE] userId={} bookId={}", userId, bookId);
@@ -700,7 +700,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
         }
         SysFile coverFile = sysFileService.findById(coverFileId);
         if (coverFile != null && StringUtils.hasText(coverFile.getFileUrl())) {
-            sysFileService.deleteByUrl(coverFile.getFileUrl(), userId);
+            sysFileService.requestDeletionByUrl(coverFile.getFileUrl(), userId);
         }
     }
 

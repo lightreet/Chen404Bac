@@ -93,7 +93,7 @@ class FileDeletionServiceTest {
     @Test
     void avatarOrBookDeleteMustShareCallerRollback() {
         transaction.executeWithoutResult(status -> {
-            assertTrue(sysFileService.deleteByUrl("/api/files/1", 7L));
+            assertTrue(sysFileService.requestDeletionByUrl("/api/files/1", 7L));
             status.setRollbackOnly();
         });
         deletionService.processPending();
@@ -104,8 +104,8 @@ class FileDeletionServiceTest {
     @Test
     void shouldDeleteOnlyAfterCommitAndDeduplicateRepeatedRequests() {
         transaction.executeWithoutResult(status -> {
-            sysFileService.deleteByUrl("/api/files/1", 7L);
-            sysFileService.deleteByUrl("/api/files/1", 7L);
+            sysFileService.requestDeletionByUrl("/api/files/1", 7L);
+            sysFileService.requestDeletionByUrl("/api/files/1", 7L);
             verifyNoInteractions(storage);
             assertEquals(1, taskCount());
         });
@@ -132,7 +132,7 @@ class FileDeletionServiceTest {
     @Test
     void shouldKeepFailureForRetryAcrossWorkerRestartAndRejectNewReferences() {
         doReturn(false, true).when(storage).deleteFile(anyString(), anyString());
-        sysFileService.deleteByUrl("/api/files/1", 7L);
+        sysFileService.requestDeletionByUrl("/api/files/1", 7L);
         deletionService.processPending();
         assertEquals("DELETING", fileStatus());
         assertEquals(1, taskCount());
@@ -155,7 +155,7 @@ class FileDeletionServiceTest {
     @Test
     void shouldRetryStorageExceptionsWithoutLosingIntent() {
         doThrow(new IllegalStateException("storage unavailable")).when(storage).deleteFile(anyString(), anyString());
-        sysFileService.deleteByUrl("/api/files/1", 7L);
+        sysFileService.requestDeletionByUrl("/api/files/1", 7L);
         deletionService.processPending();
         assertEquals(1, taskCount());
         assertEquals("DELETING", fileStatus());
@@ -176,7 +176,7 @@ class FileDeletionServiceTest {
 
     @Test
     void shouldWaitForConcurrentReferenceWriterBeforeDecidingToDelete() throws Exception {
-        sysFileService.deleteByUrl("/api/files/1", 7L);
+        sysFileService.requestDeletionByUrl("/api/files/1", 7L);
         CountDownLatch locked = new CountDownLatch(1);
         CountDownLatch commit = new CountDownLatch(1);
         CompletableFuture<Void> writer = CompletableFuture.runAsync(() -> transaction.executeWithoutResult(status -> {

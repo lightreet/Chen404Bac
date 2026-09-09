@@ -195,7 +195,7 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
 
     @Override
     @Transactional
-    public boolean deleteByUrl(String fileUrl, Long userId) {
+    public boolean requestDeletionByUrl(String fileUrl, Long userId) {
         SysFile file = resolveByManagedUrlOrStoredUrl(fileUrl);
         if (file == null) {
             log.warn("删除文件失败，文件记录不存在: {}", fileUrl);

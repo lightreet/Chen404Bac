@@ -52,7 +52,7 @@ public interface SysFileService {
      * @param userId  操作用户ID
      * @return 是否已接受任务
      */
-    boolean deleteByUrl(String fileUrl, Long userId);
+    boolean requestDeletionByUrl(String fileUrl, Long userId);
 
     /** 引用写入前锁定并确认文件可用，锁保持至业务事务结束。 */
     void lockForReference(Long fileId);
