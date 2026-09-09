@@ -1,5 +1,10 @@
 package com.chen404.domain.dto;
 
+import com.chen404.domain.ArticleConstraints;
+import com.chen404.domain.enums.ArticleStatusEnum;
+import com.chen404.domain.enums.ArticleVisibilityEnum;
+import com.chen404.domain.enums.ArticleCommentPolicyEnum;
+import com.chen404.validation.EnumValue;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -19,11 +24,11 @@ public class CreateArticleCommand {
 
     @Schema(description = "文章标题", example = "Spring Security 接入记录")
     @NotBlank(message = "文章标题不能为空")
-    @Size(max = 100, message = "文章标题长度不能超过100个字符")
+    @Size(max = ArticleConstraints.TITLE_MAX_LENGTH, message = "文章标题长度不能超过{max}个字符")
     private String title;
 
     @Schema(description = "文章摘要", example = "总结一次权限体系接入的关键步骤")
-    @Size(max = 500, message = "文章摘要长度不能超过500个字符")
+    @Size(max = ArticleConstraints.SUMMARY_MAX_LENGTH, message = "文章摘要长度不能超过{max}个字符")
     private String summary;
 
     @Schema(description = "Markdown 正文内容", example = "# 标题\\n正文内容")
@@ -39,8 +44,7 @@ public class CreateArticleCommand {
 
     @Schema(description = "文章状态：0-草稿 1-已发布 2-回收站", example = "1")
     @NotNull(message = "文章状态不能为空")
-    @Min(value = 0, message = "文章状态无效")
-    @Max(value = 2, message = "文章状态无效")
+    @EnumValue(value = ArticleStatusEnum.class, message = ArticleConstraints.INVALID_STATUS)
     private Integer status;
 
     @Schema(description = "是否置顶：0-否 1-是", example = "0")
@@ -65,13 +69,11 @@ public class CreateArticleCommand {
     private String password;
 
     @Schema(description = "可见性：0-公开 1-登录可见 2-好友可见 3-私密", example = "0")
-    @Min(value = 0, message = "文章可见性无效")
-    @Max(value = 3, message = "文章可见性无效")
+    @EnumValue(value = ArticleVisibilityEnum.class, message = ArticleConstraints.INVALID_VISIBILITY)
     private Integer visibility;
 
     @Schema(description = "评论策略：0-关闭 1-登录可评论 2-好友可评论 3-游客可评论", example = "1")
-    @Min(value = 0, message = "文章评论策略无效")
-    @Max(value = 3, message = "文章评论策略无效")
+    @EnumValue(value = ArticleCommentPolicyEnum.class, message = ArticleConstraints.INVALID_COMMENT_POLICY)
     private Integer commentPolicy;
 
     @Schema(description = "已存在标签ID列表")

@@ -3,7 +3,7 @@ package com.chen404.domain.enums;
 import lombok.Getter;
 
 @Getter
-public enum ArticleStatusEnum {
+public enum ArticleStatusEnum implements IntegerValueEnum {
 
     DRAFT(0),
     PUBLISHED(1),

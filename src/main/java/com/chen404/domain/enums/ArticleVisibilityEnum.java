@@ -3,7 +3,7 @@ package com.chen404.domain.enums;
 import lombok.Getter;
 
 @Getter
-public enum ArticleVisibilityEnum {
+public enum ArticleVisibilityEnum implements IntegerValueEnum {
 
     PUBLIC(0),
     LOGIN(1),

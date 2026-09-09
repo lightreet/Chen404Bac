@@ -8,6 +8,7 @@ import com.chen404.domain.entity.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mybatis.spring.SqlSessionTemplate;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
@@ -54,6 +55,7 @@ class ConcurrentUpdateMapperTest {
         var factory = new MybatisSqlSessionFactoryBean();
         factory.setDataSource(source);
         factory.setConfiguration(configuration);
+        factory.setMapperLocations(new ClassPathResource("mapper/ArticleMapper.xml"));
         factory.setPlugins(new MyBatisPlusConfig().mybatisPlusInterceptor());
         var session = new SqlSessionTemplate(factory.getObject());
         articles = session.getMapper(ArticleMapper.class);

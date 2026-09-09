@@ -170,7 +170,7 @@ public class AiChatServiceImpl implements AiChatService {
                                 throw new IllegalStateException("AI 回复超过长度限制");
                             }
                             streamedReply.append(text);
-                            sendEventQuietly(emitter, SSE_EVENT_DELTA, buildDeltaPayload(context.messageId(), text));
+                            sendEvent(emitter, SSE_EVENT_DELTA, buildDeltaPayload(context.messageId(), text));
                         }
 
                         @Override
@@ -441,7 +441,7 @@ public class AiChatServiceImpl implements AiChatService {
     }
 
     private void emitSuggestions(SseEmitter emitter, AiChatResponse response) {
-        sendEventQuietly(emitter, SSE_EVENT_SUGGESTIONS, JSONObject.of(
+        sendEvent(emitter, SSE_EVENT_SUGGESTIONS, JSONObject.of(
                 "messageId", response.getMessageId(),
                 "items", response.getSuggestions()
         ));
@@ -451,14 +451,14 @@ public class AiChatServiceImpl implements AiChatService {
         if (response.getRelatedArticles() == null || response.getRelatedArticles().isEmpty()) {
             return;
         }
-        sendEventQuietly(emitter, SSE_EVENT_RELATED_ARTICLES, JSONObject.of(
+        sendEvent(emitter, SSE_EVENT_RELATED_ARTICLES, JSONObject.of(
                 "messageId", response.getMessageId(),
                 "items", JSON.parseArray(JSON.toJSONString(response.getRelatedArticles()))
         ));
     }
 
     private void emitDone(SseEmitter emitter, AiChatResponse response) {
-        sendEventQuietly(emitter, SSE_EVENT_DONE, JSONObject.of(
+        sendEvent(emitter, SSE_EVENT_DONE, JSONObject.of(
                 "messageId", response.getMessageId(),
                 "finishReason", response.getFinishReason(),
                 "traceId", response.getTraceId(),
@@ -478,19 +478,19 @@ public class AiChatServiceImpl implements AiChatService {
             return;
         }
         AiChatResponse fallback = buildChatResponse(context, maidChatScenarioDefinition.buildFallbackResult(scenarioRequest));
-        sendEventQuietly(emitter, SSE_EVENT_MESSAGE_START, JSONObject.of(
+        sendEvent(emitter, SSE_EVENT_MESSAGE_START, JSONObject.of(
                 "messageId", fallback.getMessageId(),
                 "scene", fallback.getScene(),
                 "mood", fallback.getMood()
         ));
-        sendEventQuietly(emitter, SSE_EVENT_DELTA, buildDeltaPayload(fallback.getMessageId(), fallback.getReplyText()));
+        sendEvent(emitter, SSE_EVENT_DELTA, buildDeltaPayload(fallback.getMessageId(), fallback.getReplyText()));
         emitRelatedArticles(emitter, fallback);
         emitSuggestions(emitter, fallback);
         emitDone(emitter, fallback);
         if (!session.isCancelled()) {
             aiChatSessionService.saveAssistantMessage(context.session().getSessionId(), fallback);
         }
-        sendEventQuietly(emitter, SSE_EVENT_ERROR, JSONObject.of("message", message));
+        sendEvent(emitter, SSE_EVENT_ERROR, JSONObject.of("message", message));
         emitter.complete();
     }
 
@@ -502,16 +502,6 @@ public class AiChatServiceImpl implements AiChatService {
     }
 
     private void sendEvent(SseEmitter emitter, String eventName, JSONObject payload) {
-        try {
-            emitter.send(SseEmitter.event()
-                    .name(eventName)
-                    .data(payload.toJSONString()));
-        } catch (IOException e) {
-            throw new UncheckedIOException("SSE 事件发送失败", e);
-        }
-    }
-
-    private void sendEventQuietly(SseEmitter emitter, String eventName, JSONObject payload) {
         try {
             emitter.send(SseEmitter.event()
                     .name(eventName)
