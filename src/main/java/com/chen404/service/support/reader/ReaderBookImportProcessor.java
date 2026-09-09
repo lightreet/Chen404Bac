@@ -212,8 +212,10 @@ public class ReaderBookImportProcessor {
                 .sum());
         book.setCoverAssetId(coverAssetId);
         bookMapper.updateById(book);
+        // updateById 默认跳过 null，成功重试必须显式清除旧失败说明及执行租约。
         bookMapper.update(null, new LambdaUpdateWrapper<ReaderBook>()
                 .eq(ReaderBook::getId, bookId)
+                .set(ReaderBook::getParseMessage, book.getParseMessage())
                 .set(ReaderBook::getImportToken, null)
                 .set(ReaderBook::getImportLeaseUntil, null));
         adminContentEventPublisher.publish(new AdminContentEvent(
