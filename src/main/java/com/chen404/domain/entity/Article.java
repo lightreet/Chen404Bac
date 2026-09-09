@@ -7,7 +7,6 @@ import lombok.Data;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
-import java.util.List;
 
 /**
  * 文章实体
@@ -150,67 +149,5 @@ public class Article implements Serializable {
      */
     @TableLogic
     private Integer deleted;
-
-    // ========== 非数据库字段 ==========
-
-    /**
-     * 作者信息
-     */
-    @TableField(exist = false)
-    private User author;
-
-    /**
-     * 分类信息
-     */
-    @TableField(exist = false)
-    private Category category;
-
-    /**
-     * 标签列表
-     */
-    @TableField(exist = false)
-    private List<Tag> tags;
-
-    /**
-     * 标签ID列表（用于接收前端参数）
-     */
-    @TableField(exist = false)
-    private List<Long> tagIds;
-
-    /**
-     * 新标签名称列表（用户自定义输入，后端会 findOrCreate 后并入 tagIds）
-     */
-    @TableField(exist = false)
-    private List<String> tagNames;
-
-    /**
-     * 当前请求用户是否可编辑
-     */
-    @TableField(exist = false)
-    private Boolean canEdit;
-
-    /**
-     * 当前请求用户是否可删除
-     */
-    @TableField(exist = false)
-    private Boolean canDelete;
-
-    /**
-     * 当前请求用户是否可评论
-     */
-    @TableField(exist = false)
-    private Boolean canComment;
-
-    /**
-     * 当前登录用户是否已点赞（匿名无此字段）
-     */
-    @TableField(exist = false)
-    private Boolean liked;
-
-    /**
-     * 当前登录用户是否已收藏
-     */
-    @TableField(exist = false)
-    private Boolean favorited;
 
 }

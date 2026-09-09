@@ -43,13 +43,6 @@ public interface ArticleViewConverter {
     @Mapping(target = "publishTime", source = "publishTime")
     @Mapping(target = "createTime", source = "createTime")
     @Mapping(target = "updateTime", source = "updateTime")
-    @Mapping(target = "author", source = "author")
-    @Mapping(target = "category", source = "category")
-    @Mapping(target = "tags", source = "tags")
-    @Mapping(target = "canEdit", source = "canEdit")
-    @Mapping(target = "canDelete", source = "canDelete")
-    @Mapping(target = "liked", source = "liked")
-    @Mapping(target = "favorited", source = "favorited")
     ArticleListItemVO toListItemVO(Article article);
 
     @IterableMapping(qualifiedByName = "toArticleListItemVO")
@@ -77,14 +70,6 @@ public interface ArticleViewConverter {
     @Mapping(target = "publishTime", source = "publishTime")
     @Mapping(target = "createTime", source = "createTime")
     @Mapping(target = "updateTime", source = "updateTime")
-    @Mapping(target = "author", source = "author")
-    @Mapping(target = "category", source = "category")
-    @Mapping(target = "tags", source = "tags")
-    @Mapping(target = "canEdit", source = "canEdit")
-    @Mapping(target = "canDelete", source = "canDelete")
-    @Mapping(target = "canComment", source = "canComment")
-    @Mapping(target = "liked", source = "liked")
-    @Mapping(target = "favorited", source = "favorited")
     @Mapping(target = "version", source = "version")
     ArticleDetailVO toDetailVO(Article article);
 

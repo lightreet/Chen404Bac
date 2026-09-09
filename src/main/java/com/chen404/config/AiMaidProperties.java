@@ -13,8 +13,8 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "app.ai.maid")
 public class AiMaidProperties {
 
-    private static final String DEFAULT_NAME = "Lyra";
-    private static final String DEFAULT_PERSONA_VERSION = "v1.1";
+    public static final String DEFAULT_NAME = "Lyra";
+    public static final String DEFAULT_PERSONA_VERSION = "v1.1";
     private static final String DEFAULT_SYSTEM_PROMPT_LOCATION = "classpath:prompts/ai/maid-system-prompt.txt";
     private static final String DEFAULT_HELPER_TASK_PROMPT_LOCATION = "classpath:prompts/ai/maid-helper-task-prompt.txt";
     private static final String DEFAULT_COMPANION_TASK_PROMPT_LOCATION = "classpath:prompts/ai/maid-companion-task-prompt.txt";

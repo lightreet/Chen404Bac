@@ -1,29 +1,27 @@
 package com.chen404.service.impl;
 
-import com.chen404.domain.enums.ArticleCommentPolicyEnum;
-import com.chen404.domain.enums.ArticleStatusEnum;
-import com.chen404.domain.enums.ArticleVisibilityEnum;
-import com.chen404.domain.enums.TravelMemoryStatusEnum;
-import com.chen404.domain.enums.TravelMemoryVisibilityEnum;
-import com.chen404.domain.enums.UserCapabilityEnum;
-import com.chen404.domain.enums.UserRoleEnum;
-import com.chen404.domain.enums.UserTrustLevelEnum;
-import com.chen404.domain.entity.Article;
 import com.chen404.domain.access.ArticleReadScope;
-import com.chen404.domain.enums.UserStatusEnum;
+import com.chen404.domain.entity.Article;
 import com.chen404.domain.entity.MusicTrack;
 import com.chen404.domain.entity.ReaderBook;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.entity.TravelMemoryLocation;
 import com.chen404.domain.entity.User;
+import com.chen404.domain.enums.ArticleCommentPolicyEnum;
+import com.chen404.domain.enums.TravelMemoryStatusEnum;
+import com.chen404.domain.enums.TravelMemoryVisibilityEnum;
+import com.chen404.domain.enums.UserCapabilityEnum;
+import com.chen404.domain.enums.UserRoleEnum;
+import com.chen404.domain.enums.UserStatusEnum;
+import com.chen404.domain.enums.UserTrustLevelEnum;
 import com.chen404.service.AccessService;
 import com.chen404.service.FeatureToggleService;
 import com.chen404.service.support.UserAccessProfileSupport;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.Objects;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 public class AccessServiceImpl implements AccessService {
@@ -224,16 +222,6 @@ public class AccessServiceImpl implements AccessService {
         }
         return isEnabled(user)
                 && (isAdmin(user) || Objects.equals(file.getUserId(), user.getId()));
-    }
-
-    @Override
-    public void fillArticlePermissions(Article article, Long userId) {
-        if (article == null) {
-            return;
-        }
-        article.setCanEdit(canManageArticle(userId, article));
-        article.setCanDelete(canManageArticle(userId, article));
-        article.setCanComment(canCommentArticle(userId, article));
     }
 
     private boolean isEnabled(User user) {

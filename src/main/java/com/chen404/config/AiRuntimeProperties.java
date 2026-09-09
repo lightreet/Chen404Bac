@@ -33,6 +33,16 @@ public class AiRuntimeProperties {
     @Data
     public static class Chat {
 
+        /** 配置初始化、数据库配置归一化与场景回退共用的默认值。 */
+        public static final int DEFAULT_MAX_CITATION_COUNT = 3;
+        public static final int DEFAULT_MAX_CONTEXT_MESSAGES = 8;
+        public static final int DEFAULT_MAX_ARTICLE_CONTENT_CHARS = 3_000;
+        public static final int DEFAULT_MAX_ARTICLE_SUMMARY_CHARS = 300;
+        public static final int DEFAULT_MAX_SUGGESTION_COUNT = 3;
+        public static final int DEFAULT_RELATED_ARTICLE_LIMIT = 2;
+        public static final int DEFAULT_BUBBLE_MAX_CHARS = 36;
+        public static final String DEFAULT_BUBBLE_LONG_REPLY_TEXT = "我整理好了，打开聊天框看详细内容吧。";
+
         /**
          * 是否开启 AI 聊天。
          */
@@ -41,32 +51,32 @@ public class AiRuntimeProperties {
         /**
          * 站内引用上限。
          */
-        private int maxCitationCount = 3;
+        private int maxCitationCount = DEFAULT_MAX_CITATION_COUNT;
 
         /**
          * 写入 prompt 的历史消息上限。
          */
-        private int maxContextMessages = 8;
+        private int maxContextMessages = DEFAULT_MAX_CONTEXT_MESSAGES;
 
         /**
          * 当前文章正文截断长度。
          */
-        private int maxArticleContentChars = 3_000;
+        private int maxArticleContentChars = DEFAULT_MAX_ARTICLE_CONTENT_CHARS;
 
         /**
          * 当前文章摘要截断长度。
          */
-        private int maxArticleSummaryChars = 300;
+        private int maxArticleSummaryChars = DEFAULT_MAX_ARTICLE_SUMMARY_CHARS;
 
         /**
          * 建议问题上限。
          */
-        private int maxSuggestionCount = 3;
+        private int maxSuggestionCount = DEFAULT_MAX_SUGGESTION_COUNT;
 
         /**
          * 聊天附带相关文章数量上限。
          */
-        private int relatedArticleLimit = 2;
+        private int relatedArticleLimit = DEFAULT_RELATED_ARTICLE_LIMIT;
 
         /**
          * 是否仅在用户表达推荐意图时附带相关文章。

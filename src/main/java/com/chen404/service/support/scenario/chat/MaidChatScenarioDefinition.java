@@ -1,13 +1,13 @@
 package com.chen404.service.support.scenario.chat;
 
-import com.chen404.service.support.AiJsonOutput;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.chen404.config.AiRuntimeProperties;
 import com.chen404.domain.dto.AiAdminConfigDTO;
 import com.chen404.domain.dto.AiChatMessageDTO;
-import com.chen404.domain.entity.Article;
-import com.chen404.config.AiRuntimeProperties;
+import com.chen404.domain.dto.ArticleDetailVO;
+import com.chen404.service.support.AiJsonOutput;
 import com.chen404.service.support.AiLlmRequestFactory;
 import com.chen404.service.support.LlmClient;
 import com.chen404.service.support.LlmTextRequest;
@@ -190,7 +190,7 @@ public class MaidChatScenarioDefinition implements AiScenarioDefinition<MaidChat
         }
     }
 
-    private void appendArticleContext(StringBuilder builder, Article article, AiAdminConfigDTO aiConfig) {
+    private void appendArticleContext(StringBuilder builder, ArticleDetailVO article, AiAdminConfigDTO aiConfig) {
         builder.append("### Current article\n");
         builder.append("Title: ").append(normalizeText(article.getTitle())).append('\n');
         if (StringUtils.hasText(article.getSummary())) {
@@ -205,7 +205,7 @@ public class MaidChatScenarioDefinition implements AiScenarioDefinition<MaidChat
         }
     }
 
-    private List<String> normalizeSuggestions(JSONArray rawSuggestions, AiMaidPromptScene scene, Article currentArticle, AiAdminConfigDTO aiConfig) {
+    private List<String> normalizeSuggestions(JSONArray rawSuggestions, AiMaidPromptScene scene, ArticleDetailVO currentArticle, AiAdminConfigDTO aiConfig) {
         int maxSuggestionCount = resolveMaxSuggestionCount(aiConfig);
         if (maxSuggestionCount <= 0) {
             return List.of();
@@ -224,7 +224,7 @@ public class MaidChatScenarioDefinition implements AiScenarioDefinition<MaidChat
         return suggestions.isEmpty() ? defaultSuggestions(scene, currentArticle, aiConfig) : suggestions;
     }
 
-    private List<String> defaultSuggestions(AiMaidPromptScene scene, Article currentArticle, AiAdminConfigDTO aiConfig) {
+    private List<String> defaultSuggestions(AiMaidPromptScene scene, ArticleDetailVO currentArticle, AiAdminConfigDTO aiConfig) {
         int maxSuggestionCount = resolveMaxSuggestionCount(aiConfig);
         if (maxSuggestionCount <= 0) {
             return List.of();
@@ -276,7 +276,7 @@ public class MaidChatScenarioDefinition implements AiScenarioDefinition<MaidChat
                 && request.aiConfig().getChat().getBubbleMaxChars() != null) {
             return request.aiConfig().getChat().getBubbleMaxChars();
         }
-        return 36;
+        return AiRuntimeProperties.Chat.DEFAULT_BUBBLE_MAX_CHARS;
     }
 
     private String resolveLongBubbleText(MaidChatScenarioRequest request) {
@@ -285,7 +285,7 @@ public class MaidChatScenarioDefinition implements AiScenarioDefinition<MaidChat
                 && StringUtils.hasText(request.aiConfig().getChat().getBubbleLongReplyText())) {
             return request.aiConfig().getChat().getBubbleLongReplyText();
         }
-        return "我整理好了，打开聊天框看详细内容吧。";
+        return AiRuntimeProperties.Chat.DEFAULT_BUBBLE_LONG_REPLY_TEXT;
     }
 
     private int resolveMaxContextMessages(AiAdminConfigDTO config) {

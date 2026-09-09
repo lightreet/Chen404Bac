@@ -1,6 +1,5 @@
 package com.chen404.domain.dto;
 
-import com.chen404.domain.entity.Tag;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
 
@@ -24,5 +23,5 @@ public class ArchiveArticleItem implements Serializable {
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime publishTime;
 
-    private List<Tag> tags;
+    private List<ArticleTagVO> tags;
 }

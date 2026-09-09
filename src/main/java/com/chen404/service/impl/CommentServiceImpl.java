@@ -16,8 +16,8 @@ import com.chen404.domain.entity.UserCommentLike;
 import com.chen404.exception.ForbiddenException;
 import com.chen404.exception.TooManyRequestsException;
 import com.chen404.mapper.ArticleMapper;
-import com.chen404.mapper.CommentMapper;
 import com.chen404.mapper.CommentGuestTokenMapper;
+import com.chen404.mapper.CommentMapper;
 import com.chen404.mapper.UserCommentLikeMapper;
 import com.chen404.service.AccessService;
 import com.chen404.service.CommentService;
@@ -37,8 +37,8 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.*;
-import java.util.stream.Collectors;
 import java.util.Base64;
+import java.util.stream.Collectors;
 
 @Service
 public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> implements CommentService {
@@ -575,7 +575,7 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
         if (distinct.isEmpty()) {
             return Collections.emptyMap();
         }
-        List<SysFile> files = sysFileService.listByIds(distinct);
+        List<SysFile> files = sysFileService.findByIds(distinct);
         Map<Long, String> map = new HashMap<>();
         for (SysFile f : files) {
             if (f.getId() != null && StringUtils.hasText(f.getFileUrl())) {
@@ -589,7 +589,7 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
         if (c == null || c.getAuthorAvatarFileId() == null) {
             return;
         }
-        SysFile f = sysFileService.getById(c.getAuthorAvatarFileId());
+        SysFile f = sysFileService.findById(c.getAuthorAvatarFileId());
         if (f != null && StringUtils.hasText(f.getFileUrl())) {
             c.setAuthorAvatar(f.getFileUrl());
         }

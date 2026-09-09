@@ -1,9 +1,7 @@
 package com.chen404.service.support.reader;
 
-import com.chen404.domain.entity.ReaderBook;
 import com.chen404.config.ReaderImportProperties;
-import java.util.concurrent.ScheduledExecutorService;
-import static org.mockito.ArgumentMatchers.*;
+import com.chen404.domain.entity.ReaderBook;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.enums.AdminNotificationEventTypeEnum;
 import com.chen404.domain.enums.AdminNotificationResourceTypeEnum;
@@ -21,8 +19,10 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.SimpleTransactionStatus;
 
 import java.io.ByteArrayInputStream;
+import java.util.concurrent.ScheduledExecutorService;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -58,7 +58,7 @@ class ReaderBookImportProcessorTest {
         sourceFile.setBucketName("reader");
         sourceFile.setObjectName("books/42/source.txt");
         sourceFile.setFileOriginalName("夜航故事.txt");
-        when(sysFileService.getById(88L)).thenReturn(sourceFile);
+        when(sysFileService.findById(88L)).thenReturn(sourceFile);
         when(fileStorageService.openFile("reader", "books/42/source.txt"))
                 .thenReturn(new ByteArrayInputStream("正文".getBytes()));
 

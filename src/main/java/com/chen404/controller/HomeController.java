@@ -1,20 +1,17 @@
 package com.chen404.controller;
 
-import com.chen404.converter.ArticleViewConverter;
 import com.chen404.converter.HomeViewConverter;
 import com.chen404.domain.Result;
 import com.chen404.domain.dto.ArticleListItemVO;
-import com.chen404.domain.dto.BannerVO;
 import com.chen404.domain.dto.HomeDataVO;
-import com.chen404.domain.dto.RecentCommentVO;
 import com.chen404.domain.dto.SiteStatsVO;
-import com.chen404.domain.entity.Article;
 import com.chen404.domain.entity.Banner;
 import com.chen404.domain.entity.Comment;
 import com.chen404.security.AuthenticatedUser;
 import com.chen404.service.ArticleService;
 import com.chen404.service.BannerService;
 import com.chen404.service.CommentService;
+import com.chen404.service.support.RecentCommentViewAssembler;
 import com.chen404.util.CurrentUserUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -24,12 +21,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * 首页控制器
@@ -42,19 +35,19 @@ public class HomeController {
     private final ArticleService articleService;
     private final BannerService bannerService;
     private final CommentService commentService;
-    private final ArticleViewConverter articleViewConverter;
+    private final RecentCommentViewAssembler recentCommentViews;
     private final HomeViewConverter homeViewConverter;
 
     public HomeController(
             ArticleService articleService,
             BannerService bannerService,
             CommentService commentService,
-            ArticleViewConverter articleViewConverter,
+            RecentCommentViewAssembler recentCommentViews,
             HomeViewConverter homeViewConverter) {
         this.articleService = articleService;
         this.bannerService = bannerService;
         this.commentService = commentService;
-        this.articleViewConverter = articleViewConverter;
+        this.recentCommentViews = recentCommentViews;
         this.homeViewConverter = homeViewConverter;
     }
 
@@ -68,14 +61,14 @@ public class HomeController {
 
         List<Banner> banners = bannerService.getBannersByPosition(1);
         Map<String, Object> stats = articleService.getSiteStats();
-        List<Article> hotArticles = articleService.getHotArticles(10, requesterId);
+        List<ArticleListItemVO> hotArticles = articleService.getHotArticles(10, requesterId);
         List<Comment> recentComments = commentService.getRecentComments(5);
 
         HomeDataVO data = new HomeDataVO();
         data.setBanners(homeViewConverter.toBannerVOList(banners));
         data.setStats(toSiteStatsVO(stats));
-        data.setHotArticles(articleViewConverter.toListItemVOList(hotArticles));
-        data.setRecentComments(toRecentCommentVOList(recentComments));
+        data.setHotArticles(hotArticles);
+        data.setRecentComments(recentCommentViews.toList(recentComments));
 
         return Result.success(data);
     }
@@ -101,24 +94,6 @@ public class HomeController {
         return vo;
     }
 
-    private List<RecentCommentVO> toRecentCommentVOList(List<Comment> recentComments) {
-        List<Comment> safeComments = recentComments == null ? Collections.emptyList() : recentComments;
-        List<RecentCommentVO> voList = homeViewConverter.toRecentCommentVOList(safeComments);
-        Set<Long> articleIds = safeComments.stream()
-                .map(Comment::getArticleId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        Map<Long, String> articleTitleById = articleIds.isEmpty()
-                ? Collections.emptyMap()
-                : articleService.listByIds(articleIds).stream()
-                .collect(Collectors.toMap(Article::getId, Article::getTitle, (left, right) -> left, HashMap::new));
-        for (RecentCommentVO vo : voList) {
-            if (vo.getArticleId() != null) {
-                vo.setArticleTitle(articleTitleById.get(vo.getArticleId()));
-            }
-        }
-        return voList;
-    }
 
     private Long asLong(Object value) {
         if (value instanceof Number number) {

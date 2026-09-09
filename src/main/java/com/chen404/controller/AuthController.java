@@ -14,6 +14,7 @@ import com.chen404.domain.dto.TokenRefreshResultDTO;
 import com.chen404.domain.dto.UpdateProfileDTO;
 import com.chen404.domain.dto.UserProfileVO;
 import com.chen404.domain.entity.User;
+import com.chen404.domain.enums.UserStatusEnum;
 import com.chen404.domain.enums.VerificationCodeTypeEnum;
 import com.chen404.exception.BadRequestException;
 import com.chen404.exception.UnauthorizedException;
@@ -167,8 +168,8 @@ public class AuthController {
             Long userId = jwtUtil.getUserId(decoded);
             String username = decoded.getClaim("username").asString();
 
-            User user = userService.getById(userId);
-            if (user == null || user.getStatus() == 0) {
+            User user = userService.findAccount(userId);
+            if (user == null || !UserStatusEnum.isEnabled(user.getStatus())) {
                 throw new UnauthorizedException("用户不存在或已被禁用");
             }
             if (!authSessionService.isCurrent(userId, decoded)) {

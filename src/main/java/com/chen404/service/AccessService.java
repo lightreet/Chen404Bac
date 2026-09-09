@@ -97,8 +97,4 @@ public interface AccessService {
      */
     boolean canDeleteFile(Long userId, SysFile file);
 
-    /**
-     * 将当前用户对文章的操作权限填充到文章返回对象上。
-     */
-    void fillArticlePermissions(Article article, Long userId);
 }

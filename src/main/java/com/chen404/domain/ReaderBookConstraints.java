@@ -4,6 +4,7 @@ package com.chen404.domain;
 public final class ReaderBookConstraints {
     public static final int TITLE_MAX_LENGTH = 255;
     public static final int AUTHOR_MAX_LENGTH = 255;
+    public static final int LANGUAGE_MAX_LENGTH = 40;
     public static final int DESCRIPTION_MAX_LENGTH = 4_000;
     public static final int PARSE_MESSAGE_MAX_LENGTH = 1_000;
 

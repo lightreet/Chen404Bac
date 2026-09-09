@@ -13,13 +13,13 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "llm")
 public class LlmProperties {
 
-    private static final String DEFAULT_BASE_URL = "https://api.openai.com/v1";
-    private static final String DEFAULT_MODEL = "gpt-5.4-mini";
+    public static final String DEFAULT_BASE_URL = "https://api.openai.com/v1";
+    public static final String DEFAULT_MODEL = "gpt-5.4-mini";
     private static final String DEFAULT_CHAT_COMPLETIONS_PATH = "/chat/completions";
     private static final String DEFAULT_RESPONSES_PATH = "/responses";
-    private static final double DEFAULT_TEMPERATURE = 0.2d;
-    private static final int DEFAULT_MAX_TOKENS = 512;
-    private static final int DEFAULT_TIMEOUT_SECONDS = 30;
+    public static final double DEFAULT_TEMPERATURE = 0.2d;
+    public static final int DEFAULT_MAX_TOKENS = 512;
+    public static final int DEFAULT_TIMEOUT_SECONDS = 30;
 
     private boolean enabled;
     private String apiKey;

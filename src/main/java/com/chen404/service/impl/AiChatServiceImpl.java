@@ -1,27 +1,26 @@
 package com.chen404.service.impl;
 
 import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
-import com.chen404.domain.dto.AiAdminConfigDTO;
 import com.chen404.config.AiRuntimeProperties;
 import com.chen404.config.AiStreamProperties;
+import com.chen404.domain.dto.AiAdminConfigDTO;
 import com.chen404.domain.dto.AiChatCitationDTO;
 import com.chen404.domain.dto.AiChatMessageDTO;
 import com.chen404.domain.dto.AiChatRelatedArticleDTO;
 import com.chen404.domain.dto.AiChatRequest;
 import com.chen404.domain.dto.AiChatResponse;
 import com.chen404.domain.dto.AiChatSessionDetailResponse;
+import com.chen404.domain.dto.ArticleDetailVO;
 import com.chen404.domain.entity.AiChatSession;
-import com.chen404.domain.entity.Article;
 import com.chen404.exception.BadRequestException;
 import com.chen404.service.AiChatService;
 import com.chen404.service.AiChatSessionService;
 import com.chen404.service.AiConfigService;
 import com.chen404.service.ArticleKnowledgeService;
 import com.chen404.service.ArticleService;
-import com.chen404.service.support.LlmTextStreamHandler;
 import com.chen404.service.support.LlmStreamTimeoutException;
+import com.chen404.service.support.LlmTextStreamHandler;
 import com.chen404.service.support.chat.AiStreamCoordinator;
 import com.chen404.service.support.chat.AiStreamSession;
 import com.chen404.service.support.chat.ArticleKnowledgeHit;
@@ -216,7 +215,7 @@ public class AiChatServiceImpl implements AiChatService {
         AiMaidPromptScene scene = resolveScene(request, latestUserMessage);
         String traceId = buildTraceId();
         String messageId = buildMessageId();
-        Article currentArticle = loadCurrentArticle(request.getCurrentArticleId(), requesterId, traceId);
+        ArticleDetailVO currentArticle = loadCurrentArticle(request.getCurrentArticleId(), requesterId, traceId);
         int maxCitationCount = resolveMaxCitationCount(effectiveConfig);
         List<ArticleKnowledgeHit> knowledgeHits = scene == AiMaidPromptScene.HELPER && isRetrievalEnabled(effectiveConfig)
                 ? articleKnowledgeService.searchVisibleChunks(latestUserMessage, requesterId,
@@ -311,7 +310,7 @@ public class AiChatServiceImpl implements AiChatService {
         return AiMaidPromptScene.COMPANION;
     }
 
-    private Article loadCurrentArticle(Long articleId, Long requesterId, String traceId) {
+    private ArticleDetailVO loadCurrentArticle(Long articleId, Long requesterId, String traceId) {
         if (articleId == null) {
             return null;
         }
@@ -324,7 +323,7 @@ public class AiChatServiceImpl implements AiChatService {
         }
     }
 
-    private AiMaidPromptContext buildPromptContext(AiChatRequest request, Article currentArticle, boolean citationsRequired) {
+    private AiMaidPromptContext buildPromptContext(AiChatRequest request, ArticleDetailVO currentArticle, boolean citationsRequired) {
         String articleTitle = currentArticle != null && StringUtils.hasText(currentArticle.getTitle())
                 ? currentArticle.getTitle()
                 : request.getCurrentArticleTitle();
@@ -577,7 +576,7 @@ public class AiChatServiceImpl implements AiChatService {
             Long requesterId,
             String latestUserMessage,
             AiChatSession session,
-            Article currentArticle,
+            ArticleDetailVO currentArticle,
             List<ArticleKnowledgeHit> knowledgeHits,
             String systemPrompt,
             AiAdminConfigDTO aiConfig

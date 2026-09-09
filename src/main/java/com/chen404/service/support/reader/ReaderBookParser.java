@@ -1,7 +1,11 @@
 package com.chen404.service.support.reader;
 
-import com.chen404.util.TextUtil;
+import com.chen404.domain.ReaderBookConstraints;
 import com.chen404.exception.BadRequestException;
+import com.chen404.util.TextUtil;
+import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -13,14 +17,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.NodeList;
-import org.xml.sax.InputSource;
 
-import javax.xml.XMLConstants;
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.StringReader;
 import java.net.URLDecoder;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -28,20 +27,16 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Comparator;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
@@ -980,7 +975,7 @@ public class ReaderBookParser {
         parsed.setTitle(safeTitle(parsed.getTitle()));
         parsed.setAuthor(TextUtil.truncate(blankToNull(parsed.getAuthor()), 255));
         parsed.setDescription(TextUtil.truncate(blankToNull(parsed.getDescription()), 4_000));
-        parsed.setLanguage(TextUtil.truncate(blankToNull(parsed.getLanguage()), 40));
+        parsed.setLanguage(TextUtil.truncate(blankToNull(parsed.getLanguage()), ReaderBookConstraints.LANGUAGE_MAX_LENGTH));
         parsed.getChapters().removeIf(chapter -> !StringUtils.hasText(chapter.getContentText()));
         if (parsed.getChapters().isEmpty()) {
             throw new BadRequestException("未能从文件中识别出可阅读正文");
@@ -1298,7 +1293,6 @@ public class ReaderBookParser {
     private String blankToNull(String value) {
         return StringUtils.hasText(value) ? value.strip() : null;
     }
-
 
 
     private boolean startsWith(byte[] bytes, byte... prefix) {

@@ -2,13 +2,12 @@ package com.chen404.service.impl;
 
 import com.chen404.config.AiRuntimeProperties;
 import com.chen404.config.AiStreamProperties;
-import com.chen404.service.support.chat.AiStreamCoordinator;
 import com.chen404.domain.dto.AiAdminConfigDTO;
 import com.chen404.domain.dto.AiChatMessageDTO;
 import com.chen404.domain.dto.AiChatRequest;
 import com.chen404.domain.dto.AiChatResponse;
+import com.chen404.domain.dto.ArticleDetailVO;
 import com.chen404.domain.entity.AiChatSession;
-import com.chen404.domain.entity.Article;
 import com.chen404.service.AiChatSessionService;
 import com.chen404.service.AiConfigService;
 import com.chen404.service.ArticleKnowledgeService;
@@ -16,15 +15,16 @@ import com.chen404.service.ArticleService;
 import com.chen404.service.support.AiLlmRequestFactory;
 import com.chen404.service.support.LlmClient;
 import com.chen404.service.support.LlmTextRequest;
+import com.chen404.service.support.chat.AiStreamCoordinator;
 import com.chen404.service.support.chat.ArticleKnowledgeHit;
 import com.chen404.service.support.prompt.AiMaidPromptBuilder;
 import com.chen404.service.support.prompt.AiMaidPromptContext;
 import com.chen404.service.support.prompt.AiMaidPromptScene;
 import com.chen404.service.support.scenario.AiScenarioCode;
 import com.chen404.service.support.scenario.AiScenarioDefinition;
+import com.chen404.service.support.scenario.AiScenarioExecutor;
 import com.chen404.service.support.scenario.AiScenarioRequest;
 import com.chen404.service.support.scenario.AiScenarioResult;
-import com.chen404.service.support.scenario.AiScenarioExecutor;
 import com.chen404.service.support.scenario.chat.MaidChatScenarioDefinition;
 import com.chen404.service.support.scenario.recommend.ArticleRecommendScenarioItem;
 import com.chen404.service.support.scenario.recommend.ArticleRecommendScenarioRequest;
@@ -42,7 +42,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
@@ -101,7 +100,7 @@ class AiChatServiceImplTest {
 
     @Test
     void shouldBuildHelperResponseWithoutRelatedArticlesWhenUserDidNotAskForRecommendation() {
-        Article article = new Article();
+        ArticleDetailVO article = new ArticleDetailVO();
         article.setId(123L);
         article.setTitle("智能女仆接入方案");
         article.setSummary("第一阶段围绕当前文章和站内知识给出可靠的短回答。");
@@ -155,7 +154,7 @@ class AiChatServiceImplTest {
 
     @Test
     void shouldAttachRelatedArticlesWhenUserExpressesRecommendIntent() {
-        Article article = new Article();
+        ArticleDetailVO article = new ArticleDetailVO();
         article.setId(123L);
         article.setTitle("智能女仆接入方案");
         when(articleService.getArticleById(123L, false, 7L)).thenReturn(article);

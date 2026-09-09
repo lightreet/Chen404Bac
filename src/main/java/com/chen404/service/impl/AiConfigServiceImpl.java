@@ -1,6 +1,5 @@
 package com.chen404.service.impl;
 
-import com.chen404.domain.enums.LlmApiStyle;
 import com.chen404.config.AiMaidProperties;
 import com.chen404.config.AiRuntimeProperties;
 import com.chen404.config.LlmProperties;
@@ -8,6 +7,7 @@ import com.chen404.domain.dto.AiAdminConfigDTO;
 import com.chen404.domain.dto.AiConfigTestRequest;
 import com.chen404.domain.dto.AiConfigTestResponse;
 import com.chen404.domain.entity.SiteConfig;
+import com.chen404.domain.enums.LlmApiStyle;
 import com.chen404.mapper.SiteConfigMapper;
 import com.chen404.service.AiConfigService;
 import com.chen404.service.support.LlmClient;
@@ -54,7 +54,6 @@ public class AiConfigServiceImpl implements AiConfigService {
     private static final String KEY_CHAT_BUBBLE_MAX_CHARS = "ai.chat.bubble_max_chars";
     private static final String KEY_CHAT_BUBBLE_LONG_REPLY_TEXT = "ai.chat.bubble_long_reply_text";
     private static final String KEY_TOOLS_WEB_SEARCH_ENABLED = "ai.tools.web_search_enabled";
-    private static final String DEFAULT_BUBBLE_LONG_REPLY_TEXT = "我整理好了，打开聊天框看详细内容吧。";
 
     private final SiteConfigMapper siteConfigMapper;
     private final LlmProperties llmProperties;
@@ -164,16 +163,16 @@ public class AiConfigServiceImpl implements AiConfigService {
     private AiAdminConfigDTO defaults() {
         AiAdminConfigDTO config = new AiAdminConfigDTO();
         config.getLlm().setEnabled(llmProperties.isEnabled());
-        config.getLlm().setBaseUrl(defaultText(llmProperties.getBaseUrl(), "https://api.openai.com/v1"));
-        config.getLlm().setModel(defaultText(llmProperties.getModel(), "gpt-5.4-mini"));
+        config.getLlm().setBaseUrl(defaultText(llmProperties.getBaseUrl(), LlmProperties.DEFAULT_BASE_URL));
+        config.getLlm().setModel(defaultText(llmProperties.getModel(), LlmProperties.DEFAULT_MODEL));
         config.getLlm().setApiStyle(defaultText(llmProperties.getApiStyle(), LlmApiStyle.CHAT_COMPLETIONS.getValue()));
         config.getLlm().setApiKey(defaultText(llmProperties.getApiKey(), ""));
         config.getLlm().setTemperature(llmProperties.getTemperature());
         config.getLlm().setMaxTokens(llmProperties.getMaxTokens());
         config.getLlm().setTimeoutSeconds(llmProperties.getTimeoutSeconds());
 
-        config.getMaid().setName(defaultText(aiMaidProperties.getName(), "Lyra"));
-        config.getMaid().setPersonaVersion(defaultText(aiMaidProperties.getPersonaVersion(), "v1.1"));
+        config.getMaid().setName(defaultText(aiMaidProperties.getName(), AiMaidProperties.DEFAULT_NAME));
+        config.getMaid().setPersonaVersion(defaultText(aiMaidProperties.getPersonaVersion(), AiMaidProperties.DEFAULT_PERSONA_VERSION));
         config.getMaid().setSystemPrompt("");
         config.getMaid().setHelperPrompt("");
         config.getMaid().setCompanionPrompt("");
@@ -188,8 +187,8 @@ public class AiConfigServiceImpl implements AiConfigService {
         config.getChat().setMaxSuggestionCount(chat.getMaxSuggestionCount());
         config.getChat().setRelatedArticleLimit(chat.getRelatedArticleLimit());
         config.getChat().setRequireRecommendIntentForRelatedArticles(chat.isRequireRecommendIntentForRelatedArticles());
-        config.getChat().setBubbleMaxChars(36);
-        config.getChat().setBubbleLongReplyText(DEFAULT_BUBBLE_LONG_REPLY_TEXT);
+        config.getChat().setBubbleMaxChars(AiRuntimeProperties.Chat.DEFAULT_BUBBLE_MAX_CHARS);
+        config.getChat().setBubbleLongReplyText(AiRuntimeProperties.Chat.DEFAULT_BUBBLE_LONG_REPLY_TEXT);
 
         config.getTools().setWebSearchEnabled(false);
         return config;
@@ -256,32 +255,32 @@ public class AiConfigServiceImpl implements AiConfigService {
 
     private void normalize(AiAdminConfigDTO config, String currentApiKey) {
         config.getLlm().setEnabled(Boolean.TRUE.equals(config.getLlm().getEnabled()));
-        config.getLlm().setBaseUrl(defaultText(config.getLlm().getBaseUrl(), "https://api.openai.com/v1"));
-        config.getLlm().setModel(defaultText(config.getLlm().getModel(), "gpt-5.4-mini"));
+        config.getLlm().setBaseUrl(defaultText(config.getLlm().getBaseUrl(), LlmProperties.DEFAULT_BASE_URL));
+        config.getLlm().setModel(defaultText(config.getLlm().getModel(), LlmProperties.DEFAULT_MODEL));
         config.getLlm().setApiStyle(LlmApiStyle.fromValue(config.getLlm().getApiStyle()).getValue());
         String patchApiKey = config.getLlm().getApiKey();
         config.getLlm().setApiKey(StringUtils.hasText(patchApiKey) ? patchApiKey.trim() : defaultText(currentApiKey, ""));
-        config.getLlm().setTemperature(clampDouble(config.getLlm().getTemperature(), 0.2, 0.0, 2.0));
-        config.getLlm().setMaxTokens(clampInt(config.getLlm().getMaxTokens(), 512, 128, 8192));
-        config.getLlm().setTimeoutSeconds(clampInt(config.getLlm().getTimeoutSeconds(), 30, 5, 120));
+        config.getLlm().setTemperature(clampDouble(config.getLlm().getTemperature(), LlmProperties.DEFAULT_TEMPERATURE, 0.0, 2.0));
+        config.getLlm().setMaxTokens(clampInt(config.getLlm().getMaxTokens(), LlmProperties.DEFAULT_MAX_TOKENS, 128, 8192));
+        config.getLlm().setTimeoutSeconds(clampInt(config.getLlm().getTimeoutSeconds(), LlmProperties.DEFAULT_TIMEOUT_SECONDS, 5, 120));
 
-        config.getMaid().setName(defaultText(config.getMaid().getName(), "Lyra"));
-        config.getMaid().setPersonaVersion(defaultText(config.getMaid().getPersonaVersion(), "v1.1"));
+        config.getMaid().setName(defaultText(config.getMaid().getName(), AiMaidProperties.DEFAULT_NAME));
+        config.getMaid().setPersonaVersion(defaultText(config.getMaid().getPersonaVersion(), AiMaidProperties.DEFAULT_PERSONA_VERSION));
         config.getMaid().setSystemPrompt(trimToEmpty(config.getMaid().getSystemPrompt()));
         config.getMaid().setHelperPrompt(trimToEmpty(config.getMaid().getHelperPrompt()));
         config.getMaid().setCompanionPrompt(trimToEmpty(config.getMaid().getCompanionPrompt()));
 
         config.getChat().setEnabled(config.getChat().getEnabled() == null || config.getChat().getEnabled());
         config.getChat().setRetrievalEnabled(config.getChat().getRetrievalEnabled() == null || config.getChat().getRetrievalEnabled());
-        config.getChat().setMaxCitationCount(clampInt(config.getChat().getMaxCitationCount(), 3, 0, 8));
-        config.getChat().setMaxContextMessages(clampInt(config.getChat().getMaxContextMessages(), 8, 1, 20));
-        config.getChat().setMaxArticleContentChars(clampInt(config.getChat().getMaxArticleContentChars(), 3000, 500, 12000));
-        config.getChat().setMaxArticleSummaryChars(clampInt(config.getChat().getMaxArticleSummaryChars(), 300, 80, 1000));
-        config.getChat().setMaxSuggestionCount(clampInt(config.getChat().getMaxSuggestionCount(), 3, 0, 5));
-        config.getChat().setRelatedArticleLimit(clampInt(config.getChat().getRelatedArticleLimit(), 2, 0, 6));
+        config.getChat().setMaxCitationCount(clampInt(config.getChat().getMaxCitationCount(), AiRuntimeProperties.Chat.DEFAULT_MAX_CITATION_COUNT, 0, 8));
+        config.getChat().setMaxContextMessages(clampInt(config.getChat().getMaxContextMessages(), AiRuntimeProperties.Chat.DEFAULT_MAX_CONTEXT_MESSAGES, 1, 20));
+        config.getChat().setMaxArticleContentChars(clampInt(config.getChat().getMaxArticleContentChars(), AiRuntimeProperties.Chat.DEFAULT_MAX_ARTICLE_CONTENT_CHARS, 500, 12000));
+        config.getChat().setMaxArticleSummaryChars(clampInt(config.getChat().getMaxArticleSummaryChars(), AiRuntimeProperties.Chat.DEFAULT_MAX_ARTICLE_SUMMARY_CHARS, 80, 1000));
+        config.getChat().setMaxSuggestionCount(clampInt(config.getChat().getMaxSuggestionCount(), AiRuntimeProperties.Chat.DEFAULT_MAX_SUGGESTION_COUNT, 0, 5));
+        config.getChat().setRelatedArticleLimit(clampInt(config.getChat().getRelatedArticleLimit(), AiRuntimeProperties.Chat.DEFAULT_RELATED_ARTICLE_LIMIT, 0, 6));
         config.getChat().setRequireRecommendIntentForRelatedArticles(Boolean.TRUE.equals(config.getChat().getRequireRecommendIntentForRelatedArticles()));
-        config.getChat().setBubbleMaxChars(clampInt(config.getChat().getBubbleMaxChars(), 36, 12, 60));
-        config.getChat().setBubbleLongReplyText(defaultText(config.getChat().getBubbleLongReplyText(), DEFAULT_BUBBLE_LONG_REPLY_TEXT));
+        config.getChat().setBubbleMaxChars(clampInt(config.getChat().getBubbleMaxChars(), AiRuntimeProperties.Chat.DEFAULT_BUBBLE_MAX_CHARS, 12, 60));
+        config.getChat().setBubbleLongReplyText(defaultText(config.getChat().getBubbleLongReplyText(), AiRuntimeProperties.Chat.DEFAULT_BUBBLE_LONG_REPLY_TEXT));
         config.getTools().setWebSearchEnabled(Boolean.TRUE.equals(config.getTools().getWebSearchEnabled()));
 
         applyApiKeyStatus(config);

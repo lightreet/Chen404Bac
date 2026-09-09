@@ -2,18 +2,16 @@ package com.chen404.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.chen404.converter.CommentConverter;
-import com.chen404.converter.HomeViewConverter;
 import com.chen404.domain.PageResult;
 import com.chen404.domain.Result;
 import com.chen404.domain.dto.CommentLikeResult;
 import com.chen404.domain.dto.CommentVO;
 import com.chen404.domain.dto.CreateCommentDTO;
 import com.chen404.domain.dto.RecentCommentVO;
-import com.chen404.domain.entity.Article;
 import com.chen404.domain.entity.Comment;
 import com.chen404.security.AuthenticatedUser;
-import com.chen404.service.ArticleService;
 import com.chen404.service.CommentService;
+import com.chen404.service.support.RecentCommentViewAssembler;
 import com.chen404.util.CurrentUserUtil;
 import com.chen404.util.WebRequestUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -28,13 +26,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * 公共评论与留言板接口。
@@ -45,18 +37,15 @@ public class CommentController {
 
     private final CommentService commentService;
     private final CommentConverter commentConverter;
-    private final HomeViewConverter homeViewConverter;
-    private final ArticleService articleService;
+    private final RecentCommentViewAssembler recentCommentViews;
 
     public CommentController(
             CommentService commentService,
             CommentConverter commentConverter,
-            HomeViewConverter homeViewConverter,
-            ArticleService articleService) {
+            RecentCommentViewAssembler recentCommentViews) {
         this.commentService = commentService;
         this.commentConverter = commentConverter;
-        this.homeViewConverter = homeViewConverter;
-        this.articleService = articleService;
+        this.recentCommentViews = recentCommentViews;
     }
 
     @Operation(summary = "获取评论列表", description = "按 articleId 分页查询已审核评论树")
@@ -95,7 +84,7 @@ public class CommentController {
     public Result<List<RecentCommentVO>> getRecentComments(
             @RequestParam(defaultValue = "5") Integer limit) {
         List<Comment> list = commentService.getRecentComments(limit);
-        return Result.success(toRecentCommentVOList(list));
+        return Result.success(recentCommentViews.toList(list));
     }
 
     @Operation(summary = "发表评论")
@@ -138,24 +127,5 @@ public class CommentController {
                 WebRequestUtil.getClientIp(request)
         );
         return Result.success(result);
-    }
-
-    private List<RecentCommentVO> toRecentCommentVOList(List<Comment> comments) {
-        List<Comment> safeComments = comments == null ? Collections.emptyList() : comments;
-        List<RecentCommentVO> voList = homeViewConverter.toRecentCommentVOList(safeComments);
-        Set<Long> articleIds = safeComments.stream()
-                .map(Comment::getArticleId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        Map<Long, String> articleTitleById = articleIds.isEmpty()
-                ? Collections.emptyMap()
-                : articleService.listByIds(articleIds).stream()
-                .collect(Collectors.toMap(Article::getId, Article::getTitle, (left, right) -> left, HashMap::new));
-        for (RecentCommentVO vo : voList) {
-            if (vo.getArticleId() != null) {
-                vo.setArticleTitle(articleTitleById.get(vo.getArticleId()));
-            }
-        }
-        return voList;
     }
 }

@@ -1,7 +1,7 @@
 package com.chen404.service.support;
 
 import com.chen404.domain.ArticleConstraints;
-import com.chen404.domain.entity.Article;
+import com.chen404.domain.dto.ArticleWriteCommand;
 import com.chen404.domain.enums.ArticleCommentPolicyEnum;
 import com.chen404.domain.enums.ArticleStatusEnum;
 import com.chen404.domain.enums.ArticleVisibilityEnum;
@@ -13,19 +13,19 @@ public final class ArticlePolicyValidator {
     private ArticlePolicyValidator() {
     }
 
-    public static void validate(Article article) {
-        if (article == null || !IntegerValueEnum.contains(ArticleStatusEnum.class, article.getStatus())) {
+    public static void validate(ArticleWriteCommand command) {
+        if (command == null || !IntegerValueEnum.contains(ArticleStatusEnum.class, command.getStatus())) {
             throw new BadRequestException(ArticleConstraints.INVALID_STATUS);
         }
-        if (article.getVisibility() != null && !IntegerValueEnum.contains(ArticleVisibilityEnum.class, article.getVisibility())) {
+        if (command.getVisibility() != null && !IntegerValueEnum.contains(ArticleVisibilityEnum.class, command.getVisibility())) {
             throw new BadRequestException(ArticleConstraints.INVALID_VISIBILITY);
         }
-        if (article.getCommentPolicy() != null && !IntegerValueEnum.contains(ArticleCommentPolicyEnum.class, article.getCommentPolicy())) {
+        if (command.getCommentPolicy() != null && !IntegerValueEnum.contains(ArticleCommentPolicyEnum.class, command.getCommentPolicy())) {
             throw new BadRequestException(ArticleConstraints.INVALID_COMMENT_POLICY);
         }
-        validateFlag(article.getIsTop());
-        validateFlag(article.getIsRecommend());
-        validateFlag(article.getIsOriginal());
+        validateFlag(command.getIsTop());
+        validateFlag(command.getIsRecommend());
+        validateFlag(command.getIsOriginal());
     }
 
     /** 可选标志保留缺省语义，显式值只允许 0/1。 */

@@ -2,25 +2,28 @@ package com.chen404.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.chen404.converter.UserConverter;
-import com.chen404.domain.enums.UserTrustLevelEnum;
+import com.chen404.domain.dto.ChangePasswordDTO;
 import com.chen404.domain.dto.ForgotPasswordDTO;
 import com.chen404.domain.dto.LoginDTO;
 import com.chen404.domain.dto.LoginResultDTO;
 import com.chen404.domain.dto.RegisterDTO;
-import com.chen404.domain.dto.ChangePasswordDTO;
 import com.chen404.domain.dto.UpdateProfileDTO;
 import com.chen404.domain.entity.Role;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.entity.User;
 import com.chen404.domain.entity.UserRole;
-import com.chen404.mapper.RoleMapper;
-import com.chen404.mapper.UserMapper;
-import com.chen404.mapper.UserRoleMapper;
+import com.chen404.domain.enums.UserStatusEnum;
+import com.chen404.domain.enums.UserTrustLevelEnum;
 import com.chen404.exception.BadRequestException;
 import com.chen404.exception.ConflictException;
 import com.chen404.exception.ResourceNotFoundException;
-import com.chen404.service.EmailService;
+import com.chen404.exception.TooManyRequestsException;
+import com.chen404.exception.UnauthorizedException;
+import com.chen404.mapper.RoleMapper;
+import com.chen404.mapper.UserMapper;
+import com.chen404.mapper.UserRoleMapper;
 import com.chen404.service.AuthSessionService;
+import com.chen404.service.EmailService;
 import com.chen404.service.FileClaim;
 import com.chen404.service.FileReferenceService;
 import com.chen404.service.SysFileService;
@@ -29,8 +32,6 @@ import com.chen404.service.support.UserAccessProfileSupport;
 import com.chen404.util.JwtUtil;
 import com.chen404.util.RedisKeys;
 import com.chen404.util.RedisUtil;
-import com.chen404.exception.TooManyRequestsException;
-import com.chen404.exception.UnauthorizedException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -39,8 +40,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
-import java.time.LocalDateTime;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
 
@@ -97,6 +98,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     private Long expiration;
 
     @Override
+    public User findAccount(Long userId) {
+        return userId == null ? null : getById(userId);
+    }
+
+    @Override
     public LoginResultDTO login(LoginDTO loginDTO, String clientIp) {
         String account = loginDTO.getUsername();
         assertLoginAllowed(account, clientIp);
@@ -117,7 +123,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         }
 
         // 检查账号是否禁用
-        if (user.getStatus() == 0) {
+        if (!UserStatusEnum.isEnabled(user.getStatus())) {
             throw new UnauthorizedException("账号已被禁用");
         }
 
@@ -216,7 +222,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setEmail(registerDTO.getEmail());
         user.setPhone(registerDTO.getPhone());
         user.setAvatar(DEFAULT_MEMBER_AVATAR);
-        user.setStatus(1);
+        user.setStatus(UserStatusEnum.ENABLED.getValue());
         user.setTrustLevel(UserTrustLevelEnum.NORMAL.getLevel());
 
         // 填写邮箱则标记为已验证；手机号默认未验证（需后续验证流程）
@@ -270,7 +276,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     public User getPublicUser(Long userId) {
         User user = lambdaQuery()
                 .eq(User::getId, userId)
-                .eq(User::getStatus, 1)
+                .eq(User::getStatus, UserStatusEnum.ENABLED.getValue())
                 .eq(User::getProfileVisibility, 1)
                 .one();
         if (user == null) {
@@ -282,7 +288,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     public List<User> listPublicUsers() {
         return lambdaQuery()
-                .eq(User::getStatus, 1)
+                .eq(User::getStatus, UserStatusEnum.ENABLED.getValue())
                 .eq(User::getProfileVisibility, 1)
                 .orderByDesc(User::getTrustLevel)
                 .orderByAsc(User::getCreateTime)
@@ -391,7 +397,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (user == null) {
             throw new BadRequestException("用户不存在");
         }
-        if (user.getStatus() == 0) {
+        if (!UserStatusEnum.isEnabled(user.getStatus())) {
             throw new UnauthorizedException("账号已被禁用");
         }
         if (passwordEncoder.matches(dto.getNewPassword(), user.getPassword())) {

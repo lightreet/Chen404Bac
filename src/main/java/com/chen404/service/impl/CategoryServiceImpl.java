@@ -19,6 +19,11 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
     private static final int DEFAULT_SORT_ORDER = 0;
 
     @Override
+    public Category getCategoryById(Long id) {
+        return id == null ? null : getById(id);
+    }
+
+    @Override
     public List<Category> getAllCategories() {
         return baseMapper.selectAllActive();
     }

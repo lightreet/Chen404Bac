@@ -5,13 +5,13 @@ import com.chen404.domain.dto.BannerVO;
 import com.chen404.domain.dto.CategoryVO;
 import com.chen404.domain.dto.CommentVO;
 import com.chen404.domain.dto.CreateArticleCommand;
-import com.chen404.domain.dto.UpdateArticleCommand;
 import com.chen404.domain.dto.CreateCategoryCommand;
 import com.chen404.domain.dto.EmojiImportResultDTO;
 import com.chen404.domain.dto.EmojiItemVO;
 import com.chen404.domain.dto.EmojiPackVO;
 import com.chen404.domain.dto.RecentCommentVO;
 import com.chen404.domain.dto.TagVO;
+import com.chen404.domain.dto.UpdateArticleCommand;
 import com.chen404.domain.dto.UserProfileVO;
 import com.chen404.domain.entity.Article;
 import com.chen404.domain.entity.Banner;
@@ -29,7 +29,6 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BoundaryConverterTest {
 
@@ -68,12 +67,8 @@ class BoundaryConverterTest {
 
         assertEquals("命令对象标题", article.getTitle());
         assertEquals(12L, article.getCategoryId());
-        assertEquals(List.of(1L, 2L), article.getTagIds());
-        assertEquals(List.of("新增标签"), article.getTagNames());
         assertEquals(2, article.getVisibility());
         assertNull(article.getId(), "命令对象不应携带数据库主键");
-        assertNull(article.getLiked(), "命令对象不应映射展示态字段");
-        assertNull(article.getFavorited(), "命令对象不应映射展示态字段");
     }
 
     @Test
@@ -92,40 +87,12 @@ class BoundaryConverterTest {
         article.setCommentCount(4);
         article.setIsTop(1);
         article.setIsRecommend(0);
-        article.setCanEdit(Boolean.TRUE);
-        article.setCanDelete(Boolean.TRUE);
-        article.setCanComment(Boolean.TRUE);
-        article.setLiked(Boolean.TRUE);
-        article.setFavorited(Boolean.FALSE);
-
-        User author = new User();
-        author.setId(9L);
-        author.setUsername("chen404");
-        author.setNickname("辰");
-        author.setAvatar("/avatar.png");
-        article.setAuthor(author);
-
-        Category category = new Category();
-        category.setId(8L);
-        category.setName("后端");
-        category.setSlug("backend");
-        article.setCategory(category);
-
-        Tag tag = new Tag();
-        tag.setId(6L);
-        tag.setName("Spring");
-        tag.setSlug("spring");
-        tag.setColor("#42b883");
-        article.setTags(List.of(tag));
-
         ArticleDetailVO detailVO = articleViewConverter.toDetailVO(article);
 
         assertEquals(123L, detailVO.getId());
         assertEquals("Markdown 内容", detailVO.getContent());
-        assertEquals("chen404", detailVO.getAuthor().getUsername());
-        assertEquals("后端", detailVO.getCategory().getName());
-        assertEquals(1, detailVO.getTags().size());
-        assertTrue(Boolean.TRUE.equals(detailVO.getCanComment()));
+        assertNull(detailVO.getAuthor(), "关联视图由组装器加载，实体转换器只处理表字段");
+        assertNull(detailVO.getCanComment(), "权限不应来自持久化实体");
     }
 
     @Test

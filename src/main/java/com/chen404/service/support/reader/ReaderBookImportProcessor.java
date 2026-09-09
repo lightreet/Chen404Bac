@@ -1,12 +1,9 @@
 package com.chen404.service.support.reader;
 
-import com.chen404.domain.ReaderBookConstraints;
-import com.chen404.util.TextUtil;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.chen404.config.ReaderImportProperties;
 import com.chen404.config.ReaderImportTaskConfig;
-import org.springframework.beans.factory.annotation.Qualifier;
+import com.chen404.domain.ReaderBookConstraints;
 import com.chen404.domain.entity.ReaderBook;
 import com.chen404.domain.entity.ReaderBookAsset;
 import com.chen404.domain.entity.ReaderChapter;
@@ -23,7 +20,9 @@ import com.chen404.mapper.ReaderTocItemMapper;
 import com.chen404.service.AdminContentEventPublisher;
 import com.chen404.service.FileStorageService;
 import com.chen404.service.SysFileService;
+import com.chen404.util.TextUtil;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -156,7 +155,7 @@ public class ReaderBookImportProcessor {
     }
 
     private ParsedReaderBook parseStoredSource(ReaderBook task) {
-        SysFile sourceFile = sysFileService.getById(task.getSourceFileId());
+        SysFile sourceFile = sysFileService.findById(task.getSourceFileId());
         if (sourceFile == null
                 || !StringUtils.hasText(sourceFile.getBucketName())
                 || !StringUtils.hasText(sourceFile.getObjectName())) {
@@ -200,7 +199,7 @@ public class ReaderBookImportProcessor {
         book.setTitle(TextUtil.truncate(firstNonBlank(book.getTitle(), parsed.getTitle()), ReaderBookConstraints.TITLE_MAX_LENGTH));
         book.setAuthor(TextUtil.truncate(firstNonBlank(book.getAuthor(), parsed.getAuthor()), ReaderBookConstraints.AUTHOR_MAX_LENGTH));
         book.setDescription(TextUtil.truncate(firstNonBlank(book.getDescription(), parsed.getDescription()), ReaderBookConstraints.DESCRIPTION_MAX_LENGTH));
-        book.setLanguage(TextUtil.truncate(parsed.getLanguage(), 40));
+        book.setLanguage(TextUtil.truncate(parsed.getLanguage(), ReaderBookConstraints.LANGUAGE_MAX_LENGTH));
         book.setSourceFormat(parsed.getFormat());
         book.setSourceEncoding(parsed.getEncoding());
         book.setStatus(ReaderBook.STATUS_READY);
@@ -317,7 +316,6 @@ public class ReaderBookImportProcessor {
     private long elapsedMillis(long startNanos, long endNanos) {
         return (endNanos - startNanos) / 1_000_000;
     }
-
 
 
     private record PersistSummary(int chapterCount, int assetCount) {

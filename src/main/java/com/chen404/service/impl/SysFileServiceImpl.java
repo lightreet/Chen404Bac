@@ -3,8 +3,8 @@ package com.chen404.service.impl;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.chen404.config.MinioConfig;
 import com.chen404.domain.entity.SysFile;
-import com.chen404.exception.ForbiddenException;
 import com.chen404.exception.BadRequestException;
+import com.chen404.exception.ForbiddenException;
 import com.chen404.mapper.SysFileMapper;
 import com.chen404.service.AccessService;
 import com.chen404.service.FileClaim;
@@ -17,13 +17,12 @@ import com.chen404.service.SysFileService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayInputStream;
-import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -71,20 +70,17 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
     );
 
     @Override
-    public List<SysFile> listByIds(Collection<? extends Serializable> idList) {
-        if (idList == null || idList.isEmpty()) {
+    public SysFile findById(Long fileId) {
+        return fileId == null ? null : getById(fileId);
+    }
+
+    @Override
+    public List<SysFile> findByIds(Collection<Long> fileIds) {
+        if (fileIds == null || fileIds.isEmpty()) {
             return List.of();
         }
-
-        List<Serializable> validIds = idList.stream()
-                .filter(id -> id != null && StringUtils.hasText(String.valueOf(id)))
-                .distinct()
-                .collect(Collectors.toList());
-        if (validIds.isEmpty()) {
-            return List.of();
-        }
-
-        return super.listByIds(validIds);
+        List<Long> ids = fileIds.stream().filter(Objects::nonNull).distinct().toList();
+        return ids.isEmpty() ? List.of() : baseMapper.selectBatchIds(ids);
     }
 
     @Override

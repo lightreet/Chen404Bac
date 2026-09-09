@@ -1,15 +1,21 @@
 package com.chen404.service;
 
-import com.baomidou.mybatisplus.extension.service.IService;
 import com.chen404.domain.entity.SysFile;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Collection;
 import java.util.List;
 
 /**
  * 系统文件服务接口
  */
-public interface SysFileService extends IService<SysFile> {
+public interface SysFileService {
+
+    /** 内部读取存储元数据；公开访问权限由文件访问服务判定。 */
+    SysFile findById(Long fileId);
+
+    /** 批量读取存储元数据，空 ID 集合返回空列表。 */
+    List<SysFile> findByIds(Collection<Long> fileIds);
 
     /**
      * 上传临时文件（用于编辑器内上传，尚未确认使用）

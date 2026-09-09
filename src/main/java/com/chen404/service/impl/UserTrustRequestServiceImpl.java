@@ -4,27 +4,30 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.chen404.converter.TrustRequestConverter;
+import com.chen404.domain.PageBounds;
 import com.chen404.domain.PageResult;
 import com.chen404.domain.dto.CreateTrustRequestDTO;
 import com.chen404.domain.dto.TrustRequestAttachmentVO;
 import com.chen404.domain.dto.TrustRequestVO;
-import com.chen404.domain.enums.UserRoleEnum;
-import com.chen404.domain.enums.UserTrustLevelEnum;
-import com.chen404.domain.enums.AdminNotificationEventTypeEnum;
-import com.chen404.domain.enums.AdminNotificationResourceTypeEnum;
-import com.chen404.domain.event.AdminContentEvent;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.entity.User;
 import com.chen404.domain.entity.UserTrustRequest;
+import com.chen404.domain.enums.AdminNotificationEventTypeEnum;
+import com.chen404.domain.enums.AdminNotificationResourceTypeEnum;
+import com.chen404.domain.enums.UserRoleEnum;
+import com.chen404.domain.enums.UserTrustLevelEnum;
+import com.chen404.domain.event.AdminContentEvent;
 import com.chen404.exception.BadRequestException;
 import com.chen404.exception.ConflictException;
 import com.chen404.exception.ResourceNotFoundException;
 import com.chen404.exception.UnauthorizedException;
+import com.chen404.mapper.SysFileMapper;
+import com.chen404.mapper.UserMapper;
 import com.chen404.mapper.UserTrustRequestMapper;
-import com.chen404.service.EmailService;
 import com.chen404.service.AdminContentEventPublisher;
-import com.chen404.service.FileReferenceService;
+import com.chen404.service.EmailService;
 import com.chen404.service.FileClaim;
+import com.chen404.service.FileReferenceService;
 import com.chen404.service.ProtectedFileAccessService;
 import com.chen404.service.SysFileService;
 import com.chen404.service.UserService;
@@ -80,7 +83,9 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
     private final TrustRequestConverter trustRequestConverter;
     private final MailTemplateSupport mailTemplateSupport;
     private final UserService userService;
+    private final UserMapper userMapper;
     private final SysFileService sysFileService;
+    private final SysFileMapper fileMapper;
     private final EmailService emailService;
     private final FileReferenceService fileReferenceService;
     private final AdminContentEventPublisher adminContentEventPublisher;
@@ -99,7 +104,9 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
             TrustRequestConverter trustRequestConverter,
             MailTemplateSupport mailTemplateSupport,
             UserService userService,
+            UserMapper userMapper,
             SysFileService sysFileService,
+            SysFileMapper fileMapper,
             EmailService emailService,
             FileReferenceService fileReferenceService,
             AdminContentEventPublisher adminContentEventPublisher,
@@ -108,7 +115,9 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
         this.trustRequestConverter = trustRequestConverter;
         this.mailTemplateSupport = mailTemplateSupport;
         this.userService = userService;
+        this.userMapper = userMapper;
         this.sysFileService = sysFileService;
+        this.fileMapper = fileMapper;
         this.emailService = emailService;
         this.fileReferenceService = fileReferenceService;
         this.adminContentEventPublisher = adminContentEventPublisher;
@@ -206,8 +215,9 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
 
     @Override
     public PageResult<TrustRequestVO> getAdminRequests(Integer page, Integer size, Integer status, String keyword) {
-        long current = page == null || page < 1 ? 1L : page;
-        long pageSize = size == null || size < 1 ? 10L : size;
+        PageBounds bounds = PageBounds.of(page, size, PageBounds.DEFAULT_SIZE);
+        long current = bounds.current();
+        long pageSize = bounds.size();
 
         LambdaQueryWrapper<UserTrustRequest> wrapper = new LambdaQueryWrapper<UserTrustRequest>()
                 .orderByDesc(UserTrustRequest::getCreateTime);
@@ -217,7 +227,7 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
 
         String normalizedKeyword = keyword == null ? "" : keyword.trim();
         if (StringUtils.hasText(normalizedKeyword)) {
-            List<User> matchedUsers = userService.list(new LambdaQueryWrapper<User>()
+            List<User> matchedUsers = userMapper.selectList(new LambdaQueryWrapper<User>()
                     .like(User::getUsername, normalizedKeyword)
                     .or()
                     .like(User::getNickname, normalizedKeyword)
@@ -304,7 +314,7 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
         log.info("[TRUST_REQUEST_REJECT] adminId={} requestId={} applicantUserId={}",
                 adminId, request.getId(), request.getUserId());
 
-        User applicant = userService.getById(request.getUserId());
+        User applicant = userMapper.selectById(request.getUserId());
         try {
             sendApplicantResultEmail(applicant, false, note);
         } catch (Exception e) {
@@ -379,7 +389,7 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
         log.info("[TRUST_REQUEST_APPROVE] adminId={} requestId={} applicantUserId={}",
                 adminId, request.getId(), request.getUserId());
 
-        User applicant = userService.getById(request.getUserId());
+        User applicant = userMapper.selectById(request.getUserId());
         try {
             sendApplicantResultEmail(applicant, true, request.getReviewNote());
         } catch (Exception e) {
@@ -452,7 +462,7 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
         if (userIds == null || userIds.isEmpty()) {
             return Map.of();
         }
-        List<User> users = userService.listByIds(userIds);
+        List<User> users = userMapper.selectBatchIds(userIds);
         Map<Long, User> map = new HashMap<>();
         for (User user : users) {
             if (user != null && user.getId() != null) {
@@ -467,7 +477,7 @@ public class UserTrustRequestServiceImpl extends ServiceImpl<UserTrustRequestMap
             return Map.of();
         }
 
-        List<SysFile> files = sysFileService.list(new LambdaQueryWrapper<SysFile>()
+        List<SysFile> files = fileMapper.selectList(new LambdaQueryWrapper<SysFile>()
                 .eq(SysFile::getRefType, SysFile.RefType.TRUST_REQUEST_ATTACHMENT)
                 .in(SysFile::getRefId, requestIds)
                 .ne(SysFile::getStatus, SysFile.Status.DELETED)

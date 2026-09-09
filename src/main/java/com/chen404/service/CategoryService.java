@@ -1,12 +1,15 @@
 package com.chen404.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.baomidou.mybatisplus.extension.service.IService;
 import com.chen404.domain.entity.Category;
 
 import java.util.List;
 
-public interface CategoryService extends IService<Category> {
+/** 分类用例接口，持久化操作只通过明确的分类业务方法调用。 */
+public interface CategoryService {
+
+    /** 查询单个分类，不存在时返回 null。 */
+    Category getCategoryById(Long id);
 
     List<Category> getAllCategories();
 

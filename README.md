@@ -257,5 +257,6 @@ mvn "-Dtest=MusicRadioControllerTest,MusicRadioServiceImplTest,LlmMusicTrackAiSu
 - 旅行纪念地图专题：[`doc/architecture/旅行纪念地图设计与改造方案.md`](./doc/architecture/旅行纪念地图设计与改造方案.md)
 - 小说书架与阅读器专题：[`doc/architecture/小说书架与阅读器设计与实现.md`](./doc/architecture/小说书架与阅读器设计与实现.md)
 - Java 质量债务：[`doc/architecture/java-quality-debt.md`](./doc/architecture/java-quality-debt.md)
+- 公共规则与业务边界：[`doc/architecture/backend-reuse-and-boundaries.md`](./doc/architecture/backend-reuse-and-boundaries.md)
 - 前后端扫描与缺陷台账：[`doc/architecture/前后端代码与文档扫描报告_2026-08-14.md`](./doc/architecture/前后端代码与文档扫描报告_2026-08-14.md)
 - 阶段快照：[`doc/architecture/后端功能审查与优化清单.md`](./doc/architecture/后端功能审查与优化清单.md)、[`功能审查总结_2026-03-27.md`](./功能审查总结_2026-03-27.md)

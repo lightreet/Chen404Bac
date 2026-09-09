@@ -2,19 +2,19 @@ package com.chen404.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.chen404.domain.dto.ArticleAuthorVO;
 import com.chen404.domain.dto.MusicPlaylistTracksCommand;
 import com.chen404.domain.dto.MusicPlaylistUpsertCommand;
 import com.chen404.domain.dto.MusicPlaylistVO;
-import com.chen404.domain.dto.ArticleAuthorVO;
 import com.chen404.domain.dto.MusicTrackUpsertCommand;
 import com.chen404.domain.dto.MusicTrackVO;
-import com.chen404.domain.enums.AdminNotificationEventTypeEnum;
-import com.chen404.domain.enums.AdminNotificationResourceTypeEnum;
 import com.chen404.domain.entity.MusicPlaylist;
 import com.chen404.domain.entity.MusicPlaylistTrack;
 import com.chen404.domain.entity.MusicTrack;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.entity.User;
+import com.chen404.domain.enums.AdminNotificationEventTypeEnum;
+import com.chen404.domain.enums.AdminNotificationResourceTypeEnum;
 import com.chen404.domain.event.AdminContentEvent;
 import com.chen404.exception.BadRequestException;
 import com.chen404.exception.ForbiddenException;
@@ -25,8 +25,8 @@ import com.chen404.mapper.MusicTrackMapper;
 import com.chen404.mapper.UserMapper;
 import com.chen404.service.AccessService;
 import com.chen404.service.AdminContentEventPublisher;
-import com.chen404.service.FileReferenceService;
 import com.chen404.service.FileClaim;
+import com.chen404.service.FileReferenceService;
 import com.chen404.service.MusicRadioService;
 import com.chen404.service.ProtectedFileAccessService;
 import com.chen404.service.SysFileService;
@@ -37,14 +37,13 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * 音乐馆歌曲、分类和分类曲目编排的业务服务实现。
@@ -503,7 +502,7 @@ public class MusicRadioServiceImpl implements MusicRadioService {
             Long operatorId,
             boolean admin,
             String expectedRefType) {
-        SysFile file = fileId == null ? null : sysFileService.getById(fileId);
+        SysFile file = fileId == null ? null : sysFileService.findById(fileId);
         if (file == null && StringUtils.hasText(fileUrl)) {
             file = sysFileService.findByFileUrl(fileUrl.trim());
         }

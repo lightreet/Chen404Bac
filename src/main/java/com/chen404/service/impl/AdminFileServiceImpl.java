@@ -2,6 +2,7 @@ package com.chen404.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.chen404.domain.PageBounds;
 import com.chen404.domain.PageResult;
 import com.chen404.domain.dto.AdminFileDetailVO;
 import com.chen404.domain.dto.AdminFileReferenceVO;
@@ -12,10 +13,10 @@ import com.chen404.domain.entity.FileReference;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.entity.User;
 import com.chen404.exception.ResourceNotFoundException;
+import com.chen404.mapper.FileReferenceMapper;
+import com.chen404.mapper.SysFileMapper;
+import com.chen404.mapper.UserMapper;
 import com.chen404.service.AdminFileService;
-import com.chen404.service.FileReferenceService;
-import com.chen404.service.SysFileService;
-import com.chen404.service.UserService;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -41,17 +42,17 @@ public class AdminFileServiceImpl implements AdminFileService {
     private static final String STATUS_UNKNOWN = "UNKNOWN";
     private static final String REFERENCED_FILE_IDS_SQL = "select distinct file_id from file_reference";
 
-    private final SysFileService sysFileService;
-    private final FileReferenceService fileReferenceService;
-    private final UserService userService;
+    private final SysFileMapper fileMapper;
+    private final FileReferenceMapper referenceMapper;
+    private final UserMapper userMapper;
 
     public AdminFileServiceImpl(
-            SysFileService sysFileService,
-            FileReferenceService fileReferenceService,
-            UserService userService) {
-        this.sysFileService = sysFileService;
-        this.fileReferenceService = fileReferenceService;
-        this.userService = userService;
+            SysFileMapper fileMapper,
+            FileReferenceMapper referenceMapper,
+            UserMapper userMapper) {
+        this.fileMapper = fileMapper;
+        this.referenceMapper = referenceMapper;
+        this.userMapper = userMapper;
     }
 
     @Override
@@ -63,8 +64,9 @@ public class AdminFileServiceImpl implements AdminFileService {
             String refType,
             Boolean referenced,
             String referenceStatus) {
-        long current = page == null || page < 1 ? 1L : page;
-        long pageSize = size == null || size < 1 ? 10L : size;
+        PageBounds bounds = PageBounds.of(page, size, PageBounds.DEFAULT_SIZE);
+        long current = bounds.current();
+        long pageSize = bounds.size();
 
         LambdaQueryWrapper<SysFile> wrapper = new LambdaQueryWrapper<SysFile>()
                 .orderByDesc(SysFile::getCreateTime)
@@ -89,7 +91,7 @@ public class AdminFileServiceImpl implements AdminFileService {
             applyReferencedFilter(wrapper, referenced);
         }
 
-        Page<SysFile> filePage = sysFileService.page(new Page<>(current, pageSize), wrapper);
+        Page<SysFile> filePage = fileMapper.selectPage(new Page<>(current, pageSize), wrapper);
         List<SysFile> files = filePage.getRecords();
         if (files.isEmpty()) {
             return PageResult.of(new Page<AdminFileVO>(current, pageSize, 0));
@@ -113,16 +115,16 @@ public class AdminFileServiceImpl implements AdminFileService {
 
     @Override
     public AdminFileDetailVO getAdminFileDetail(Long fileId) {
-        SysFile file = sysFileService.getById(fileId);
+        SysFile file = fileMapper.selectById(fileId);
         if (file == null) {
             throw new ResourceNotFoundException("文件不存在");
         }
-        List<FileReference> references = fileReferenceService.list(new LambdaQueryWrapper<FileReference>()
+        List<FileReference> references = referenceMapper.selectList(new LambdaQueryWrapper<FileReference>()
                 .eq(FileReference::getFileId, fileId)
                 .orderByAsc(FileReference::getModuleCode)
                 .orderByAsc(FileReference::getBizType)
                 .orderByAsc(FileReference::getBizId));
-        User user = file.getUserId() == null ? null : userService.getById(file.getUserId());
+        User user = file.getUserId() == null ? null : userMapper.selectById(file.getUserId());
 
         AdminFileDetailVO detail = new AdminFileDetailVO();
         AdminFileVO base = toAdminFileVO(file, references, user);
@@ -133,9 +135,9 @@ public class AdminFileServiceImpl implements AdminFileService {
 
     @Override
     public AdminFileStatsVO getAdminFileStats() {
-        List<SysFile> files = sysFileService.list(new LambdaQueryWrapper<SysFile>()
+        List<SysFile> files = fileMapper.selectList(new LambdaQueryWrapper<SysFile>()
                 .select(SysFile::getId, SysFile::getStatus, SysFile::getRefType, SysFile::getFileSize));
-        List<FileReference> references = fileReferenceService.list(new LambdaQueryWrapper<FileReference>()
+        List<FileReference> references = referenceMapper.selectList(new LambdaQueryWrapper<FileReference>()
                 .select(FileReference::getFileId, FileReference::getModuleCode));
 
         Map<Long, List<FileReference>> referenceMap = groupReferencesByFileId(references);
@@ -176,7 +178,7 @@ public class AdminFileServiceImpl implements AdminFileService {
         if (fileIds == null || fileIds.isEmpty()) {
             return Map.of();
         }
-        List<FileReference> rows = fileReferenceService.list(new LambdaQueryWrapper<FileReference>()
+        List<FileReference> rows = referenceMapper.selectList(new LambdaQueryWrapper<FileReference>()
                 .in(FileReference::getFileId, fileIds));
         return groupReferencesByFileId(rows);
     }
@@ -199,7 +201,7 @@ public class AdminFileServiceImpl implements AdminFileService {
         if (userIds == null || userIds.isEmpty()) {
             return Map.of();
         }
-        return userService.listByIds(userIds).stream()
+        return userMapper.selectBatchIds(userIds).stream()
                 .filter(user -> user != null && user.getId() != null)
                 .collect(Collectors.toMap(User::getId, user -> user));
     }

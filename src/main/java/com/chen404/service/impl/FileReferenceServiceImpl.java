@@ -1,8 +1,8 @@
 package com.chen404.service.impl;
 
-import com.chen404.config.SiteAssetConfig;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.chen404.config.SiteAssetConfig;
 import com.chen404.domain.entity.Article;
 import com.chen404.domain.entity.Comment;
 import com.chen404.domain.entity.FileReference;
@@ -20,6 +20,7 @@ import com.chen404.mapper.FileReferenceMapper;
 import com.chen404.mapper.MusicTrackMapper;
 import com.chen404.mapper.ReaderBookMapper;
 import com.chen404.mapper.SiteConfigMapper;
+import com.chen404.mapper.SysFileMapper;
 import com.chen404.mapper.TravelMemoryEntryMapper;
 import com.chen404.mapper.TravelMemoryLocationMapper;
 import com.chen404.mapper.UserMapper;
@@ -53,6 +54,7 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
 
 
     private final SysFileService sysFileService;
+    private final SysFileMapper fileMapper;
     private final ArticleMapper articleMapper;
     private final CommentMapper commentMapper;
     private final UserMapper userMapper;
@@ -66,6 +68,7 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
 
     public FileReferenceServiceImpl(
             SysFileService sysFileService,
+            SysFileMapper fileMapper,
             ArticleMapper articleMapper,
             CommentMapper commentMapper,
             UserMapper userMapper,
@@ -77,6 +80,7 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
             ReaderBookMapper readerBookMapper,
             ObjectMapper objectMapper) {
         this.sysFileService = sysFileService;
+        this.fileMapper = fileMapper;
         this.articleMapper = articleMapper;
         this.commentMapper = commentMapper;
         this.userMapper = userMapper;
@@ -334,7 +338,7 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
             }
             String coverImage = article.getCoverImage();
             if (!StringUtils.hasText(coverImage) && article.getCoverFileId() != null) {
-                SysFile coverFile = sysFileService.getById(article.getCoverFileId());
+                SysFile coverFile = sysFileService.findById(article.getCoverFileId());
                 coverImage = coverFile == null ? null : coverFile.getFileUrl();
             }
             syncArticleReferences(article.getId(), article.getContent(), coverImage);
@@ -357,7 +361,7 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
             }
             String avatarUrl = user.getAvatar();
             if (!StringUtils.hasText(avatarUrl) && user.getAvatarFileId() != null) {
-                SysFile file = sysFileService.getById(user.getAvatarFileId());
+                SysFile file = sysFileService.findById(user.getAvatarFileId());
                 avatarUrl = file == null ? null : file.getFileUrl();
             }
             syncUserAvatarReference(user.getId(), avatarUrl);
@@ -391,7 +395,7 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
             if (request == null || request.getId() == null) {
                 continue;
             }
-            List<String> attachmentUrls = sysFileService.list(new LambdaQueryWrapper<SysFile>()
+            List<String> attachmentUrls = fileMapper.selectList(new LambdaQueryWrapper<SysFile>()
                             .eq(SysFile::getRefType, SysFile.RefType.TRUST_REQUEST_ATTACHMENT)
                             .eq(SysFile::getRefId, request.getId())
                             .ne(SysFile::getStatus, SysFile.Status.DELETED))
@@ -564,7 +568,7 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
             if (fileId == null) {
                 continue;
             }
-            SysFile file = sysFileService.getById(fileId);
+            SysFile file = sysFileService.findById(fileId);
             if (file == null || file.getId() == null || SysFile.Status.DELETED.equals(file.getStatus())) {
                 continue;
             }
@@ -620,7 +624,7 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
         if (!StringUtils.hasText(refType) || refId == null) {
             return List.of();
         }
-        List<SysFile> matchedFiles = sysFileService.list(new LambdaQueryWrapper<SysFile>()
+        List<SysFile> matchedFiles = fileMapper.selectList(new LambdaQueryWrapper<SysFile>()
                 .eq(SysFile::getRefType, refType)
                 .eq(SysFile::getRefId, refId)
                 .ne(SysFile::getStatus, SysFile.Status.DELETED)

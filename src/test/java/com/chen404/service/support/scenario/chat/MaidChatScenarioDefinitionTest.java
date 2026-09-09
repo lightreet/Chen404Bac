@@ -3,7 +3,7 @@ package com.chen404.service.support.scenario.chat;
 import com.chen404.config.AiRuntimeProperties;
 import com.chen404.domain.dto.AiAdminConfigDTO;
 import com.chen404.domain.dto.AiChatMessageDTO;
-import com.chen404.domain.entity.Article;
+import com.chen404.domain.dto.ArticleDetailVO;
 import com.chen404.service.AiConfigService;
 import com.chen404.service.support.AiLlmRequestFactory;
 import com.chen404.service.support.LlmClient;
@@ -205,8 +205,8 @@ class MaidChatScenarioDefinitionTest {
         return message;
     }
 
-    private Article buildArticle() {
-        Article article = new Article();
+    private ArticleDetailVO buildArticle() {
+        ArticleDetailVO article = new ArticleDetailVO();
         article.setId(123L);
         article.setTitle("AI maid plan");
         article.setSummary("A concise summary about the AI maid assistant.");

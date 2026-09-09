@@ -1,6 +1,5 @@
 package com.chen404.controller;
 
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.chen404.annotation.RequireAdmin;
 import com.chen404.converter.CategoryConverter;
 import com.chen404.domain.Result;
@@ -19,8 +18,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -58,7 +57,7 @@ public class CategoryController {
     @GetMapping("/{id}")
     public Result<CategoryVO> getCategoryById(
             @Parameter(description = "分类ID", required = true) @PathVariable Long id) {
-        Category category = categoryService.getById(id);
+        Category category = categoryService.getCategoryById(id);
         if (category == null) {
             throw new ResourceNotFoundException("分类不存在");
         }

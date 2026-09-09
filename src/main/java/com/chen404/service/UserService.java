@@ -1,11 +1,10 @@
 package com.chen404.service;
 
-import com.baomidou.mybatisplus.extension.service.IService;
+import com.chen404.domain.dto.ChangePasswordDTO;
+import com.chen404.domain.dto.ForgotPasswordDTO;
 import com.chen404.domain.dto.LoginDTO;
 import com.chen404.domain.dto.LoginResultDTO;
 import com.chen404.domain.dto.RegisterDTO;
-import com.chen404.domain.dto.ChangePasswordDTO;
-import com.chen404.domain.dto.ForgotPasswordDTO;
 import com.chen404.domain.dto.UpdateProfileDTO;
 import com.chen404.domain.entity.User;
 
@@ -14,7 +13,10 @@ import java.util.List;
 /**
  * 用户服务接口
  */
-public interface UserService extends IService<User> {
+public interface UserService {
+
+    /** 认证流程读取账号快照；不存在时返回 null，不对外暴露通用 CRUD。 */
+    User findAccount(Long userId);
 
     /**
      * 用户登录

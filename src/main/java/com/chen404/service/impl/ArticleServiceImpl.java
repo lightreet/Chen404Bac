@@ -3,52 +3,55 @@ package com.chen404.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.chen404.domain.enums.ArticleCommentPolicyEnum;
-import com.chen404.domain.enums.ArticleStatusEnum;
-import com.chen404.domain.enums.ArticleVisibilityEnum;
-import com.chen404.domain.enums.AdminNotificationEventTypeEnum;
-import com.chen404.domain.enums.AdminNotificationResourceTypeEnum;
+import com.chen404.converter.ArticleCommandConverter;
+import com.chen404.domain.PageBounds;
+import com.chen404.domain.PageResult;
+import com.chen404.domain.access.ArticleReadScope;
 import com.chen404.domain.dto.ArchiveArticleItem;
 import com.chen404.domain.dto.ArchiveMonthVO;
 import com.chen404.domain.dto.ArchiveYearVO;
+import com.chen404.domain.dto.ArticleDetailVO;
 import com.chen404.domain.dto.ArticleLikeResult;
-import com.chen404.domain.enums.UserTrustLevelEnum;
-import com.chen404.domain.entity.Article;
-import com.chen404.domain.PageBounds;
+import com.chen404.domain.dto.ArticleListItemVO;
+import com.chen404.domain.dto.ArticleNeighborsVO;
 import com.chen404.domain.dto.ArticleSearchCriteria;
-import com.chen404.domain.access.ArticleReadScope;
-import com.chen404.domain.entity.SysFile;
+import com.chen404.domain.dto.ArticleTagVO;
+import com.chen404.domain.dto.ArticleWriteCommand;
+import com.chen404.domain.dto.CreateArticleCommand;
+import com.chen404.domain.dto.UpdateArticleCommand;
+import com.chen404.domain.entity.Article;
 import com.chen404.domain.entity.ArticleTag;
-import com.chen404.domain.entity.Category;
+import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.entity.Tag;
 import com.chen404.domain.entity.User;
 import com.chen404.domain.entity.UserArticleFavorite;
-import com.chen404.domain.entity.UserArticleLike;
+import com.chen404.domain.enums.AdminNotificationEventTypeEnum;
+import com.chen404.domain.enums.AdminNotificationResourceTypeEnum;
+import com.chen404.domain.enums.ArticleCommentPolicyEnum;
+import com.chen404.domain.enums.ArticleStatusEnum;
+import com.chen404.domain.enums.ArticleVisibilityEnum;
 import com.chen404.domain.event.AdminContentEvent;
-import com.chen404.exception.ForbiddenException;
 import com.chen404.exception.ConflictException;
+import com.chen404.exception.ForbiddenException;
 import com.chen404.exception.ResourceNotFoundException;
 import com.chen404.exception.TooManyRequestsException;
 import com.chen404.exception.UnauthorizedException;
 import com.chen404.mapper.ArticleMapper;
 import com.chen404.mapper.ArticleTagMapper;
 import com.chen404.mapper.CategoryMapper;
-import com.chen404.mapper.TagMapper;
 import com.chen404.mapper.UserArticleFavoriteMapper;
 import com.chen404.mapper.UserArticleLikeMapper;
-import com.chen404.mapper.UserMapper;
 import com.chen404.service.AccessService;
 import com.chen404.service.AdminContentEventPublisher;
-import com.chen404.service.FileReferenceService;
-import com.chen404.service.FileClaim;
-import com.chen404.service.ProtectedFileAccessService;
 import com.chen404.service.ArticleKnowledgeService;
 import com.chen404.service.ArticleService;
+import com.chen404.service.FileClaim;
+import com.chen404.service.FileReferenceService;
+import com.chen404.service.ProtectedFileAccessService;
 import com.chen404.service.SysFileService;
 import com.chen404.service.TagService;
-import com.chen404.service.support.UserAccessProfileSupport;
 import com.chen404.service.support.ArticlePolicyValidator;
+import com.chen404.service.support.ArticleViewAssembler;
 import com.chen404.util.RedisKeys;
 import com.chen404.util.RedisUtil;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,21 +59,20 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
-import java.time.LocalDateTime;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.stream.Collectors;
 
+/** 文章用例编排；写入仅接收命令，读取返回专用视图，数据库实体留在服务内部。 */
 @Service
-public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> implements ArticleService {
+public class ArticleServiceImpl implements ArticleService {
 
     private static final long LIKE_COOLDOWN_MS = 60_000L;
     private static final int DEFAULT_VISIBLE_SCAN_LIMIT = 60;
@@ -80,13 +82,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     private ArticleMapper articleMapper;
 
     @Autowired
-    private UserMapper userMapper;
-
-    @Autowired
     private CategoryMapper categoryMapper;
-
-    @Autowired
-    private TagMapper tagMapper;
 
     @Autowired
     private ArticleTagMapper articleTagMapper;
@@ -113,9 +109,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     private RedisUtil redisUtil;
 
     @Autowired
-    private UserAccessProfileSupport userAccessProfileSupport;
-
-    @Autowired
     private ArticleKnowledgeService articleKnowledgeService;
 
     @Autowired
@@ -124,21 +117,25 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     @Autowired
     private AdminContentEventPublisher adminContentEventPublisher;
 
+    @Autowired
+    private ArticleCommandConverter commandConverter;
+
+    @Autowired
+    private ArticleViewAssembler viewAssembler;
+
     @Override
-    public Page<Article> getArticlePage(Integer page, Integer size, Integer status, Long categoryId, Long tagId, Long authorId, String keyword, Long requesterId) {
+    public PageResult<ArticleListItemVO> getArticlePage(Integer page, Integer size, Integer status, Long categoryId, Long tagId, Long authorId, String keyword, Long requesterId) {
         // 公共文章流固定为已发布；访问范围在数据库中应用，避免先扫描再分页。
         ArticleSearchCriteria criteria = new ArticleSearchCriteria(
                 ArticleStatusEnum.PUBLISHED.getValue(), categoryId, tagId, authorId, keyword);
         PageBounds bounds = PageBounds.of(page, size, PageBounds.DEFAULT_SIZE);
         Page<Article> result = articleMapper.selectReadablePage(new Page<>(bounds.current(), bounds.size()),
                 criteria, ArticleReadScope.forUser(accessService.getUserOrNull(requesterId)), false);
-        batchFillArticleRelations(result.getRecords());
-        applyArticlePermissions(result.getRecords(), requesterId);
-        return result;
+        return viewAssembler.toPage(result, requesterId, false);
     }
 
     @Override
-    public Page<Article> getMyArticlePage(Long userId, Integer page, Integer size, Integer status, String keyword) {
+    public PageResult<ArticleListItemVO> getMyArticlePage(Long userId, Integer page, Integer size, Integer status, String keyword) {
         if (userId == null) {
             throw new UnauthorizedException();
         }
@@ -146,13 +143,11 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         ArticleSearchCriteria criteria = new ArticleSearchCriteria(status, null, null, userId, keyword);
         Page<Article> result = articleMapper.selectReadablePage(new Page<>(bounds.current(), bounds.size()),
                 criteria, ArticleReadScope.forUser(accessService.getUserOrNull(userId)), true);
-        batchFillArticleRelations(result.getRecords());
-        applyArticlePermissions(result.getRecords(), userId);
-        return result;
+        return viewAssembler.toPage(result, userId, false);
     }
 
     @Override
-    public Article getArticleById(Long id, boolean incrementView, Long requesterId) {
+    public ArticleDetailVO getArticleById(Long id, boolean incrementView, Long requesterId) {
         Article article = articleMapper.selectById(id);
         if (article == null) {
             return null;
@@ -168,36 +163,15 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
             article.setViewCount(article.getViewCount() + 1);
         }
 
-        // 填充关联数据
-        fillArticleRelations(article);
-        issueArticleFileUrls(article, true);
-        accessService.fillArticlePermissions(article, requesterId);
-        fillArticleInteractionFlags(article, requesterId);
-
-        return article;
-    }
-
-    private void fillArticleInteractionFlags(Article article, Long requesterId) {
-        if (article == null || requesterId == null) {
-            return;
-        }
-        long likedCount = userArticleLikeMapper.selectCount(new LambdaQueryWrapper<UserArticleLike>()
-                .eq(UserArticleLike::getUserId, requesterId)
-                .eq(UserArticleLike::getArticleId, article.getId()));
-        article.setLiked(likedCount > 0);
-        long favCount = userArticleFavoriteMapper.selectCount(new LambdaQueryWrapper<UserArticleFavorite>()
-                .eq(UserArticleFavorite::getUserId, requesterId)
-                .eq(UserArticleFavorite::getArticleId, article.getId()));
-        article.setFavorited(favCount > 0);
+        return viewAssembler.toDetail(article, requesterId);
     }
 
     @Override
-    public Map<String, Article> getNeighbors(Long articleId, Long requesterId) {
+    public ArticleNeighborsVO getNeighbors(Long articleId, Long requesterId) {
         Article current = articleMapper.selectById(articleId);
         if (current == null || current.getPublishTime() == null || !accessService.canViewArticle(requesterId, current)) {
-            return Map.of();
+            return new ArticleNeighborsVO();
         }
-        Map<String, Article> result = new java.util.HashMap<>();
         ArticleReadScope scope = ArticleReadScope.forUser(accessService.getUserOrNull(requesterId));
 
         // 上一篇：发布时间早于当前，取最近一篇
@@ -210,9 +184,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                 .filter(article -> scope.canRead(article))
                 .findFirst()
                 .orElse(null);
-        if (prev != null) {
-            result.put("prev", prev);
-        }
 
         // 下一篇：发布时间晚于当前，取最早一篇
         LambdaQueryWrapper<Article> nextWrapper = new LambdaQueryWrapper<>();
@@ -224,17 +195,16 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                 .filter(article -> scope.canRead(article))
                 .findFirst()
                 .orElse(null);
-        if (next != null) {
-            result.put("next", next);
-        }
 
-        return result;
+        return viewAssembler.toNeighbors(prev, next);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Article createArticle(Article article) {
-        ArticlePolicyValidator.validate(article);
+    public ArticleDetailVO createArticle(CreateArticleCommand command, Long operatorId) {
+        ArticlePolicyValidator.validate(command);
+        Article article = commandConverter.toEntity(command);
+        article.setAuthorId(operatorId);
         User operator = accessService.getUserOrNull(article.getAuthorId());
         if (operator == null) {
             throw new UnauthorizedException();
@@ -283,7 +253,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         articleMapper.insert(article);
 
         // 解析 tagNames 为 ID 并合并到 tagIds，再保存标签关联
-        List<Long> resolvedTagIds = resolveTagIds(article);
+        List<Long> resolvedTagIds = resolveTagIds(command);
         if (!resolvedTagIds.isEmpty()) {
             saveArticleTags(article.getId(), resolvedTagIds);
         }
@@ -301,13 +271,14 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         articleKnowledgeService.syncArticleChunks(article.getId());
 
         publishArticleCreatedEvent(article);
-        return article;
+        return getArticleById(article.getId(), false, operatorId);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Article updateArticle(Long id, Article article, Long operatorId) {
-        ArticlePolicyValidator.validate(article);
+    public ArticleDetailVO updateArticle(Long id, UpdateArticleCommand command, Long operatorId) {
+        ArticlePolicyValidator.validate(command);
+        Article article = commandConverter.toEntity(command);
         Article existing = articleMapper.selectById(id);
         if (existing == null) {
             throw new ResourceNotFoundException("文章不存在");
@@ -355,7 +326,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         }
 
         // 解析 tagNames 并合并 tagIds，更新标签关联
-        List<Long> resolvedTagIds = resolveTagIds(article);
+        List<Long> resolvedTagIds = resolveTagIds(command);
         articleTagMapper.delete(new LambdaQueryWrapper<ArticleTag>()
                 .eq(ArticleTag::getArticleId, id));
         if (!resolvedTagIds.isEmpty()) {
@@ -515,7 +486,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     }
 
     @Override
-    public Page<Article> getMyLikedArticlePage(Long userId, Integer page, Integer size) {
+    public PageResult<ArticleListItemVO> getMyLikedArticlePage(Long userId, Integer page, Integer size) {
         if (userId == null) {
             throw new UnauthorizedException();
         }
@@ -523,7 +494,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     }
 
     @Override
-    public Page<Article> getMyFavoriteArticlePage(Long userId, Integer page, Integer size) {
+    public PageResult<ArticleListItemVO> getMyFavoriteArticlePage(Long userId, Integer page, Integer size) {
         if (userId == null) {
             throw new UnauthorizedException();
         }
@@ -533,35 +504,32 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     /**
      * 按关联表时间倒序，对当前仍可见的文章进行数据库分页
      */
-    private Page<Article> buildArticlePageFromUserRelation(Long userId, Integer page, Integer size, boolean likes) {
+    private PageResult<ArticleListItemVO> buildArticlePageFromUserRelation(Long userId, Integer page, Integer size, boolean likes) {
         PageBounds bounds = PageBounds.of(page, size, PageBounds.DEFAULT_SIZE);
         Page<Article> result = articleMapper.selectRelatedPage(new Page<>(bounds.current(), bounds.size()), userId,
                 likes, ArticleReadScope.forUser(accessService.getUserOrNull(userId)));
-        batchFillArticleRelations(result.getRecords());
-        applyArticlePermissions(result.getRecords(), userId);
-        batchFillArticleInteractionFlags(result.getRecords(), userId);
-        return result;
+        return viewAssembler.toPage(result, userId, true);
     }
 
     @Override
-    public List<Article> getHotArticles(Integer limit, Long requesterId) {
+    public List<ArticleListItemVO> getHotArticles(Integer limit, Long requesterId) {
         int safeLimit = limit == null || limit < 1 ? 10 : limit;
         LambdaQueryWrapper<Article> wrapper = new LambdaQueryWrapper<Article>()
                 .eq(Article::getStatus, ArticleStatusEnum.PUBLISHED.getValue())
                 .orderByDesc(Article::getViewCount)
                 .last("LIMIT " + DEFAULT_VISIBLE_SCAN_LIMIT);
-        return filterVisibleArticles(articleMapper.selectList(wrapper), requesterId, safeLimit, false);
+        return viewAssembler.toList(filterVisibleArticles(articleMapper.selectList(wrapper), requesterId, safeLimit), requesterId, false);
     }
 
     @Override
-    public List<Article> getRecommendArticles(Integer limit, Long requesterId) {
+    public List<ArticleListItemVO> getRecommendArticles(Integer limit, Long requesterId) {
         int safeLimit = limit == null || limit < 1 ? 6 : limit;
         LambdaQueryWrapper<Article> wrapper = new LambdaQueryWrapper<Article>()
                 .eq(Article::getStatus, ArticleStatusEnum.PUBLISHED.getValue())
                 .eq(Article::getIsRecommend, 1)
                 .orderByDesc(Article::getCreateTime)
                 .last("LIMIT " + DEFAULT_VISIBLE_SCAN_LIMIT);
-        return filterVisibleArticles(articleMapper.selectList(wrapper), requesterId, safeLimit, false);
+        return viewAssembler.toList(filterVisibleArticles(articleMapper.selectList(wrapper), requesterId, safeLimit), requesterId, false);
     }
 
     @Override
@@ -582,8 +550,9 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                 Article::getStatus,
                 Article::getVisibility,
                 Article::getPublishTime);
-        List<Article> rows = filterVisibleArticles(articleMapper.selectList(w), requesterId, null, false);
-        Map<Long, List<Tag>> tagsByArticleId = buildTagsByArticleId(rows);
+        List<Article> rows = filterVisibleArticles(articleMapper.selectList(w), requesterId, null);
+        Map<Long, List<ArticleTagVO>> tagsByArticleId = viewAssembler.tagsByArticleIds(
+                rows.stream().map(Article::getId).toList());
 
         Map<Integer, Map<Integer, List<ArchiveArticleItem>>> byYearMonth = new LinkedHashMap<>();
         for (Article a : rows) {
@@ -633,47 +602,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         return result;
     }
 
-    /**
-     * 填充文章关联数据
-     */
-    private void fillArticleRelations(Article article) {
-        // 填充作者信息
-        if (article.getAuthorId() != null) {
-            User author = userMapper.selectById(article.getAuthorId());
-            if (author != null) {
-                author.setPassword(null);
-                if (author.getTrustLevel() == null) {
-                    author.setTrustLevel(UserTrustLevelEnum.NORMAL.getLevel());
-                }
-                userAccessProfileSupport.applyDisplayAvatar(author);
-                article.setAuthor(author);
-            }
-        }
-
-        // 填充分类信息
-        if (article.getCategoryId() != null) {
-            Category category = categoryMapper.selectById(article.getCategoryId());
-            article.setCategory(category);
-        }
-
-        // 填充标签信息
-        List<Tag> tags = tagMapper.selectTagsByArticleId(article.getId());
-        article.setTags(tags);
-
-        resolveCoverImageFromSysFile(article);
-    }
-
-    /** 有 cover_file_id 时，用 sys_file 当前 URL 覆盖展示字段（换域名/桶时仍正确） */
-    private void resolveCoverImageFromSysFile(Article article) {
-        if (article == null || article.getCoverFileId() == null) {
-            return;
-        }
-        SysFile f = sysFileService.getById(article.getCoverFileId());
-        if (f != null && StringUtils.hasText(f.getFileUrl())) {
-            article.setCoverImage(f.getFileUrl());
-        }
-    }
-
     /** 保存/更新文章后，将封面 URL 解析为 sys_file.id 写入 article.cover_file_id */
     private void persistCoverFileId(Long articleId, String coverImage) {
         if (articleId == null) {
@@ -686,15 +614,15 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     }
 
     /**
-     * 将 article.tagIds 与 article.tagNames（findOrCreate 后）合并为最终要保存的 tagId 列表
+     * 将命令中的 tagIds 与 tagNames（findOrCreate 后）合并为最终要保存的 tagId 列表
      */
-    private List<Long> resolveTagIds(Article article) {
+    private List<Long> resolveTagIds(ArticleWriteCommand command) {
         List<Long> ids = new ArrayList<>();
-        if (article.getTagIds() != null) {
-            ids.addAll(article.getTagIds());
+        if (command.getTagIds() != null) {
+            ids.addAll(command.getTagIds());
         }
-        if (article.getTagNames() != null && !article.getTagNames().isEmpty()) {
-            for (String name : article.getTagNames()) {
+        if (command.getTagNames() != null && !command.getTagNames().isEmpty()) {
+            for (String name : command.getTagNames()) {
                 if (!StringUtils.hasText(name)) {
                     continue;
                 }
@@ -771,24 +699,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         article.setCoverImage(protectedFileAccessService.normalizeUrl(article.getCoverImage()));
     }
 
-    private void issueArticleFileUrls(Article article, boolean includeContent) {
-        if (article == null || article.getId() == null) {
-            return;
-        }
-        if (includeContent) {
-            article.setContent(protectedFileAccessService.issueContentUrls(
-                    article.getContent(),
-                    SysFile.RefType.ARTICLE_CONTENT,
-                    article.getId()
-            ));
-        }
-        article.setCoverImage(protectedFileAccessService.issueUrlForReference(
-                article.getCoverImage(),
-                SysFile.RefType.ARTICLE_COVER,
-                article.getId()
-        ));
-    }
-
     private void assertAnonymousArticleLikeAllowed(Long articleId, String clientIp) {
         String key = RedisKeys.articleLikeThrottle(articleId, normalizeClientIp(clientIp));
         if (!redisUtil.setIfAbsent(key, "1", Duration.ofMillis(LIKE_COOLDOWN_MS))) {
@@ -796,7 +706,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         }
     }
 
-    private List<Article> filterVisibleArticles(List<Article> candidates, Long requesterId, Integer limit, boolean fillRelations) {
+    private List<Article> filterVisibleArticles(List<Article> candidates, Long requesterId, Integer limit) {
         if (candidates == null || candidates.isEmpty()) {
             return List.of();
         }
@@ -807,156 +717,25 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
             if (!scope.canRead(article)) {
                 continue;
             }
-            if (!fillRelations) {
-                resolveCoverImageFromSysFile(article);
-            }
             result.add(article);
             if (limit != null && result.size() >= limit) {
                 break;
             }
         }
-        if (fillRelations) {
-            batchFillArticleRelations(result);
-            applyArticlePermissions(result, requesterId);
-        }
         return result;
     }
 
-    private void batchFillArticleRelations(List<Article> articles) {
-        if (articles == null || articles.isEmpty()) {
-            return;
-        }
-
-        Set<Long> authorIds = new HashSet<>();
-        Set<Long> categoryIds = new HashSet<>();
-        Set<Long> coverFileIds = new HashSet<>();
-        for (Article article : articles) {
-            if (article.getAuthorId() != null) {
-                authorIds.add(article.getAuthorId());
-            }
-            if (article.getCategoryId() != null) {
-                categoryIds.add(article.getCategoryId());
-            }
-            if (article.getCoverFileId() != null) {
-                coverFileIds.add(article.getCoverFileId());
-            }
-        }
-
-        Map<Long, User> authorById = userMapper.selectBatchIds(authorIds).stream()
-                .collect(Collectors.toMap(User::getId, author -> {
-                    author.setPassword(null);
-                    if (author.getTrustLevel() == null) {
-                        author.setTrustLevel(UserTrustLevelEnum.NORMAL.getLevel());
-                    }
-                    userAccessProfileSupport.applyDisplayAvatar(author);
-                    return author;
-                }));
-
-        Map<Long, Category> categoryById = categoryMapper.selectBatchIds(categoryIds).stream()
-                .collect(Collectors.toMap(Category::getId, category -> category));
-
-        Map<Long, List<Tag>> tagsByArticleId = buildTagsByArticleId(articles);
-
-        Map<Long, String> coverUrlByFileId = sysFileService.listByIds(coverFileIds).stream()
-                .filter(file -> file != null && file.getId() != null && StringUtils.hasText(file.getFileUrl()))
-                .collect(Collectors.toMap(SysFile::getId, SysFile::getFileUrl));
-
-        for (Article article : articles) {
-            article.setAuthor(authorById.get(article.getAuthorId()));
-            article.setCategory(categoryById.get(article.getCategoryId()));
-            article.setTags(tagsByArticleId.getOrDefault(article.getId(), List.of()));
-            if (article.getCoverFileId() != null) {
-                String coverUrl = coverUrlByFileId.get(article.getCoverFileId());
-                if (StringUtils.hasText(coverUrl)) {
-                    article.setCoverImage(coverUrl);
-                }
-            }
-            issueArticleFileUrls(article, false);
-        }
-    }
-
-    private Map<Long, List<Tag>> buildTagsByArticleId(List<Article> articles) {
-        if (articles == null || articles.isEmpty()) {
+    @Override
+    public Map<Long, String> getVisibleArticleTitles(Collection<Long> articleIds, Long requesterId) {
+        if (articleIds == null || articleIds.isEmpty()) {
             return Map.of();
         }
-
-        List<Long> articleIds = articles.stream()
-                .map(Article::getId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
-        if (articleIds.isEmpty()) {
-            return Map.of();
-        }
-
-        List<ArticleTag> articleTags = articleTagMapper.selectList(new LambdaQueryWrapper<ArticleTag>()
-                .in(ArticleTag::getArticleId, articleIds));
-        if (articleTags.isEmpty()) {
-            return Map.of();
-        }
-
-        Set<Long> tagIds = articleTags.stream()
-                .map(ArticleTag::getTagId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        Map<Long, Tag> tagById = tagMapper.selectBatchIds(tagIds).stream()
-                .filter(tag -> tag != null
-                        && Objects.equals(tag.getStatus(), 1)
-                        && !Objects.equals(tag.getDeleted(), 1))
-                .collect(Collectors.toMap(Tag::getId, tag -> tag));
-
-        Map<Long, List<Tag>> tagsByArticleId = new HashMap<>();
-        for (ArticleTag articleTag : articleTags) {
-            Tag tag = tagById.get(articleTag.getTagId());
-            if (tag == null) {
-                continue;
-            }
-            tagsByArticleId
-                    .computeIfAbsent(articleTag.getArticleId(), key -> new ArrayList<>())
-                    .add(tag);
-        }
-        return tagsByArticleId;
-    }
-
-    private void applyArticlePermissions(List<Article> articles, Long requesterId) {
-        if (articles == null || articles.isEmpty()) {
-            return;
-        }
-        for (Article article : articles) {
-            accessService.fillArticlePermissions(article, requesterId);
-        }
-    }
-
-    private void batchFillArticleInteractionFlags(List<Article> articles, Long requesterId) {
-        if (articles == null || articles.isEmpty() || requesterId == null) {
-            return;
-        }
-
-        List<Long> articleIds = articles.stream()
-                .map(Article::getId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
-        if (articleIds.isEmpty()) {
-            return;
-        }
-
-        Set<Long> likedArticleIds = userArticleLikeMapper.selectList(new LambdaQueryWrapper<UserArticleLike>()
-                        .eq(UserArticleLike::getUserId, requesterId)
-                        .in(UserArticleLike::getArticleId, articleIds))
-                .stream()
-                .map(UserArticleLike::getArticleId)
-                .collect(Collectors.toSet());
-
-        Set<Long> favoritedArticleIds = userArticleFavoriteMapper.selectList(new LambdaQueryWrapper<UserArticleFavorite>()
-                        .eq(UserArticleFavorite::getUserId, requesterId)
-                        .in(UserArticleFavorite::getArticleId, articleIds))
-                .stream()
-                .map(UserArticleFavorite::getArticleId)
-                .collect(Collectors.toSet());
-
-        for (Article article : articles) {
-            article.setLiked(likedArticleIds.contains(article.getId()));
-            article.setFavorited(favoritedArticleIds.contains(article.getId()));
-        }
+        ArticleReadScope scope = ArticleReadScope.forUser(accessService.getUserOrNull(requesterId));
+        return articleMapper.selectList(new LambdaQueryWrapper<Article>()
+                        .in(Article::getId, articleIds)
+                        .select(Article::getId, Article::getTitle, Article::getAuthorId, Article::getStatus, Article::getVisibility))
+                .stream().filter(scope::canRead).filter(article -> StringUtils.hasText(article.getTitle()))
+                .collect(Collectors.toMap(Article::getId, Article::getTitle));
     }
 
     private String normalizeClientIp(String clientIp) {

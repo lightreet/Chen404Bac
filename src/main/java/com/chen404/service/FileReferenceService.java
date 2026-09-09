@@ -1,7 +1,5 @@
 package com.chen404.service;
 
-import com.baomidou.mybatisplus.extension.service.IService;
-import com.chen404.domain.entity.FileReference;
 import com.chen404.domain.entity.TravelMemoryEntry;
 
 import java.util.Collection;
@@ -11,7 +9,7 @@ import java.util.Map;
 /**
  * 统一文件引用关系服务接口。
  */
-public interface FileReferenceService extends IService<FileReference> {
+public interface FileReferenceService {
 
     /** 同步文章正文与封面的文件引用。 */
     void syncArticleReferences(Long articleId, String content, String coverImage);

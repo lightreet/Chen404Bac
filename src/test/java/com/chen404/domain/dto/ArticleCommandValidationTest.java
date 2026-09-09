@@ -1,6 +1,5 @@
 package com.chen404.domain.dto;
 
-import com.chen404.domain.entity.Article;
 import com.chen404.exception.BadRequestException;
 import com.chen404.service.impl.ArticleServiceImpl;
 import com.chen404.service.support.ArticlePolicyValidator;
@@ -39,12 +38,12 @@ class ArticleCommandValidationTest {
         assertTrue(VALIDATOR.validate(command).stream()
                 .anyMatch(violation -> field.equals(violation.getPropertyPath().toString())));
 
-        Article article = new Article();
-        article.setStatus(1);
-        new BeanWrapperImpl(article).setPropertyValue(field, invalid);
         ArticleServiceImpl service = new ArticleServiceImpl();
-        assertThrows(BadRequestException.class, () -> service.createArticle(article));
-        assertThrows(BadRequestException.class, () -> service.updateArticle(1L, article, 7L));
+        if (command instanceof CreateArticleCommand create) {
+            assertThrows(BadRequestException.class, () -> service.createArticle(create, 7L));
+        } else {
+            assertThrows(BadRequestException.class, () -> service.updateArticle(1L, (UpdateArticleCommand) command, 7L));
+        }
     }
 
     @Test
@@ -60,7 +59,7 @@ class ArticleCommandValidationTest {
                     command.setVisibility(visibility);
                     command.setCommentPolicy(policy);
                     assertTrue(VALIDATOR.validate(command).isEmpty());
-                    Article article = new Article();
+                    CreateArticleCommand article = new CreateArticleCommand();
                     article.setStatus(status);
                     article.setVisibility(visibility);
                     article.setCommentPolicy(policy);
@@ -68,7 +67,7 @@ class ArticleCommandValidationTest {
                 }
             }
         }
-        Article defaults = new Article();
+        CreateArticleCommand defaults = new CreateArticleCommand();
         defaults.setStatus(0);
         assertDoesNotThrow(() -> ArticlePolicyValidator.validate(defaults));
         defaults.setStatus(null);

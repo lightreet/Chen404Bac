@@ -1,11 +1,10 @@
 package com.chen404.service.impl;
 
-import com.chen404.domain.ReaderBookConstraints;
-import com.chen404.util.TextUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.chen404.domain.ReaderBookConstraints;
+import com.chen404.domain.dto.ReaderBookPreviewVO;
 import com.chen404.domain.dto.ReaderBookUpdateCommand;
 import com.chen404.domain.dto.ReaderBookVO;
-import com.chen404.domain.dto.ReaderBookPreviewVO;
 import com.chen404.domain.dto.ReaderChapterVO;
 import com.chen404.domain.dto.ReaderPreferenceCommand;
 import com.chen404.domain.dto.ReaderPreferenceVO;
@@ -16,9 +15,9 @@ import com.chen404.domain.dto.ReaderTocItemVO;
 import com.chen404.domain.entity.ReaderBook;
 import com.chen404.domain.entity.ReaderBookAsset;
 import com.chen404.domain.entity.ReaderChapter;
+import com.chen404.domain.entity.ReaderNote;
 import com.chen404.domain.entity.ReaderPreference;
 import com.chen404.domain.entity.ReaderProgress;
-import com.chen404.domain.entity.ReaderNote;
 import com.chen404.domain.entity.ReaderTocItem;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.enums.ReaderBookVisibilityEnum;
@@ -30,19 +29,20 @@ import com.chen404.exception.ResourceNotFoundException;
 import com.chen404.mapper.ReaderBookAssetMapper;
 import com.chen404.mapper.ReaderBookMapper;
 import com.chen404.mapper.ReaderChapterMapper;
+import com.chen404.mapper.ReaderNoteMapper;
 import com.chen404.mapper.ReaderPreferenceMapper;
 import com.chen404.mapper.ReaderProgressMapper;
-import com.chen404.mapper.ReaderNoteMapper;
 import com.chen404.mapper.ReaderTocItemMapper;
+import com.chen404.service.AccessService;
 import com.chen404.service.FileClaim;
 import com.chen404.service.FileReferenceService;
-import com.chen404.service.AccessService;
 import com.chen404.service.ProtectedFileAccessService;
 import com.chen404.service.ReaderLibraryService;
 import com.chen404.service.SysFileService;
 import com.chen404.service.support.reader.ParsedReaderBook;
 import com.chen404.service.support.reader.ReaderBookParser;
 import com.chen404.service.support.reader.ReaderImportTaskRunner;
+import com.chen404.util.TextUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.task.TaskRejectedException;
 import org.springframework.stereotype.Service;
@@ -256,7 +256,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
         preview.setTitle(TextUtil.truncate(parsed.getTitle(), ReaderBookConstraints.TITLE_MAX_LENGTH));
         preview.setAuthor(TextUtil.truncate(parsed.getAuthor(), ReaderBookConstraints.AUTHOR_MAX_LENGTH));
         preview.setDescription(TextUtil.truncate(parsed.getDescription(), ReaderBookConstraints.DESCRIPTION_MAX_LENGTH));
-        preview.setLanguage(TextUtil.truncate(parsed.getLanguage(), 40));
+        preview.setLanguage(TextUtil.truncate(parsed.getLanguage(), ReaderBookConstraints.LANGUAGE_MAX_LENGTH));
         preview.setSourceFormat(parsed.getFormat());
         preview.setSourceEncoding(parsed.getEncoding());
         parsed.getAssets().stream()
@@ -298,7 +298,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
                 description,
                 previewParsed == null ? null : previewParsed.getDescription()
         ), ReaderBookConstraints.DESCRIPTION_MAX_LENGTH));
-        book.setLanguage(TextUtil.truncate(previewParsed == null ? null : previewParsed.getLanguage(), 40));
+        book.setLanguage(TextUtil.truncate(previewParsed == null ? null : previewParsed.getLanguage(), ReaderBookConstraints.LANGUAGE_MAX_LENGTH));
         book.setVisibility(ReaderBookVisibilityEnum.normalize(visibility));
         book.setSourceFormat(previewParsed == null ? source.sourceFormat() : previewParsed.getFormat());
         book.setSourceEncoding(previewParsed == null ? blankToNull(encoding) : previewParsed.getEncoding());
@@ -682,7 +682,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
         if (coverFileId == null) {
             return;
         }
-        SysFile coverFile = sysFileService.getById(coverFileId);
+        SysFile coverFile = sysFileService.findById(coverFileId);
         if (coverFile == null) {
             throw new BadRequestException("小说封面不存在或已过期，请重新上传");
         }
@@ -698,7 +698,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
         if (coverFileId == null) {
             return;
         }
-        SysFile coverFile = sysFileService.getById(coverFileId);
+        SysFile coverFile = sysFileService.findById(coverFileId);
         if (coverFile != null && StringUtils.hasText(coverFile.getFileUrl())) {
             sysFileService.deleteByUrl(coverFile.getFileUrl(), userId);
         }
@@ -810,7 +810,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
 
     private String resolveCoverUrl(ReaderBook book) {
         if (book.getCoverFileId() != null) {
-            SysFile coverFile = sysFileService.getById(book.getCoverFileId());
+            SysFile coverFile = sysFileService.findById(book.getCoverFileId());
             if (coverFile != null && StringUtils.hasText(coverFile.getFileUrl())) {
                 return protectedFileAccessService.issueUrlForReference(
                         coverFile.getFileUrl(),
@@ -904,7 +904,6 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
         int dotIndex = fileName.lastIndexOf('.');
         return dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName;
     }
-
 
 
     private record UploadedReaderSource(

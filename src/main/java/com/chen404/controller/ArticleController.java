@@ -1,8 +1,5 @@
 package com.chen404.controller;
 
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.chen404.converter.ArticleCommandConverter;
-import com.chen404.converter.ArticleViewConverter;
 import com.chen404.domain.PageResult;
 import com.chen404.domain.Result;
 import com.chen404.domain.dto.ArchiveYearVO;
@@ -13,10 +10,7 @@ import com.chen404.domain.dto.ArticleNeighborsVO;
 import com.chen404.domain.dto.CreateArticleCommand;
 import com.chen404.domain.dto.FavoriteToggleResultDTO;
 import com.chen404.domain.dto.UpdateArticleCommand;
-import com.chen404.domain.entity.Article;
-import com.chen404.exception.ForbiddenException;
 import com.chen404.exception.ResourceNotFoundException;
-import com.chen404.exception.UnauthorizedException;
 import com.chen404.security.AuthenticatedUser;
 import com.chen404.service.ArticleService;
 import com.chen404.util.CurrentUserUtil;
@@ -37,7 +31,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * 文章控制器：列表/详情/热门/推荐等公开接口；我的文章、创建、更新、删除需要登录。
@@ -47,16 +40,9 @@ import java.util.Map;
 public class ArticleController {
 
     private final ArticleService articleService;
-    private final ArticleCommandConverter articleCommandConverter;
-    private final ArticleViewConverter articleViewConverter;
 
-    public ArticleController(
-            ArticleService articleService,
-            ArticleCommandConverter articleCommandConverter,
-            ArticleViewConverter articleViewConverter) {
+    public ArticleController(ArticleService articleService) {
         this.articleService = articleService;
-        this.articleCommandConverter = articleCommandConverter;
-        this.articleViewConverter = articleViewConverter;
     }
 
     @Operation(summary = "我的文章列表", description = "分页获取当前登录用户的文章，需要登录")
@@ -68,8 +54,8 @@ public class ArticleController {
             @RequestParam(required = false) String keyword,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
         Long userId = CurrentUserUtil.requireUserId(currentUser);
-        Page<Article> articlePage = articleService.getMyArticlePage(userId, page, size, status, keyword);
-        return Result.success(toPageResult(articlePage, articleViewConverter.toListItemVOList(articlePage.getRecords())));
+        PageResult<ArticleListItemVO> articlePage = articleService.getMyArticlePage(userId, page, size, status, keyword);
+        return Result.success(articlePage);
     }
 
     @Operation(summary = "我的点赞文章", description = "分页获取当前用户点赞过且仍可见的文章，需要登录")
@@ -79,8 +65,8 @@ public class ArticleController {
             @RequestParam(defaultValue = "10") Integer size,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
         Long userId = CurrentUserUtil.requireUserId(currentUser);
-        Page<Article> articlePage = articleService.getMyLikedArticlePage(userId, page, size);
-        return Result.success(toPageResult(articlePage, articleViewConverter.toListItemVOList(articlePage.getRecords())));
+        PageResult<ArticleListItemVO> articlePage = articleService.getMyLikedArticlePage(userId, page, size);
+        return Result.success(articlePage);
     }
 
     @Operation(summary = "我的收藏文章", description = "分页获取当前用户收藏的文章，需要登录")
@@ -90,8 +76,8 @@ public class ArticleController {
             @RequestParam(defaultValue = "10") Integer size,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
         Long userId = CurrentUserUtil.requireUserId(currentUser);
-        Page<Article> articlePage = articleService.getMyFavoriteArticlePage(userId, page, size);
-        return Result.success(toPageResult(articlePage, articleViewConverter.toListItemVOList(articlePage.getRecords())));
+        PageResult<ArticleListItemVO> articlePage = articleService.getMyFavoriteArticlePage(userId, page, size);
+        return Result.success(articlePage);
     }
 
     @Operation(summary = "获取文章列表", description = "支持分页、分类筛选、标签筛选；关键字仅按文章标题模糊匹配")
@@ -112,7 +98,7 @@ public class ArticleController {
             @RequestParam(required = false) Long authorId,
             @RequestParam(required = false) String keyword,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
-        Page<Article> articlePage = articleService.getArticlePage(
+        PageResult<ArticleListItemVO> articlePage = articleService.getArticlePage(
                 page,
                 size,
                 status,
@@ -122,7 +108,7 @@ public class ArticleController {
                 keyword,
                 CurrentUserUtil.getUserId(currentUser)
         );
-        return Result.success(toPageResult(articlePage, articleViewConverter.toListItemVOList(articlePage.getRecords())));
+        return Result.success(articlePage);
     }
 
     @Operation(summary = "获取文章详情", description = "获取单篇文章的详细信息")
@@ -133,11 +119,11 @@ public class ArticleController {
             @PathVariable Long id,
             @RequestParam(defaultValue = "true") Boolean incrementView,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
-        Article article = articleService.getArticleById(id, incrementView, CurrentUserUtil.getUserId(currentUser));
+        ArticleDetailVO article = articleService.getArticleById(id, incrementView, CurrentUserUtil.getUserId(currentUser));
         if (article == null) {
             throw new ResourceNotFoundException("文章不存在");
         }
-        return Result.success(articleViewConverter.toDetailVO(article));
+        return Result.success(article);
     }
 
     @Operation(summary = "上一篇 / 下一篇", description = "按发布时间获取相邻文章")
@@ -146,11 +132,7 @@ public class ArticleController {
     public Result<ArticleNeighborsVO> getArticleNeighbors(
             @PathVariable Long id,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
-        Map<String, Article> neighbors = articleService.getNeighbors(id, CurrentUserUtil.getUserId(currentUser));
-        ArticleNeighborsVO result = new ArticleNeighborsVO();
-        result.setPrev(articleViewConverter.toNeighborVO(neighbors.get("prev")));
-        result.setNext(articleViewConverter.toNeighborVO(neighbors.get("next")));
-        return Result.success(result);
+        return Result.success(articleService.getNeighbors(id, CurrentUserUtil.getUserId(currentUser)));
     }
 
     @Operation(summary = "归档时间线", description = "仅包含已发布且公开可见、有发布时间的文章，按发布时间倒序分组")
@@ -190,8 +172,8 @@ public class ArticleController {
     public Result<List<ArticleListItemVO>> getHotArticles(
             @RequestParam(defaultValue = "10") Integer limit,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
-        List<Article> articles = articleService.getHotArticles(limit, CurrentUserUtil.getUserId(currentUser));
-        return Result.success(articleViewConverter.toListItemVOList(articles));
+        List<ArticleListItemVO> articles = articleService.getHotArticles(limit, CurrentUserUtil.getUserId(currentUser));
+        return Result.success(articles);
     }
 
     @Operation(summary = "获取推荐文章", description = "获取管理员推荐的文章列表")
@@ -200,8 +182,8 @@ public class ArticleController {
     public Result<List<ArticleListItemVO>> getRecommendArticles(
             @RequestParam(defaultValue = "6") Integer limit,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
-        List<Article> articles = articleService.getRecommendArticles(limit, CurrentUserUtil.getUserId(currentUser));
-        return Result.success(articleViewConverter.toListItemVOList(articles));
+        List<ArticleListItemVO> articles = articleService.getRecommendArticles(limit, CurrentUserUtil.getUserId(currentUser));
+        return Result.success(articles);
     }
 
     @Operation(summary = "创建文章", description = "发布新文章或保存草稿，需要登录")
@@ -210,11 +192,7 @@ public class ArticleController {
             @Valid @RequestBody CreateArticleCommand command,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
         Long userId = CurrentUserUtil.requireUserId(currentUser);
-        Article article = articleCommandConverter.toEntity(command);
-        article.setAuthorId(userId);
-        Article created = articleService.createArticle(article);
-        Article freshArticle = articleService.getArticleById(created.getId(), false, userId);
-        return Result.success("创建成功", articleViewConverter.toDetailVO(freshArticle));
+        return Result.success("创建成功", articleService.createArticle(command, userId));
     }
 
     @Operation(summary = "更新文章", description = "更新已有文章，需要登录")
@@ -225,9 +203,7 @@ public class ArticleController {
             @Valid @RequestBody UpdateArticleCommand command,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
         Long userId = CurrentUserUtil.requireUserId(currentUser);
-        Article article = articleCommandConverter.toEntity(command);
-        Article updated = articleService.updateArticle(id, article, userId);
-        return Result.success("更新成功", articleViewConverter.toDetailVO(updated));
+        return Result.success("更新成功", articleService.updateArticle(id, command, userId));
     }
 
     @Operation(summary = "删除文章", description = "逻辑删除，需要登录")
@@ -241,7 +217,4 @@ public class ArticleController {
         return Result.success("删除成功");
     }
 
-    private <T> PageResult<T> toPageResult(Page<?> page, List<T> records) {
-        return new PageResult<>(records, page.getTotal(), page.getCurrent(), page.getSize());
-    }
 }

@@ -2,7 +2,7 @@ package com.chen404.service.support.scenario.chat;
 
 import com.chen404.domain.dto.AiAdminConfigDTO;
 import com.chen404.domain.dto.AiChatMessageDTO;
-import com.chen404.domain.entity.Article;
+import com.chen404.domain.dto.ArticleDetailVO;
 import com.chen404.service.support.chat.ArticleKnowledgeHit;
 import com.chen404.service.support.prompt.AiMaidPromptScene;
 
@@ -25,7 +25,7 @@ public record MaidChatScenarioRequest(
         List<AiChatMessageDTO> messages,
         String pageContext,
         Long currentArticleId,
-        Article currentArticle,
+        ArticleDetailVO currentArticle,
         List<ArticleKnowledgeHit> knowledgeHits,
         AiAdminConfigDTO aiConfig
 ) {

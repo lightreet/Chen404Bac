@@ -1,12 +1,10 @@
 package com.chen404.service;
 
-import com.baomidou.mybatisplus.extension.service.IService;
 import com.chen404.domain.PageResult;
 import com.chen404.domain.dto.CreateTrustRequestDTO;
 import com.chen404.domain.dto.TrustRequestVO;
-import com.chen404.domain.entity.UserTrustRequest;
 
-public interface UserTrustRequestService extends IService<UserTrustRequest> {
+public interface UserTrustRequestService {
 
     TrustRequestVO createRequest(Long userId, CreateTrustRequestDTO dto);
 
