@@ -15,6 +15,9 @@ import com.chen404.domain.dto.ArchiveYearVO;
 import com.chen404.domain.dto.ArticleLikeResult;
 import com.chen404.domain.enums.UserTrustLevelEnum;
 import com.chen404.domain.entity.Article;
+import com.chen404.domain.PageBounds;
+import com.chen404.domain.dto.ArticleSearchCriteria;
+import com.chen404.domain.access.ArticleReadScope;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.entity.ArticleTag;
 import com.chen404.domain.entity.Category;
@@ -123,52 +126,26 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
     @Override
     public Page<Article> getArticlePage(Integer page, Integer size, Integer status, Long categoryId, Long tagId, Long authorId, String keyword, Long requesterId) {
-        LambdaQueryWrapper<Article> wrapper = new LambdaQueryWrapper<>();
-
-        // 公共文章流只返回已发布文章；具体是否对当前访问者可见，再按访问控制过滤。
-        wrapper.eq(Article::getStatus, ArticleStatusEnum.PUBLISHED.getValue());
-
-        // 分类筛选
-        if (categoryId != null) {
-            wrapper.eq(Article::getCategoryId, categoryId);
-        }
-
-        // 标签筛选
-        if (tagId != null) {
-            wrapper.apply("id IN (SELECT article_id FROM article_tag WHERE tag_id = {0})", tagId);
-        }
-
-        if (authorId != null) {
-            wrapper.eq(Article::getAuthorId, authorId);
-        }
-
-        // 关键词搜索（公开列表：仅匹配标题）
-        if (StringUtils.hasText(keyword)) {
-            wrapper.like(Article::getTitle, keyword);
-        }
-
-        // 排序：置顶优先，再按「展示时间」倒序（无 publish_time 时用 create_time，避免 NULL 全堆在最前）
-        wrapper.last("ORDER BY is_top DESC, COALESCE(publish_time, create_time) DESC, id DESC");
-
-        return buildVisibleArticlePage(page, size, wrapper, requesterId);
+        // 公共文章流固定为已发布；访问范围在数据库中应用，避免先扫描再分页。
+        ArticleSearchCriteria criteria = new ArticleSearchCriteria(
+                ArticleStatusEnum.PUBLISHED.getValue(), categoryId, tagId, authorId, keyword);
+        PageBounds bounds = PageBounds.of(page, size, PageBounds.DEFAULT_SIZE);
+        Page<Article> result = articleMapper.selectReadablePage(new Page<>(bounds.current(), bounds.size()),
+                criteria, ArticleReadScope.forUser(accessService.getUserOrNull(requesterId)), false);
+        batchFillArticleRelations(result.getRecords());
+        applyArticlePermissions(result.getRecords(), requesterId);
+        return result;
     }
 
     @Override
     public Page<Article> getMyArticlePage(Long userId, Integer page, Integer size, Integer status, String keyword) {
-        Page<Article> pageParam = new Page<>(page, size);
-        LambdaQueryWrapper<Article> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(Article::getAuthorId, userId);
-        if (status != null) {
-            wrapper.eq(Article::getStatus, status);
+        if (userId == null) {
+            throw new UnauthorizedException();
         }
-        if (StringUtils.hasText(keyword)) {
-            wrapper.and(w -> w.like(Article::getTitle, keyword)
-                    .or()
-                    .like(Article::getSummary, keyword));
-        }
-        // 已发布按发布时间、草稿按最近编辑时间，统一「最近在前」
-        wrapper.last("ORDER BY COALESCE(publish_time, update_time, create_time) DESC, id DESC");
-        Page<Article> result = articleMapper.selectPage(pageParam, wrapper);
+        PageBounds bounds = PageBounds.of(page, size, PageBounds.DEFAULT_SIZE);
+        ArticleSearchCriteria criteria = new ArticleSearchCriteria(status, null, null, userId, keyword);
+        Page<Article> result = articleMapper.selectReadablePage(new Page<>(bounds.current(), bounds.size()),
+                criteria, ArticleReadScope.forUser(accessService.getUserOrNull(userId)), true);
         batchFillArticleRelations(result.getRecords());
         applyArticlePermissions(result.getRecords(), userId);
         return result;
@@ -221,7 +198,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
             return Map.of();
         }
         Map<String, Article> result = new java.util.HashMap<>();
-        User viewer = accessService.getUserOrNull(requesterId);
+        ArticleReadScope scope = ArticleReadScope.forUser(accessService.getUserOrNull(requesterId));
 
         // 上一篇：发布时间早于当前，取最近一篇
         LambdaQueryWrapper<Article> prevWrapper = new LambdaQueryWrapper<>();
@@ -230,7 +207,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                 .orderByDesc(Article::getPublishTime)
                 .last("LIMIT " + NEIGHBOR_SCAN_LIMIT);
         Article prev = articleMapper.selectList(prevWrapper).stream()
-                .filter(article -> canViewPublishedArticle(article, requesterId, viewer))
+                .filter(article -> scope.canRead(article))
                 .findFirst()
                 .orElse(null);
         if (prev != null) {
@@ -244,7 +221,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                 .orderByAsc(Article::getPublishTime)
                 .last("LIMIT " + NEIGHBOR_SCAN_LIMIT);
         Article next = articleMapper.selectList(nextWrapper).stream()
-                .filter(article -> canViewPublishedArticle(article, requesterId, viewer))
+                .filter(article -> scope.canRead(article))
                 .findFirst()
                 .orElse(null);
         if (next != null) {
@@ -554,47 +531,15 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     }
 
     /**
-     * 按关联表时间倒序取文章，过滤当前仍可见，内存分页
+     * 按关联表时间倒序，对当前仍可见的文章进行数据库分页
      */
-    private Page<Article> buildArticlePageFromUserRelation(Long userId, int page, int size, boolean likes) {
-        int current = Math.max(page, 1);
-        int pageSize = Math.max(size, 1);
-        int visibleOffset = (current - 1) * pageSize;
-        int scanBatchSize = Math.max(pageSize * 3, DEFAULT_VISIBLE_SCAN_LIMIT);
-
-        User viewer = accessService.getUserOrNull(userId);
-        List<Article> records = new ArrayList<>(pageSize);
-        long visibleTotal = 0L;
-        long relationPage = 1L;
-
-        while (true) {
-            List<Long> articleIdsOrdered = loadUserRelationArticleIds(userId, relationPage, scanBatchSize, likes);
-            if (articleIdsOrdered.isEmpty()) {
-                break;
-            }
-
-            for (Article article : loadArticlesByIdsPreservingOrder(articleIdsOrdered)) {
-                if (!canViewPublishedArticle(article, userId, viewer)) {
-                    continue;
-                }
-                if (visibleTotal >= visibleOffset && records.size() < pageSize) {
-                    records.add(article);
-                }
-                visibleTotal++;
-            }
-
-            if (articleIdsOrdered.size() < scanBatchSize) {
-                break;
-            }
-            relationPage++;
-        }
-
-        batchFillArticleRelations(records);
-        applyArticlePermissions(records, userId);
-        batchFillArticleInteractionFlags(records, userId);
-
-        Page<Article> result = new Page<>(current, pageSize, visibleTotal);
-        result.setRecords(records);
+    private Page<Article> buildArticlePageFromUserRelation(Long userId, Integer page, Integer size, boolean likes) {
+        PageBounds bounds = PageBounds.of(page, size, PageBounds.DEFAULT_SIZE);
+        Page<Article> result = articleMapper.selectRelatedPage(new Page<>(bounds.current(), bounds.size()), userId,
+                likes, ArticleReadScope.forUser(accessService.getUserOrNull(userId)));
+        batchFillArticleRelations(result.getRecords());
+        applyArticlePermissions(result.getRecords(), userId);
+        batchFillArticleInteractionFlags(result.getRecords(), userId);
         return result;
     }
 
@@ -851,57 +796,15 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         }
     }
 
-    private Page<Article> buildVisibleArticlePage(Integer page, Integer size, LambdaQueryWrapper<Article> wrapper, Long requesterId) {
-        int current = page == null || page < 1 ? 1 : page;
-        int pageSize = size == null || size < 1 ? 10 : size;
-        int visibleOffset = Math.max((current - 1) * pageSize, 0);
-        int scanBatchSize = Math.max(pageSize * 3, DEFAULT_VISIBLE_SCAN_LIMIT);
-
-        User viewer = accessService.getUserOrNull(requesterId);
-        List<Article> records = new ArrayList<>(pageSize);
-        long visibleTotal = 0L;
-        long scanPageNo = 1L;
-
-        while (true) {
-            Page<Article> scanPage = articleMapper.selectPage(new Page<>(scanPageNo, scanBatchSize, false), wrapper);
-            List<Article> candidates = scanPage.getRecords();
-            if (candidates == null || candidates.isEmpty()) {
-                break;
-            }
-
-            for (Article article : candidates) {
-                if (!canViewPublishedArticle(article, requesterId, viewer)) {
-                    continue;
-                }
-                if (visibleTotal >= visibleOffset && records.size() < pageSize) {
-                    records.add(article);
-                }
-                visibleTotal++;
-            }
-
-            if (candidates.size() < scanBatchSize) {
-                break;
-            }
-            scanPageNo++;
-        }
-
-        batchFillArticleRelations(records);
-        applyArticlePermissions(records, requesterId);
-
-        Page<Article> result = new Page<>(current, pageSize, visibleTotal);
-        result.setRecords(records);
-        return result;
-    }
-
     private List<Article> filterVisibleArticles(List<Article> candidates, Long requesterId, Integer limit, boolean fillRelations) {
         if (candidates == null || candidates.isEmpty()) {
             return List.of();
         }
 
-        User viewer = accessService.getUserOrNull(requesterId);
+        ArticleReadScope scope = ArticleReadScope.forUser(accessService.getUserOrNull(requesterId));
         List<Article> result = new ArrayList<>();
         for (Article article : candidates) {
-            if (!canViewPublishedArticle(article, requesterId, viewer)) {
+            if (!scope.canRead(article)) {
                 continue;
             }
             if (!fillRelations) {
@@ -917,48 +820,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
             applyArticlePermissions(result, requesterId);
         }
         return result;
-    }
-
-    private List<Long> loadUserRelationArticleIds(Long userId, long pageNo, int pageSize, boolean likes) {
-        if (likes) {
-            Page<UserArticleLike> relationPage = userArticleLikeMapper.selectPage(
-                    new Page<>(pageNo, pageSize, false),
-                    new LambdaQueryWrapper<UserArticleLike>()
-                            .eq(UserArticleLike::getUserId, userId)
-                            .orderByDesc(UserArticleLike::getCreateTime)
-            );
-            return relationPage.getRecords().stream()
-                    .map(UserArticleLike::getArticleId)
-                    .collect(Collectors.toList());
-        }
-
-        Page<UserArticleFavorite> relationPage = userArticleFavoriteMapper.selectPage(
-                new Page<>(pageNo, pageSize, false),
-                new LambdaQueryWrapper<UserArticleFavorite>()
-                        .eq(UserArticleFavorite::getUserId, userId)
-                        .orderByDesc(UserArticleFavorite::getCreateTime)
-        );
-        return relationPage.getRecords().stream()
-                .map(UserArticleFavorite::getArticleId)
-                .collect(Collectors.toList());
-    }
-
-    private List<Article> loadArticlesByIdsPreservingOrder(List<Long> orderedArticleIds) {
-        if (orderedArticleIds == null || orderedArticleIds.isEmpty()) {
-            return List.of();
-        }
-
-        Map<Long, Article> articleById = articleMapper.selectBatchIds(orderedArticleIds).stream()
-                .collect(Collectors.toMap(Article::getId, article -> article));
-
-        List<Article> orderedArticles = new ArrayList<>(orderedArticleIds.size());
-        for (Long articleId : orderedArticleIds) {
-            Article article = articleById.get(articleId);
-            if (article != null) {
-                orderedArticles.add(article);
-            }
-        }
-        return orderedArticles;
     }
 
     private void batchFillArticleRelations(List<Article> articles) {
@@ -1096,30 +957,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
             article.setLiked(likedArticleIds.contains(article.getId()));
             article.setFavorited(favoritedArticleIds.contains(article.getId()));
         }
-    }
-
-    private boolean canViewPublishedArticle(Article article, Long requesterId, User viewer) {
-        if (article == null) {
-            return false;
-        }
-        if (requesterId != null && Objects.equals(article.getAuthorId(), requesterId)) {
-            return true;
-        }
-        if (viewer != null && accessService.isAdmin(viewer)) {
-            return true;
-        }
-        if (!ArticleStatusEnum.is(article.getStatus(), ArticleStatusEnum.PUBLISHED)) {
-            return false;
-        }
-
-        ArticleVisibilityEnum visibility = ArticleVisibilityEnum.fromValue(article.getVisibility());
-        return switch (visibility) {
-            case PUBLIC -> true;
-            case LOGIN -> viewer != null;
-            case FRIEND -> viewer != null && accessService.isFriend(viewer);
-            case PRIVATE -> false;
-            default -> false;
-        };
     }
 
     private String normalizeClientIp(String clientIp) {

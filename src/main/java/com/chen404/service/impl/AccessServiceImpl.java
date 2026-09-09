@@ -9,6 +9,8 @@ import com.chen404.domain.enums.UserCapabilityEnum;
 import com.chen404.domain.enums.UserRoleEnum;
 import com.chen404.domain.enums.UserTrustLevelEnum;
 import com.chen404.domain.entity.Article;
+import com.chen404.domain.access.ArticleReadScope;
+import com.chen404.domain.enums.UserStatusEnum;
 import com.chen404.domain.entity.MusicTrack;
 import com.chen404.domain.entity.ReaderBook;
 import com.chen404.domain.entity.SysFile;
@@ -186,29 +188,7 @@ public class AccessServiceImpl implements AccessService {
 
     @Override
     public boolean canViewArticle(Long userId, Article article) {
-        if (article == null) {
-            return false;
-        }
-
-        User user = getUserOrNull(userId);
-        if (isEnabled(user)
-                && (isArticleOwner(userId, article) || canManageArticle(userId, article))) {
-            return true;
-        }
-
-        if (!ArticleStatusEnum.is(article.getStatus(), ArticleStatusEnum.PUBLISHED)) {
-            return false;
-        }
-
-        ArticleVisibilityEnum visibility = ArticleVisibilityEnum.fromValue(article.getVisibility());
-
-        return switch (visibility) {
-            case PUBLIC -> true;
-            case LOGIN -> isEnabled(user);
-            case FRIEND -> isEnabled(user) && (isAdmin(user) || isFriend(user));
-            case PRIVATE -> false;
-            default -> false;
-        };
+        return ArticleReadScope.forUser(getUserOrNull(userId)).canRead(article);
     }
 
     @Override
@@ -257,7 +237,7 @@ public class AccessServiceImpl implements AccessService {
     }
 
     private boolean isEnabled(User user) {
-        return user != null && Integer.valueOf(1).equals(user.getStatus());
+        return user != null && UserStatusEnum.isEnabled(user.getStatus());
     }
 
     private boolean isActiveTravelMemoryOwner(Long userId, TravelMemoryLocation location) {

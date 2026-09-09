@@ -3,6 +3,8 @@ package com.chen404.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.chen404.domain.entity.Article;
+import com.chen404.domain.dto.ArticleSearchCriteria;
+import com.chen404.domain.access.ArticleReadScope;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -15,6 +17,14 @@ import java.util.List;
  */
 @Mapper
 public interface ArticleMapper extends BaseMapper<Article> {
+
+    /** 权限过滤后由数据库计数和分页，列表投影不读取正文或密码。 */
+    Page<Article> selectReadablePage(Page<Article> page, @Param("criteria") ArticleSearchCriteria criteria,
+                                      @Param("scope") ArticleReadScope scope, @Param("ownArticles") boolean ownArticles);
+
+    /** 点赞和收藏按关系时间分页；关系类型只在固定表名中选择。 */
+    Page<Article> selectRelatedPage(Page<Article> page, @Param("userId") Long userId,
+                                     @Param("likes") boolean likes, @Param("scope") ArticleReadScope scope);
 
     /** 仅保存编辑字段并比较版本，禁止把读取时的互动计数或作者信息写回。 */
     int updateEditableFields(@Param("article") Article article, @Param("expectedVersion") Integer expectedVersion,

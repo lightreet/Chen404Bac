@@ -11,6 +11,7 @@ import org.mybatis.spring.SqlSessionTemplate;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -33,12 +34,7 @@ class ConcurrentUpdateMapperTest {
         var source = new DriverManagerDataSource("jdbc:h2:mem:concurrent-updates;MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
         jdbc = new JdbcTemplate(source);
         jdbc.execute("DROP ALL OBJECTS");
-        jdbc.execute("CREATE TABLE article (id BIGINT PRIMARY KEY, title VARCHAR(100), summary VARCHAR(500), "
-                + "content CLOB, content_html CLOB, cover_image VARCHAR(255), cover_file_id BIGINT, author_id BIGINT, "
-                + "category_id BIGINT, status INT, view_count INT, like_count INT, comment_count INT, "
-                + "is_top INT, is_recommend INT, is_original INT, original_url VARCHAR(255), password VARCHAR(255), "
-                + "visibility INT, comment_policy INT, publish_time TIMESTAMP, create_time TIMESTAMP, "
-                + "update_time TIMESTAMP, deleted INT DEFAULT 0)");
+        new ResourceDatabasePopulator(new ClassPathResource("db/article-test-schema.sql")).execute(source);
         jdbc.execute(Files.readString(Path.of("src/main/resources/db/migration/V2026090802__add_article_edit_version.sql")));
         jdbc.execute("CREATE TABLE sys_user (id BIGINT PRIMARY KEY, username VARCHAR(64), password VARCHAR(255), "
                 + "nickname VARCHAR(64), email VARCHAR(255), phone VARCHAR(32), avatar VARCHAR(255), avatar_file_id BIGINT, "
