@@ -34,13 +34,13 @@
         <if test="criteria.tagId != null">
             AND EXISTS (SELECT 1 FROM article_tag t WHERE t.article_id=a.id AND t.tag_id=#{criteria.tagId})
         </if>
-        <if test="criteria.keyword != null and criteria.keyword.trim() != ''">
+        <if test="criteria.keyword != null">
             AND (a.title LIKE CONCAT('%', #{criteria.keyword}, '%')
             <if test="ownArticles">OR a.summary LIKE CONCAT('%', #{criteria.keyword}, '%')</if>)
         </if>
         ORDER BY
         <choose>
-            <when test="ownArticles">COALESCE(a.publish_time, a.update_time) DESC, a.id DESC</when>
+            <when test="ownArticles">COALESCE(a.publish_time, a.update_time, a.create_time) DESC, a.id DESC</when>
             <otherwise>a.is_top DESC, COALESCE(a.publish_time, a.create_time) DESC, a.id DESC</otherwise>
         </choose>
     </select>

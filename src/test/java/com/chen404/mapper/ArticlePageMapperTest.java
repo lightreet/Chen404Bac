@@ -124,6 +124,36 @@ class ArticlePageMapperTest {
         }
     }
 
+    @Test
+    void ownArticleOrderFallsBackToCreationTimeWhenPublishAndUpdateAreMissing() {
+        insert(1L, 7L, 0, 3);
+        insert(2L, 7L, 0, 3);
+        insert(3L, 7L, 1, 3);
+        jdbc.update("UPDATE article SET create_time='2026-09-09',update_time=NULL,publish_time=NULL WHERE id=1");
+        jdbc.update("UPDATE article SET create_time='2026-09-01',update_time='2026-09-08' WHERE id=2");
+        jdbc.update("UPDATE article SET create_time='2026-09-01',update_time='2026-09-10',publish_time='2026-09-07' WHERE id=3");
+        ArticleSearchCriteria criteria = new ArticleSearchCriteria(null, null, null, 7L, null);
+        ArticleReadScope scope = ArticleReadScope.forUser(user(7, 1, 0, "user"));
+
+        Page<Article> first = mapper.selectReadablePage(new Page<>(1, 2), criteria, scope, true);
+        Page<Article> second = mapper.selectReadablePage(new Page<>(2, 2), criteria, scope, true);
+
+        assertEquals(3, first.getTotal());
+        assertEquals(List.of(1L, 2L), first.getRecords().stream().map(Article::getId).toList());
+        assertEquals(List.of(3L), second.getRecords().stream().map(Article::getId).toList());
+    }
+
+    @Test
+    void unicodeWhitespaceKeywordDoesNotFilterPublicOrOwnArticles() {
+        insert(1L, 7L, 1, 0);
+        ArticleReadScope scope = ArticleReadScope.forUser(user(7, 1, 0, "user"));
+        for (boolean ownArticles : List.of(false, true)) {
+            Page<Article> result = mapper.selectReadablePage(new Page<>(1, 10),
+                    new ArticleSearchCriteria(1, null, null, ownArticles ? 7L : null, "\u3000"), scope, ownArticles);
+            assertEquals(1, result.getTotal());
+        }
+    }
+
     private Article insert(Long id, Long authorId, Integer status, Integer visibility) {
         jdbc.update("INSERT INTO article (id,title,author_id,status,visibility,create_time) VALUES (?,'title',?,?,?,CURRENT_TIMESTAMP)",
                 id, authorId, status, visibility);
