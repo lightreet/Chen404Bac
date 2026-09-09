@@ -1,6 +1,9 @@
 package com.chen404.service.support.reader;
 
 import com.chen404.domain.entity.ReaderBook;
+import com.chen404.config.ReaderImportProperties;
+import java.util.concurrent.ScheduledExecutorService;
+import static org.mockito.ArgumentMatchers.*;
 import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.enums.AdminNotificationEventTypeEnum;
 import com.chen404.domain.enums.AdminNotificationResourceTypeEnum;
@@ -46,6 +49,9 @@ class ReaderBookImportProcessorTest {
         book.setTitle("夜航故事");
         book.setSourceFileId(88L);
         book.setStatus(ReaderBook.STATUS_IMPORTING);
+        book.setImportAttempts(1);
+        when(bookMapper.tryClaimImport(eq(42L), anyString(), anyInt())).thenReturn(1);
+        when(bookMapper.selectClaimForUpdate(eq(42L), anyString())).thenReturn(book);
         when(bookMapper.selectById(42L)).thenReturn(book);
 
         SysFile sourceFile = new SysFile();
@@ -71,7 +77,9 @@ class ReaderBookImportProcessorTest {
                 sysFileService,
                 fileStorageService,
                 eventPublisher,
-                transactionManager
+                transactionManager,
+                new ReaderImportProperties(),
+                mock(ScheduledExecutorService.class)
         );
 
         processor.process(42L);

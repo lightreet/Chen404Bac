@@ -50,7 +50,8 @@ class FlywayMigrationLayoutTest {
             "V2026081702__create_reader_note.sql",
             "V2026082001__add_reader_reading_mode.sql",
             "V2026090801__create_file_deletion_task.sql",
-            "V2026090802__add_article_edit_version.sql"
+            "V2026090802__add_article_edit_version.sql",
+            "V2026090901__add_reader_import_lease.sql"
     );
 
     @Test

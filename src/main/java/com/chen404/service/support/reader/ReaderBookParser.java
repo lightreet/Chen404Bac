@@ -1,5 +1,6 @@
 package com.chen404.service.support.reader;
 
+import com.chen404.util.TextUtil;
 import com.chen404.exception.BadRequestException;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -977,9 +978,9 @@ public class ReaderBookParser {
             parsed.setTitle(stripExtension(fileName));
         }
         parsed.setTitle(safeTitle(parsed.getTitle()));
-        parsed.setAuthor(limit(blankToNull(parsed.getAuthor()), 255));
-        parsed.setDescription(limit(blankToNull(parsed.getDescription()), 4_000));
-        parsed.setLanguage(limit(blankToNull(parsed.getLanguage()), 40));
+        parsed.setAuthor(TextUtil.truncate(blankToNull(parsed.getAuthor()), 255));
+        parsed.setDescription(TextUtil.truncate(blankToNull(parsed.getDescription()), 4_000));
+        parsed.setLanguage(TextUtil.truncate(blankToNull(parsed.getLanguage()), 40));
         parsed.getChapters().removeIf(chapter -> !StringUtils.hasText(chapter.getContentText()));
         if (parsed.getChapters().isEmpty()) {
             throw new BadRequestException("未能从文件中识别出可阅读正文");
@@ -1269,12 +1270,12 @@ public class ReaderBookParser {
 
     private String safeTitle(String value) {
         String safe = firstNonBlank(value, "未命名章节").replaceAll("\\s+", " ").strip();
-        return limit(safe, 500);
+        return TextUtil.truncate(safe, 500);
     }
 
     private String safeMessage(Exception exception) {
         String message = exception.getMessage();
-        return StringUtils.hasText(message) ? limit(message, 300) : "文件结构不完整或内容已损坏";
+        return StringUtils.hasText(message) ? TextUtil.truncate(message, 300) : "文件结构不完整或内容已损坏";
     }
 
     private String firstNonBlank(String... values) {
@@ -1298,10 +1299,7 @@ public class ReaderBookParser {
         return StringUtils.hasText(value) ? value.strip() : null;
     }
 
-    private String limit(String value, int max) {
-        if (value == null || value.length() <= max) return value;
-        return value.substring(0, max);
-    }
+
 
     private boolean startsWith(byte[] bytes, byte... prefix) {
         if (bytes.length < prefix.length) return false;

@@ -5,6 +5,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.concurrent.Executor;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 /**
  * 小说解析任务线程池。
@@ -16,6 +18,7 @@ import java.util.concurrent.Executor;
 public class ReaderImportTaskConfig {
 
     public static final String READER_IMPORT_TASK_EXECUTOR = "readerImportTaskExecutor";
+    public static final String READER_IMPORT_LEASE_SCHEDULER = "readerImportLeaseScheduler";
 
     private static final int CORE_POOL_SIZE = 1;
     private static final int MAX_POOL_SIZE = 2;
@@ -33,5 +36,17 @@ public class ReaderImportTaskConfig {
         executor.setAwaitTerminationSeconds(AWAIT_TERMINATION_SECONDS);
         executor.initialize();
         return executor;
+    }
+
+    /** 恢复扫描及续租与文件存储清理隔离，避免阻塞清理延迟任务恢复。 */
+    @Bean(name = READER_IMPORT_LEASE_SCHEDULER, destroyMethod = "shutdownNow")
+    public ScheduledExecutorService readerImportLeaseScheduler() {
+        ScheduledThreadPoolExecutor scheduler = new ScheduledThreadPoolExecutor(2, action -> {
+            Thread thread = new Thread(action, "reader-import-lease");
+            thread.setDaemon(true);
+            return thread;
+        });
+        scheduler.setRemoveOnCancelPolicy(true);
+        return scheduler;
     }
 }

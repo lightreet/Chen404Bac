@@ -33,6 +33,10 @@ public class ReaderBook implements Serializable {
     private String sourceFileUrl;
     private String contentChecksum;
     private String status;
+    /** 当前解析执行的租约；只由后台任务条件更新。 */
+    private String importToken;
+    private LocalDateTime importLeaseUntil;
+    private Integer importAttempts;
     private String parseMessage;
     private Integer chapterCount;
     private Long totalCharCount;

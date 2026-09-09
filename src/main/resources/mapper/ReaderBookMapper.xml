@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chen404.mapper.ReaderBookMapper">
+    <sql id="taskStates">
+        <bind name="importing" value="@com.chen404.domain.entity.ReaderBook@STATUS_IMPORTING"/>
+        <bind name="failed" value="@com.chen404.domain.entity.ReaderBook@STATUS_FAILED"/>
+    </sql>
+
+    <select id="selectRecoverableImports" resultType="java.lang.Long">
+        <include refid="taskStates"/>
+        SELECT id FROM reader_book
+        WHERE deleted=0 AND status=#{importing}
+          AND (import_lease_until IS NULL OR import_lease_until &lt;= CURRENT_TIMESTAMP)
+        ORDER BY id LIMIT #{limit}
+    </select>
+
+    <!-- 唯一令牌用于区分每次执行；数据库时间避免多实例时钟偏差。 -->
+    <update id="tryClaimImport">
+        <include refid="taskStates"/>
+        UPDATE reader_book SET import_token=#{token}, import_attempts=import_attempts+1,
+            import_lease_until=TIMESTAMPADD(SECOND, #{leaseSeconds}, CURRENT_TIMESTAMP)
+        WHERE id=#{bookId} AND deleted=0 AND status=#{importing}
+          AND (import_lease_until IS NULL OR import_lease_until &lt;= CURRENT_TIMESTAMP)
+    </update>
+
+    <update id="renewImportLease">
+        <include refid="taskStates"/>
+        UPDATE reader_book SET import_lease_until=TIMESTAMPADD(SECOND, #{leaseSeconds}, CURRENT_TIMESTAMP)
+        WHERE id=#{bookId} AND import_token=#{token} AND status=#{importing} AND deleted=0
+          AND import_lease_until &gt; CURRENT_TIMESTAMP
+    </update>
+
+    <!-- 持久化前锁定当前认领，旧执行器不能写入新执行器的任务。 -->
+    <select id="selectClaimForUpdate" resultType="com.chen404.domain.entity.ReaderBook">
+        <include refid="taskStates"/>
+        SELECT * FROM reader_book
+        WHERE id=#{bookId} AND import_token=#{token} AND status=#{importing} AND deleted=0
+          AND import_lease_until &gt; CURRENT_TIMESTAMP
+        FOR UPDATE
+    </select>
+
+    <update id="retryOrFailImport">
+        <include refid="taskStates"/>
+        UPDATE reader_book SET parse_message=#{message}, import_token=NULL,
+            status=CASE WHEN #{terminal} OR import_attempts &gt;= #{maxAttempts} THEN #{failed} ELSE #{importing} END,
+            import_lease_until=TIMESTAMPADD(SECOND, #{retrySeconds}, CURRENT_TIMESTAMP)
+        WHERE id=#{bookId} AND import_token=#{token} AND status=#{importing} AND deleted=0
+          AND import_lease_until &gt; CURRENT_TIMESTAMP
+    </update>
+</mapper>

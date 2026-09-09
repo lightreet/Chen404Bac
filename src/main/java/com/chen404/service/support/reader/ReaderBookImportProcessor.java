@@ -1,6 +1,12 @@
 package com.chen404.service.support.reader;
 
+import com.chen404.domain.ReaderBookConstraints;
+import com.chen404.util.TextUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.chen404.config.ReaderImportProperties;
+import com.chen404.config.ReaderImportTaskConfig;
+import org.springframework.beans.factory.annotation.Qualifier;
 import com.chen404.domain.entity.ReaderBook;
 import com.chen404.domain.entity.ReaderBookAsset;
 import com.chen404.domain.entity.ReaderChapter;
@@ -20,8 +26,7 @@ import com.chen404.service.SysFileService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 
@@ -34,12 +39,16 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 小说后台解析与持久化处理器。
  *
  * <p>原文件读取和正文解析在事务外完成，章节、目录和资源在一个短事务中整体写入。
- * 任一步失败都会回滚内容数据，由任务执行器另行把书籍状态标记为失败。</p>
+ * 写入前验证租约；失败回滚后只允许当前执行器登记重试或终止状态。</p>
  */
 @Slf4j
 @Service
@@ -54,6 +63,8 @@ public class ReaderBookImportProcessor {
     private final FileStorageService fileStorageService;
     private final AdminContentEventPublisher adminContentEventPublisher;
     private final TransactionTemplate transactionTemplate;
+    private final ReaderImportProperties properties;
+    private final ScheduledExecutorService scheduler;
 
     public ReaderBookImportProcessor(
             ReaderBookMapper bookMapper,
@@ -64,7 +75,9 @@ public class ReaderBookImportProcessor {
             SysFileService sysFileService,
             FileStorageService fileStorageService,
             AdminContentEventPublisher adminContentEventPublisher,
-            PlatformTransactionManager transactionManager) {
+            PlatformTransactionManager transactionManager,
+            ReaderImportProperties properties,
+            @Qualifier(ReaderImportTaskConfig.READER_IMPORT_LEASE_SCHEDULER) ScheduledExecutorService scheduler) {
         this.bookMapper = bookMapper;
         this.chapterMapper = chapterMapper;
         this.tocItemMapper = tocItemMapper;
@@ -74,6 +87,9 @@ public class ReaderBookImportProcessor {
         this.fileStorageService = fileStorageService;
         this.adminContentEventPublisher = adminContentEventPublisher;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
+        this.transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        this.properties = properties;
+        this.scheduler = scheduler;
     }
 
     /**
@@ -82,45 +98,61 @@ public class ReaderBookImportProcessor {
      * @param bookId 任务对应的书籍 ID
      */
     public void process(Long bookId) {
-        ReaderBook task = bookMapper.selectById(bookId);
-        if (task == null || !ReaderBook.STATUS_IMPORTING.equals(task.getStatus())) {
-            log.info("[READER_IMPORT_SKIPPED] bookId={} reason=task-not-importing", bookId);
+        String token = UUID.randomUUID().toString();
+        ReaderBook task = transactionTemplate.execute(status -> {
+            if (bookMapper.tryClaimImport(bookId, token, properties.getLeaseSeconds()) != 1) {
+                return null;
+            }
+            return bookMapper.selectById(bookId);
+        });
+        if (task == null) {
             return;
         }
-
-        long startedAt = System.nanoTime();
-        ParsedReaderBook parsed = parseStoredSource(task);
-        long parsedAt = System.nanoTime();
-
-        PersistSummary summary = transactionTemplate.execute(status -> persistParsedBook(bookId, parsed));
-        if (summary == null) {
-            log.info("[READER_IMPORT_SKIPPED] bookId={} reason=task-state-changed", bookId);
+        if (task.getImportAttempts() > properties.getMaxAttempts()) {
+            recordFailure(bookId, token, new BadRequestException("导入多次中断，请重新导入"));
             return;
         }
-        log.info(
-                "[READER_IMPORT_OK] userId={} bookId={} format={} chapters={} assets={} parseMs={} persistMs={}",
-                task.getOwnerUserId(),
-                bookId,
-                parsed.getFormat(),
-                summary.chapterCount(),
-                summary.assetCount(),
-                elapsedMillis(startedAt, parsedAt),
-                elapsedMillis(parsedAt, System.nanoTime())
-        );
+        log.info("[READER_IMPORT_CLAIMED] bookId={} attempt={}", bookId, task.getImportAttempts());
+        ScheduledFuture<?> heartbeat = null;
+        try {
+            int interval = Math.max(1, properties.getLeaseSeconds() / 3);
+            heartbeat = scheduler.scheduleWithFixedDelay(() -> renewLease(bookId, token),
+                    interval, interval, TimeUnit.SECONDS);
+            long startedAt = System.nanoTime();
+            ParsedReaderBook parsed = parseStoredSource(task);
+            long parsedAt = System.nanoTime();
+            PersistSummary summary = transactionTemplate.execute(status -> persistParsedBook(bookId, token, parsed));
+            if (summary == null) {
+                log.info("[READER_IMPORT_LEASE_LOST] bookId={}", bookId);
+                return;
+            }
+            log.info("[READER_IMPORT_OK] userId={} bookId={} format={} chapters={} assets={} parseMs={} persistMs={}",
+                    task.getOwnerUserId(), bookId, parsed.getFormat(), summary.chapterCount(), summary.assetCount(),
+                    elapsedMillis(startedAt, parsedAt), elapsedMillis(parsedAt, System.nanoTime()));
+        } catch (RuntimeException exception) {
+            recordFailure(bookId, token, exception);
+        } finally {
+            if (heartbeat != null) {
+                heartbeat.cancel(false);
+            }
+        }
     }
 
-    /**
-     * 在独立事务中记录失败状态，确保正文持久化事务回滚后用户仍能看到明确结果。
-     */
-    @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
-    public void markFailed(Long bookId, String message) {
-        ReaderBook book = bookMapper.selectById(bookId);
-        if (book == null || !ReaderBook.STATUS_IMPORTING.equals(book.getStatus())) {
-            return;
+    private void renewLease(Long bookId, String token) {
+        try {
+            bookMapper.renewImportLease(bookId, token, properties.getLeaseSeconds());
+        } catch (RuntimeException exception) {
+            log.warn("[READER_IMPORT_RENEW_FAIL] bookId={}", bookId, exception);
         }
-        book.setStatus(ReaderBook.STATUS_FAILED);
-        book.setParseMessage(limit(message, 1_000));
-        bookMapper.updateById(book);
+    }
+
+    private void recordFailure(Long bookId, String token, RuntimeException exception) {
+        boolean terminal = exception instanceof BadRequestException;
+        String message = terminal ? exception.getMessage() : "后台导入失败";
+        log.warn("[READER_IMPORT_ATTEMPT_FAIL] bookId={} terminal={}", bookId, terminal, exception);
+        transactionTemplate.executeWithoutResult(status -> bookMapper.retryOrFailImport(
+                bookId, token, TextUtil.truncate(message, ReaderBookConstraints.PARSE_MESSAGE_MAX_LENGTH), terminal,
+                properties.getMaxAttempts(), properties.getRetryDelaySeconds()));
     }
 
     private ParsedReaderBook parseStoredSource(ReaderBook task) {
@@ -144,12 +176,12 @@ public class ReaderBookImportProcessor {
         } catch (BadRequestException exception) {
             throw exception;
         } catch (IOException exception) {
-            throw new BadRequestException("无法读取小说源文件");
+            throw new IllegalStateException("无法读取小说源文件", exception);
         }
     }
 
-    private PersistSummary persistParsedBook(Long bookId, ParsedReaderBook parsed) {
-        ReaderBook book = bookMapper.selectById(bookId);
+    private PersistSummary persistParsedBook(Long bookId, String token, ParsedReaderBook parsed) {
+        ReaderBook book = bookMapper.selectClaimForUpdate(bookId, token);
         if (book == null || !ReaderBook.STATUS_IMPORTING.equals(book.getStatus())) {
             return null;
         }
@@ -165,14 +197,14 @@ public class ReaderBookImportProcessor {
                 .findFirst()
                 .orElse(null);
 
-        book.setTitle(limit(firstNonBlank(book.getTitle(), parsed.getTitle()), 255));
-        book.setAuthor(limit(firstNonBlank(book.getAuthor(), parsed.getAuthor()), 255));
-        book.setDescription(limit(firstNonBlank(book.getDescription(), parsed.getDescription()), 4_000));
-        book.setLanguage(limit(parsed.getLanguage(), 40));
+        book.setTitle(TextUtil.truncate(firstNonBlank(book.getTitle(), parsed.getTitle()), ReaderBookConstraints.TITLE_MAX_LENGTH));
+        book.setAuthor(TextUtil.truncate(firstNonBlank(book.getAuthor(), parsed.getAuthor()), ReaderBookConstraints.AUTHOR_MAX_LENGTH));
+        book.setDescription(TextUtil.truncate(firstNonBlank(book.getDescription(), parsed.getDescription()), ReaderBookConstraints.DESCRIPTION_MAX_LENGTH));
+        book.setLanguage(TextUtil.truncate(parsed.getLanguage(), 40));
         book.setSourceFormat(parsed.getFormat());
         book.setSourceEncoding(parsed.getEncoding());
         book.setStatus(ReaderBook.STATUS_READY);
-        book.setParseMessage(limit(parsed.getParseMessage(), 1_000));
+        book.setParseMessage(TextUtil.truncate(parsed.getParseMessage(), ReaderBookConstraints.PARSE_MESSAGE_MAX_LENGTH));
         book.setChapterCount(chapterIds.size());
         book.setTotalCharCount(parsed.getChapters().stream()
                 .map(ParsedReaderBook.Chapter::getContentText)
@@ -181,6 +213,10 @@ public class ReaderBookImportProcessor {
                 .sum());
         book.setCoverAssetId(coverAssetId);
         bookMapper.updateById(book);
+        bookMapper.update(null, new LambdaUpdateWrapper<ReaderBook>()
+                .eq(ReaderBook::getId, bookId)
+                .set(ReaderBook::getImportToken, null)
+                .set(ReaderBook::getImportLeaseUntil, null));
         adminContentEventPublisher.publish(new AdminContentEvent(
                 AdminNotificationEventTypeEnum.READER_BOOK_IMPORTED,
                 book.getOwnerUserId(),
@@ -196,10 +232,10 @@ public class ReaderBookImportProcessor {
         for (ParsedReaderBook.Asset parsed : assets) {
             ReaderBookAsset asset = new ReaderBookAsset();
             asset.setBookId(bookId);
-            asset.setSourcePath(limit(parsed.getSourcePath(), 1_000));
+            asset.setSourcePath(TextUtil.truncate(parsed.getSourcePath(), 1_000));
             asset.setSourcePathHash(parser.sha256(parsed.getSourcePath().getBytes(StandardCharsets.UTF_8)));
-            asset.setFileName(limit(parsed.getFileName(), 255));
-            asset.setMediaType(limit(parsed.getMediaType(), 120));
+            asset.setFileName(TextUtil.truncate(parsed.getFileName(), 255));
+            asset.setMediaType(TextUtil.truncate(parsed.getMediaType(), 120));
             asset.setFileSize((long) parsed.getData().length);
             asset.setContentHash(parser.sha256(parsed.getData()));
             asset.setAssetData(parsed.getData());
@@ -232,9 +268,9 @@ public class ReaderBookImportProcessor {
             ReaderChapter chapter = new ReaderChapter();
             chapter.setBookId(bookId);
             chapter.setChapterOrder(index);
-            chapter.setTitle(limit(parsed.getTitle(), 500));
-            chapter.setVolumeTitle(limit(parsed.getVolumeTitle(), 500));
-            chapter.setSourceHref(limit(parsed.getSourceHref(), 1_000));
+            chapter.setTitle(TextUtil.truncate(parsed.getTitle(), 500));
+            chapter.setVolumeTitle(TextUtil.truncate(parsed.getVolumeTitle(), 500));
+            chapter.setSourceHref(TextUtil.truncate(parsed.getSourceHref(), 1_000));
             chapter.setContentHtml(html);
             chapter.setContentText(parsed.getContentText());
             chapter.setCharCount(parsed.getContentText().length());
@@ -259,9 +295,9 @@ public class ReaderBookImportProcessor {
             item.setChapterId(validChapterId(parsed.getChapterIndex(), chapterIds));
             item.setItemOrder(index);
             item.setDepth(depth);
-            item.setLabel(limit(parsed.getLabel(), 500));
-            item.setSourceHref(limit(parsed.getSourceHref(), 1_000));
-            item.setFragment(limit(parsed.getFragment(), 500));
+            item.setLabel(TextUtil.truncate(parsed.getLabel(), 500));
+            item.setSourceHref(TextUtil.truncate(parsed.getSourceHref(), 1_000));
+            item.setFragment(TextUtil.truncate(parsed.getFragment(), 500));
             item.setCreateTime(LocalDateTime.now());
             tocItemMapper.insert(item);
             persistToc(bookId, item.getId(), depth + 1, parsed.getChildren(), chapterIds);
@@ -282,12 +318,7 @@ public class ReaderBookImportProcessor {
         return (endNanos - startNanos) / 1_000_000;
     }
 
-    private String limit(String value, int max) {
-        if (value == null || value.length() <= max) {
-            return value;
-        }
-        return value.substring(0, max);
-    }
+
 
     private record PersistSummary(int chapterCount, int assetCount) {
     }

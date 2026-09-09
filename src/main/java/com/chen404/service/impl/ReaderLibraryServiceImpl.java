@@ -1,5 +1,7 @@
 package com.chen404.service.impl;
 
+import com.chen404.domain.ReaderBookConstraints;
+import com.chen404.util.TextUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.chen404.domain.dto.ReaderBookUpdateCommand;
 import com.chen404.domain.dto.ReaderBookVO;
@@ -39,7 +41,6 @@ import com.chen404.service.ProtectedFileAccessService;
 import com.chen404.service.ReaderLibraryService;
 import com.chen404.service.SysFileService;
 import com.chen404.service.support.reader.ParsedReaderBook;
-import com.chen404.service.support.reader.ReaderBookImportProcessor;
 import com.chen404.service.support.reader.ReaderBookParser;
 import com.chen404.service.support.reader.ReaderImportTaskRunner;
 import lombok.extern.slf4j.Slf4j;
@@ -100,7 +101,6 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
     private final AccessService accessService;
     private final ProtectedFileAccessService protectedFileAccessService;
     private final ReaderImportTaskRunner importTaskRunner;
-    private final ReaderBookImportProcessor importProcessor;
 
     public ReaderLibraryServiceImpl(
             ReaderBookMapper bookMapper,
@@ -115,8 +115,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
             FileReferenceService fileReferenceService,
             AccessService accessService,
             ProtectedFileAccessService protectedFileAccessService,
-            ReaderImportTaskRunner importTaskRunner,
-            ReaderBookImportProcessor importProcessor) {
+            ReaderImportTaskRunner importTaskRunner) {
         this.bookMapper = bookMapper;
         this.chapterMapper = chapterMapper;
         this.tocItemMapper = tocItemMapper;
@@ -130,7 +129,6 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
         this.accessService = accessService;
         this.protectedFileAccessService = protectedFileAccessService;
         this.importTaskRunner = importTaskRunner;
-        this.importProcessor = importProcessor;
     }
 
     @Override
@@ -255,10 +253,10 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
 
     private ReaderBookPreviewVO toPreviewVO(ParsedReaderBook parsed) {
         ReaderBookPreviewVO preview = new ReaderBookPreviewVO();
-        preview.setTitle(limit(parsed.getTitle(), 255));
-        preview.setAuthor(limit(parsed.getAuthor(), 255));
-        preview.setDescription(limit(parsed.getDescription(), 4_000));
-        preview.setLanguage(limit(parsed.getLanguage(), 40));
+        preview.setTitle(TextUtil.truncate(parsed.getTitle(), ReaderBookConstraints.TITLE_MAX_LENGTH));
+        preview.setAuthor(TextUtil.truncate(parsed.getAuthor(), ReaderBookConstraints.AUTHOR_MAX_LENGTH));
+        preview.setDescription(TextUtil.truncate(parsed.getDescription(), ReaderBookConstraints.DESCRIPTION_MAX_LENGTH));
+        preview.setLanguage(TextUtil.truncate(parsed.getLanguage(), 40));
         preview.setSourceFormat(parsed.getFormat());
         preview.setSourceEncoding(parsed.getEncoding());
         parsed.getAssets().stream()
@@ -287,20 +285,20 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
             Long userId) {
         ReaderBook book = new ReaderBook();
         book.setOwnerUserId(userId);
-        book.setTitle(limit(firstNonBlank(
+        book.setTitle(TextUtil.truncate(firstNonBlank(
                 title,
                 previewParsed == null ? null : previewParsed.getTitle(),
                 stripExtension(source.originalName())
-        ), 255));
-        book.setAuthor(limit(firstNonBlank(
+        ), ReaderBookConstraints.TITLE_MAX_LENGTH));
+        book.setAuthor(TextUtil.truncate(firstNonBlank(
                 author,
                 previewParsed == null ? null : previewParsed.getAuthor()
-        ), 255));
-        book.setDescription(limit(firstNonBlank(
+        ), ReaderBookConstraints.AUTHOR_MAX_LENGTH));
+        book.setDescription(TextUtil.truncate(firstNonBlank(
                 description,
                 previewParsed == null ? null : previewParsed.getDescription()
-        ), 4_000));
-        book.setLanguage(limit(previewParsed == null ? null : previewParsed.getLanguage(), 40));
+        ), ReaderBookConstraints.DESCRIPTION_MAX_LENGTH));
+        book.setLanguage(TextUtil.truncate(previewParsed == null ? null : previewParsed.getLanguage(), 40));
         book.setVisibility(ReaderBookVisibilityEnum.normalize(visibility));
         book.setSourceFormat(previewParsed == null ? source.sourceFormat() : previewParsed.getFormat());
         book.setSourceEncoding(previewParsed == null ? blankToNull(encoding) : previewParsed.getEncoding());
@@ -350,12 +348,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
         try {
             importTaskRunner.runAsync(bookId);
         } catch (TaskRejectedException exception) {
-            log.error("[READER_IMPORT_REJECTED] bookId={}", bookId, exception);
-            try {
-                importProcessor.markFailed(bookId, "后台导入任务较多，请稍后删除并重新导入");
-            } catch (Exception stateException) {
-                log.error("[READER_IMPORT_REJECTED_STATE_ERROR] bookId={}", bookId, stateException);
-            }
+            log.info("[READER_IMPORT_DEFERRED] bookId={} reason=executor-full", bookId);
         }
     }
 
@@ -604,7 +597,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
         progress.setBlockIndex(Math.max(0, command.getBlockIndex()));
         progress.setCharacterOffset(Math.max(0, command.getCharacterOffset()));
         progress.setProgressPercent(command.getProgressPercent().setScale(3, RoundingMode.HALF_UP));
-        progress.setLocatorContext(limit(blankToNull(command.getLocatorContext()), 255));
+        progress.setLocatorContext(TextUtil.truncate(blankToNull(command.getLocatorContext()), 255));
         progress.setContentVersion(book.getContentVersion());
         progress.setFinished(Boolean.TRUE.equals(command.getFinished())
                 || command.getProgressPercent().compareTo(new BigDecimal("99.9")) >= 0);
@@ -878,7 +871,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
         }
         int index = text.toLowerCase().indexOf(keyword.toLowerCase());
         if (index < 0) {
-            return limit(text, 120);
+            return TextUtil.truncate(text, 120);
         }
         int start = Math.max(0, index - 45);
         int end = Math.min(text.length(), index + keyword.length() + 75);
@@ -912,10 +905,7 @@ public class ReaderLibraryServiceImpl implements ReaderLibraryService {
         return dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName;
     }
 
-    private String limit(String value, int max) {
-        if (value == null || value.length() <= max) return value;
-        return value.substring(0, max);
-    }
+
 
     private record UploadedReaderSource(
             String originalName,

@@ -28,7 +28,6 @@ import com.chen404.service.AccessService;
 import com.chen404.service.SysFileService;
 import com.chen404.service.support.reader.ReaderBookParser;
 import com.chen404.service.support.reader.ParsedReaderBook;
-import com.chen404.service.support.reader.ReaderBookImportProcessor;
 import com.chen404.service.support.reader.ReaderImportTaskRunner;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.Test;
@@ -177,7 +176,6 @@ class ReaderLibraryServiceImplTest {
         SysFileService sysFileService = mock(SysFileService.class);
         FileReferenceService fileReferenceService = mock(FileReferenceService.class);
         ReaderImportTaskRunner taskRunner = mock(ReaderImportTaskRunner.class);
-        ReaderBookImportProcessor importProcessor = mock(ReaderBookImportProcessor.class);
         MultipartFile file = mock(MultipartFile.class);
 
         when(file.isEmpty()).thenReturn(false);
@@ -205,8 +203,7 @@ class ReaderLibraryServiceImplTest {
                 mock(AccessService.class),
                 sysFileService,
                 fileReferenceService,
-                taskRunner,
-                importProcessor
+                taskRunner
         ).importBook(
                 file,
                 null,
@@ -270,8 +267,7 @@ class ReaderLibraryServiceImplTest {
                 accessService,
                 mock(SysFileService.class),
                 mock(FileReferenceService.class),
-                mock(ReaderImportTaskRunner.class),
-                mock(ReaderBookImportProcessor.class)
+                mock(ReaderImportTaskRunner.class)
         );
     }
 
@@ -281,8 +277,7 @@ class ReaderLibraryServiceImplTest {
             AccessService accessService,
             SysFileService sysFileService,
             FileReferenceService fileReferenceService,
-            ReaderImportTaskRunner taskRunner,
-            ReaderBookImportProcessor importProcessor) {
+            ReaderImportTaskRunner taskRunner) {
         return new ReaderLibraryServiceImpl(
                 bookMapper,
                 mock(ReaderChapterMapper.class),
@@ -296,8 +291,7 @@ class ReaderLibraryServiceImplTest {
                 fileReferenceService,
                 accessService,
                 mock(ProtectedFileAccessService.class),
-                taskRunner,
-                importProcessor);
+                taskRunner);
     }
 
     private ReaderLibraryServiceImpl serviceWithPreferenceMapper(ReaderPreferenceMapper preferenceMapper) {
@@ -314,8 +308,7 @@ class ReaderLibraryServiceImplTest {
                 mock(FileReferenceService.class),
                 mock(AccessService.class),
                 mock(ProtectedFileAccessService.class),
-                mock(ReaderImportTaskRunner.class),
-                mock(ReaderBookImportProcessor.class));
+                mock(ReaderImportTaskRunner.class));
     }
 
     private ReaderBook book(Long id, Long ownerUserId, String visibility) {
