@@ -1,5 +1,6 @@
 package com.chen404.service.impl;
 
+import com.chen404.config.SiteAssetConfig;
 import com.chen404.domain.dto.SiteConfigDTO;
 import com.chen404.domain.entity.SiteConfig;
 import com.chen404.domain.entity.SysFile;
@@ -35,7 +36,6 @@ import java.util.stream.Collectors;
 @Service
 public class SiteConfigServiceImpl implements SiteConfigService {
 
-    private static final long SITE_CONFIG_REF_ID = 1L;
     private static final String DEFAULT_GITHUB_URL = "https://github.com/lightreet";
     private static final String LEGACY_GITHUB_URL = "https://github.com/chen404";
     private static final String DEFAULT_SITE_EMAIL = "helychen@outlook.com";
@@ -48,8 +48,6 @@ public class SiteConfigServiceImpl implements SiteConfigService {
     private static final String KEY_SITE_NAME = "site.name";
     private static final String KEY_FRONTEND_BASE_URL = "app.frontend-base-url";
     private static final String KEY_SITE_DESCRIPTION = "site.description";
-    private static final String KEY_SITE_LOGO = "site.logo";
-    private static final String KEY_SITE_FAVICON = "site.favicon";
     private static final String KEY_SITE_ICP = "site.icp";
     private static final String KEY_SITE_BEIAN = "site.beian";
     private static final String KEY_SITE_GITHUB = "site.github";
@@ -59,7 +57,6 @@ public class SiteConfigServiceImpl implements SiteConfigService {
     private static final String KEY_SEO_DESCRIPTION = "seo.description";
     private static final String KEY_COMMENT_AUDIT = "comment.audit";
     private static final String KEY_COMMENT_GUEST = "comment.guest";
-    private static final String KEY_HERO_IMAGES = "site.hero_images";
     private static final String KEY_HERO_IMAGE_POSITIONS = "site.hero_image_positions";
     private static final String KEY_HERO_TEXTS = "site.hero_texts";
     private static final Pattern HERO_POSITION_PATTERN = Pattern.compile(
@@ -105,7 +102,7 @@ public class SiteConfigServiceImpl implements SiteConfigService {
         persistSiteAssets(current);
         persistHeroImages(current);
         fileReferenceService.syncSiteConfigReferences(
-                SITE_CONFIG_REF_ID,
+                SiteAssetConfig.REFERENCE_ID,
                 current.getSiteLogo(),
                 current.getSiteFavicon(),
                 current.getHeroImages()
@@ -121,7 +118,7 @@ public class SiteConfigServiceImpl implements SiteConfigService {
             persistSiteAssets(config);
             persistHeroImages(config);
             fileReferenceService.syncSiteConfigReferences(
-                    SITE_CONFIG_REF_ID,
+                    SiteAssetConfig.REFERENCE_ID,
                     config.getSiteLogo(),
                     config.getSiteFavicon(),
                     config.getHeroImages()
@@ -140,8 +137,8 @@ public class SiteConfigServiceImpl implements SiteConfigService {
                 case KEY_SITE_NAME -> dto.setSiteName(value);
                 case KEY_FRONTEND_BASE_URL -> dto.setFrontendBaseUrl(value);
                 case KEY_SITE_DESCRIPTION -> dto.setSiteDescription(value);
-                case KEY_SITE_LOGO -> dto.setSiteLogo(value);
-                case KEY_SITE_FAVICON -> dto.setSiteFavicon(value);
+                case SiteAssetConfig.LOGO_KEY -> dto.setSiteLogo(value);
+                case SiteAssetConfig.FAVICON_KEY -> dto.setSiteFavicon(value);
                 case KEY_SITE_ICP -> dto.setIcp(value);
                 case KEY_SITE_BEIAN -> dto.setBeian(value);
                 case KEY_SITE_GITHUB -> dto.setGithub(value);
@@ -151,7 +148,7 @@ public class SiteConfigServiceImpl implements SiteConfigService {
                 case KEY_SEO_DESCRIPTION -> dto.setSeoDescription(value);
                 case KEY_COMMENT_AUDIT -> dto.setCommentAudit(parseBoolean(value));
                 case KEY_COMMENT_GUEST -> dto.setCommentGuest(parseBoolean(value));
-                case KEY_HERO_IMAGES -> dto.setHeroImages(parseHeroImages(value));
+                case SiteAssetConfig.HERO_IMAGES_KEY -> dto.setHeroImages(parseHeroImages(value));
                 case KEY_HERO_IMAGE_POSITIONS -> dto.setHeroImagePositions(parseHeroImagePositions(value));
                 case KEY_HERO_TEXTS -> dto.setHeroTexts(parseHeroTexts(value));
                 default -> {
@@ -176,8 +173,8 @@ public class SiteConfigServiceImpl implements SiteConfigService {
             upsertValue(existing, KEY_FRONTEND_BASE_URL, config.getFrontendBaseUrl(), "Frontend public base URL", 1);
         }
         upsertValue(existing, KEY_SITE_DESCRIPTION, config.getSiteDescription(), "Site description", 1);
-        upsertValue(existing, KEY_SITE_LOGO, config.getSiteLogo(), "Site logo", 1);
-        upsertValue(existing, KEY_SITE_FAVICON, config.getSiteFavicon(), "Site favicon", 1);
+        upsertValue(existing, SiteAssetConfig.LOGO_KEY, config.getSiteLogo(), "Site logo", 1);
+        upsertValue(existing, SiteAssetConfig.FAVICON_KEY, config.getSiteFavicon(), "Site favicon", 1);
         upsertValue(existing, KEY_SITE_ICP, config.getIcp(), "ICP number", 1);
         upsertValue(existing, KEY_SITE_BEIAN, config.getBeian(), "Police filing number", 1);
         upsertValue(existing, KEY_SITE_GITHUB, config.getGithub(), "GitHub link", 1);
@@ -187,7 +184,7 @@ public class SiteConfigServiceImpl implements SiteConfigService {
         upsertValue(existing, KEY_SEO_DESCRIPTION, config.getSeoDescription(), "SEO description", 1);
         upsertValue(existing, KEY_COMMENT_AUDIT, String.valueOf(Boolean.TRUE.equals(config.getCommentAudit())), "Comment audit enabled", 3);
         upsertValue(existing, KEY_COMMENT_GUEST, String.valueOf(Boolean.TRUE.equals(config.getCommentGuest())), "Guest comment enabled", 3);
-        upsertValue(existing, KEY_HERO_IMAGES, toHeroImagesJson(config.getHeroImages()), "Hero images", 4);
+        upsertValue(existing, SiteAssetConfig.HERO_IMAGES_KEY, toHeroImagesJson(config.getHeroImages()), "Hero images", 4);
         upsertValue(existing, KEY_HERO_IMAGE_POSITIONS, toHeroImagePositionsJson(config.getHeroImagePositions()), "Hero image positions", 4);
         upsertValue(existing, KEY_HERO_TEXTS, toHeroTextsJson(config.getHeroTexts()), "Hero texts", 4);
     }
@@ -224,7 +221,7 @@ public class SiteConfigServiceImpl implements SiteConfigService {
                         .map(FileClaim::byUrl)
                         .toList(),
                 SysFile.RefType.SITE_HERO,
-                SITE_CONFIG_REF_ID
+                SiteAssetConfig.REFERENCE_ID
         );
     }
 
@@ -237,7 +234,7 @@ public class SiteConfigServiceImpl implements SiteConfigService {
                         .map(FileClaim::byUrl)
                         .toList(),
                 SysFile.RefType.SITE_ASSET,
-                SITE_CONFIG_REF_ID
+                SiteAssetConfig.REFERENCE_ID
         );
     }
 

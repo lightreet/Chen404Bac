@@ -19,7 +19,6 @@ import java.util.UUID;
 public class JwtUtil {
 
     private static final String TOKEN_TYPE_CLAIM = "type";
-    private static final String SESSION_VERSION_CLAIM = "sessionVersion";
     private static final String ACCESS_TOKEN_TYPE = "access";
     private static final String REFRESH_TOKEN_TYPE = "refresh";
 
@@ -49,7 +48,7 @@ public class JwtUtil {
                 .withSubject(String.valueOf(userId))
                 .withClaim("username", username)
                 .withClaim(TOKEN_TYPE_CLAIM, ACCESS_TOKEN_TYPE)
-                .withClaim(SESSION_VERSION_CLAIM, authSessionService.getCurrentVersion(userId))
+                .withClaim(AuthConstants.SESSION_VERSION_CLAIM, authSessionService.getCurrentVersion(userId))
                 .withIssuedAt(now)
                 .withExpiresAt(expireDate)
                 .sign(Algorithm.HMAC256(secret));
@@ -67,7 +66,7 @@ public class JwtUtil {
                 .withClaim("username", username)
                 .withJWTId(UUID.randomUUID().toString())
                 .withClaim(TOKEN_TYPE_CLAIM, REFRESH_TOKEN_TYPE)
-                .withClaim(SESSION_VERSION_CLAIM, authSessionService.getCurrentVersion(userId))
+                .withClaim(AuthConstants.SESSION_VERSION_CLAIM, authSessionService.getCurrentVersion(userId))
                 .withIssuedAt(now)
                 .withExpiresAt(expireDate)
                 .sign(Algorithm.HMAC256(secret));

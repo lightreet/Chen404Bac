@@ -16,4 +16,5 @@ public record MaidChatScenarioResult(
         String mood,
         List<String> suggestions
 ) {
+    public static final String DEFAULT_MOOD = "happy";
 }

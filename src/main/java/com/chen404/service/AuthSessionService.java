@@ -1,5 +1,6 @@
 package com.chen404.service;
 
+import com.chen404.util.AuthConstants;
 import com.auth0.jwt.interfaces.DecodedJWT;
 import com.chen404.util.RedisKeys;
 import com.chen404.util.RedisUtil;
@@ -12,7 +13,6 @@ import org.springframework.stereotype.Service;
 public class AuthSessionService {
 
     private static final long INITIAL_SESSION_VERSION = 0L;
-    private static final String SESSION_VERSION_CLAIM = "sessionVersion";
 
     private final RedisUtil redisUtil;
 
@@ -45,7 +45,7 @@ public class AuthSessionService {
         if (userId == null || decodedJWT == null) {
             return false;
         }
-        Long tokenVersion = decodedJWT.getClaim(SESSION_VERSION_CLAIM).asLong();
+        Long tokenVersion = decodedJWT.getClaim(AuthConstants.SESSION_VERSION_CLAIM).asLong();
         return tokenVersion != null && tokenVersion == getCurrentVersion(userId);
     }
 

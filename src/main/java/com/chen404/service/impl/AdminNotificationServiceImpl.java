@@ -1,5 +1,6 @@
 package com.chen404.service.impl;
 
+import com.chen404.domain.PageBounds;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -31,9 +32,6 @@ import java.util.stream.Collectors;
 @Service
 public class AdminNotificationServiceImpl implements AdminNotificationService {
 
-    private static final long DEFAULT_PAGE = 1L;
-    private static final long DEFAULT_PAGE_SIZE = 20L;
-    private static final long MAX_PAGE_SIZE = 100L;
 
     private final AdminNotificationMapper adminNotificationMapper;
     private final UserMapper userMapper;
@@ -53,8 +51,7 @@ public class AdminNotificationServiceImpl implements AdminNotificationService {
             Integer readStatus,
             String eventType) {
         validateReadStatus(readStatus);
-        long current = page == null || page < 1 ? DEFAULT_PAGE : page;
-        long pageSize = size == null || size < 1 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
+        PageBounds bounds = PageBounds.of(page, size, PageBounds.ADMIN_DEFAULT_SIZE);
 
         LambdaQueryWrapper<AdminNotification> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(AdminNotification::getRecipientUserId, recipientUserId);
@@ -66,7 +63,7 @@ public class AdminNotificationServiceImpl implements AdminNotificationService {
         }
         wrapper.orderByDesc(AdminNotification::getCreateTime).orderByDesc(AdminNotification::getId);
 
-        Page<AdminNotification> result = adminNotificationMapper.selectPage(new Page<>(current, pageSize), wrapper);
+        Page<AdminNotification> result = adminNotificationMapper.selectPage(new Page<>(bounds.current(), bounds.size()), wrapper);
         List<AdminNotificationVO> records = toVOList(result.getRecords());
         return new PageResult<>(records, result.getTotal(), result.getCurrent(), result.getSize());
     }

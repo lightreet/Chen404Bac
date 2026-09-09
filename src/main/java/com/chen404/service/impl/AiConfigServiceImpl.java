@@ -1,5 +1,6 @@
 package com.chen404.service.impl;
 
+import com.chen404.domain.enums.LlmApiStyle;
 import com.chen404.config.AiMaidProperties;
 import com.chen404.config.AiRuntimeProperties;
 import com.chen404.config.LlmProperties;
@@ -165,7 +166,7 @@ public class AiConfigServiceImpl implements AiConfigService {
         config.getLlm().setEnabled(llmProperties.isEnabled());
         config.getLlm().setBaseUrl(defaultText(llmProperties.getBaseUrl(), "https://api.openai.com/v1"));
         config.getLlm().setModel(defaultText(llmProperties.getModel(), "gpt-5.4-mini"));
-        config.getLlm().setApiStyle(defaultText(llmProperties.getApiStyle(), "chat-completions"));
+        config.getLlm().setApiStyle(defaultText(llmProperties.getApiStyle(), LlmApiStyle.CHAT_COMPLETIONS.getValue()));
         config.getLlm().setApiKey(defaultText(llmProperties.getApiKey(), ""));
         config.getLlm().setTemperature(llmProperties.getTemperature());
         config.getLlm().setMaxTokens(llmProperties.getMaxTokens());
@@ -257,7 +258,7 @@ public class AiConfigServiceImpl implements AiConfigService {
         config.getLlm().setEnabled(Boolean.TRUE.equals(config.getLlm().getEnabled()));
         config.getLlm().setBaseUrl(defaultText(config.getLlm().getBaseUrl(), "https://api.openai.com/v1"));
         config.getLlm().setModel(defaultText(config.getLlm().getModel(), "gpt-5.4-mini"));
-        config.getLlm().setApiStyle(normalizeApiStyle(config.getLlm().getApiStyle()));
+        config.getLlm().setApiStyle(LlmApiStyle.fromValue(config.getLlm().getApiStyle()).getValue());
         String patchApiKey = config.getLlm().getApiKey();
         config.getLlm().setApiKey(StringUtils.hasText(patchApiKey) ? patchApiKey.trim() : defaultText(currentApiKey, ""));
         config.getLlm().setTemperature(clampDouble(config.getLlm().getTemperature(), 0.2, 0.0, 2.0));
@@ -418,10 +419,6 @@ public class AiConfigServiceImpl implements AiConfigService {
         }
     }
 
-    private static String normalizeApiStyle(String value) {
-        String normalized = defaultText(value, "chat-completions").toLowerCase();
-        return "responses".equals(normalized) ? "responses" : "chat-completions";
-    }
 
     private static String textOrDefault(String value, String fallback) {
         return StringUtils.hasText(value) ? value.trim() : fallback;

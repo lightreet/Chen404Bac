@@ -1,5 +1,6 @@
 package com.chen404.service.support;
 
+import com.chen404.domain.enums.LlmApiStyle;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
@@ -37,8 +38,6 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
 
     private static final Logger log = LoggerFactory.getLogger(OpenAiCompatibleLlmClient.class);
 
-    private static final String STYLE_CHAT_COMPLETIONS = "chat-completions";
-    private static final String STYLE_RESPONSES = "responses";
     private static final String ROLE_SYSTEM = "system";
     private static final String ROLE_USER = "user";
     private static final String JSON_CONTENT_TYPE = "application/json";
@@ -133,7 +132,7 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
             return;
         }
         String apiStyle = normalizeApiStyle(resolveApiStyle(request));
-        HttpRequest httpRequest = STYLE_CHAT_COMPLETIONS.equals(apiStyle) ? buildStreamRequest(request) : buildRequest(request);
+        HttpRequest httpRequest = LlmApiStyle.CHAT_COMPLETIONS.getValue().equals(apiStyle) ? buildStreamRequest(request) : buildRequest(request);
         long timeoutMs = Math.min(streamProperties.getTotalTimeoutMs(), Duration.ofSeconds(resolveTimeoutSeconds(request)).toMillis());
         LlmStreamControl control = new LlmStreamControl(handler, streamScheduler, timeoutMs, streamProperties.getIdleTimeoutMs());
         try (control) {
@@ -146,7 +145,7 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
                 if (response.statusCode() < 200 || response.statusCode() >= 300) {
                     throw new IllegalStateException(DEFAULT_ERROR_PREFIX + response.statusCode());
                 }
-                if (STYLE_CHAT_COMPLETIONS.equals(apiStyle)) {
+                if (LlmApiStyle.CHAT_COMPLETIONS.getValue().equals(apiStyle)) {
                     readChatCompletionStream(reader, handler);
                 } else {
                     streamByChunkingPlainText(reader, handler);
@@ -194,7 +193,7 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
 
     private HttpRequest buildRequest(LlmTextRequest request) {
         String apiStyle = normalizeApiStyle(resolveApiStyle(request));
-        boolean useResponses = STYLE_RESPONSES.equals(apiStyle);
+        boolean useResponses = LlmApiStyle.RESPONSES.getValue().equals(apiStyle);
         String endpoint = useResponses ? resolveResponsesPath(request) : resolveChatCompletionsPath(request);
         JSONObject body = useResponses ? buildResponsesBody(request) : buildChatCompletionsBody(request);
         if (!useResponses) {
@@ -293,7 +292,7 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
     }
 
     private boolean shouldRetryEmptySseWithStream(String apiStyle, String rawBody) {
-        return STYLE_CHAT_COMPLETIONS.equals(apiStyle) && isSseBody(rawBody);
+        return LlmApiStyle.CHAT_COMPLETIONS.getValue().equals(apiStyle) && isSseBody(rawBody);
     }
 
     private String retryEmptySseWithStream(LlmTextRequest request) {
@@ -549,16 +548,10 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
     }
 
     private String normalizeApiStyle(String apiStyle) {
-        if (!StringUtils.hasText(apiStyle)) {
-            return STYLE_CHAT_COMPLETIONS;
+        LlmApiStyle style = LlmApiStyle.fromValue(apiStyle);
+        if (StringUtils.hasText(apiStyle) && !style.getValue().equalsIgnoreCase(apiStyle.trim())) {
+            log.warn("[LLM_API_STYLE_FALLBACK] value={} fallback={}", apiStyle, style.getValue());
         }
-        String normalized = apiStyle.trim().toLowerCase();
-        if (STYLE_RESPONSES.equals(normalized)) {
-            return STYLE_RESPONSES;
-        }
-        if (!STYLE_CHAT_COMPLETIONS.equals(normalized)) {
-            log.warn("未知的 LLM_API_STYLE 配置，已回退到 chat-completions，value={}", apiStyle);
-        }
-        return STYLE_CHAT_COMPLETIONS;
+        return style.getValue();
     }
 }

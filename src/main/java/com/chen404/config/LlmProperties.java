@@ -1,5 +1,6 @@
 package com.chen404.config;
 
+import com.chen404.domain.enums.LlmApiStyle;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
@@ -14,7 +15,6 @@ public class LlmProperties {
 
     private static final String DEFAULT_BASE_URL = "https://api.openai.com/v1";
     private static final String DEFAULT_MODEL = "gpt-5.4-mini";
-    private static final String DEFAULT_API_STYLE = "chat-completions";
     private static final String DEFAULT_CHAT_COMPLETIONS_PATH = "/chat/completions";
     private static final String DEFAULT_RESPONSES_PATH = "/responses";
     private static final double DEFAULT_TEMPERATURE = 0.2d;
@@ -25,7 +25,7 @@ public class LlmProperties {
     private String apiKey;
     private String baseUrl = DEFAULT_BASE_URL;
     private String model = DEFAULT_MODEL;
-    private String apiStyle = DEFAULT_API_STYLE;
+    private String apiStyle = LlmApiStyle.CHAT_COMPLETIONS.getValue();
     private String chatCompletionsPath = DEFAULT_CHAT_COMPLETIONS_PATH;
     private String responsesPath = DEFAULT_RESPONSES_PATH;
     private double temperature = DEFAULT_TEMPERATURE;

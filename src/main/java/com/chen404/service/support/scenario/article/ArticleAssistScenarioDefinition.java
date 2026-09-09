@@ -1,5 +1,6 @@
 package com.chen404.service.support.scenario.article;
 
+import com.chen404.service.support.AiJsonOutput;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
@@ -28,10 +29,6 @@ public class ArticleAssistScenarioDefinition implements AiScenarioDefinition<Art
     private static final String SYSTEM_INSTRUCTION = "You are an assistant for a Chinese technical blog CMS. Return valid JSON only.";
     private static final String OUTPUT_FIELD_SUMMARY = "summary";
     private static final String OUTPUT_FIELD_TAGS = "tags";
-    private static final String CODE_FENCE_PREFIX = "```";
-    private static final String JSON_FENCE_PATTERN = "^```(?:json)?\\s*";
-    private static final String JSON_FENCE_SUFFIX_PATTERN = "\\s*```$";
-    private static final String EMPTY_TEXT = "";
 
     private final LlmClient llmClient;
     private final AiRuntimeProperties aiRuntimeProperties;
@@ -62,7 +59,7 @@ public class ArticleAssistScenarioDefinition implements AiScenarioDefinition<Art
     }
 
     private ArticleAssistScenarioResult parseResponse(String outputText) {
-        JSONObject payload = JSON.parseObject(stripCodeFence(outputText));
+        JSONObject payload = JSON.parseObject(AiJsonOutput.stripCodeFence(outputText));
         return new ArticleAssistScenarioResult(
                 normalizeSummary(payload.getString(OUTPUT_FIELD_SUMMARY)),
                 normalizeTags(payload.getJSONArray(OUTPUT_FIELD_TAGS))
@@ -136,14 +133,6 @@ public class ArticleAssistScenarioDefinition implements AiScenarioDefinition<Art
         return normalized.substring(0, maxInputChars);
     }
 
-    private String stripCodeFence(String text) {
-        String trimmed = text == null ? EMPTY_TEXT : text.trim();
-        if (trimmed.startsWith(CODE_FENCE_PREFIX)) {
-            trimmed = trimmed.replaceFirst(JSON_FENCE_PATTERN, EMPTY_TEXT);
-            trimmed = trimmed.replaceFirst(JSON_FENCE_SUFFIX_PATTERN, EMPTY_TEXT);
-        }
-        return trimmed;
-    }
 
     private String normalizeSummary(String summary) {
         if (!StringUtils.hasText(summary)) {

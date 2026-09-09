@@ -1,5 +1,6 @@
 package com.chen404.service.support.scenario.music;
 
+import com.chen404.service.support.AiJsonOutput;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONException;
@@ -25,9 +26,6 @@ import java.util.List;
 public class MusicTrackSuggestScenarioDefinition implements AiScenarioDefinition<MusicTrackSuggestScenarioRequest, MusicTrackSuggestScenarioResult> {
 
     private static final String SYSTEM_INSTRUCTION = "You are a careful music metadata assistant and music recommendation editor for a personal Sakura Radio CMS. Return valid JSON only.";
-    private static final String CODE_FENCE_PREFIX = "```";
-    private static final String JSON_FENCE_PATTERN = "^```(?:json)?\\s*";
-    private static final String JSON_FENCE_SUFFIX_PATTERN = "\\s*```$";
     private static final String EMPTY_TEXT = "";
     private static final int MIN_RELEASE_YEAR = 1900;
     private static final int MAX_TAG_COUNT = 5;
@@ -128,7 +126,7 @@ public class MusicTrackSuggestScenarioDefinition implements AiScenarioDefinition
     }
 
     private JSONObject parseJsonObject(String outputText) {
-        String jsonText = stripCodeFence(outputText);
+        String jsonText = AiJsonOutput.stripCodeFence(outputText);
         try {
             return JSON.parseObject(jsonText);
         } catch (JSONException ex) {
@@ -237,14 +235,6 @@ public class MusicTrackSuggestScenarioDefinition implements AiScenarioDefinition
                 && !StringUtils.hasText(candidate.lyricSource());
     }
 
-    private String stripCodeFence(String text) {
-        String trimmed = text == null ? EMPTY_TEXT : text.trim();
-        if (trimmed.startsWith(CODE_FENCE_PREFIX)) {
-            trimmed = trimmed.replaceFirst(JSON_FENCE_PATTERN, EMPTY_TEXT);
-            trimmed = trimmed.replaceFirst(JSON_FENCE_SUFFIX_PATTERN, EMPTY_TEXT);
-        }
-        return trimmed;
-    }
 
     private Integer normalizeReleaseYear(Integer releaseYear) {
         if (releaseYear == null) {

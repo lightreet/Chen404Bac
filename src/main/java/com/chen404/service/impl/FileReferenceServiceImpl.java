@@ -1,5 +1,6 @@
 package com.chen404.service.impl;
 
+import com.chen404.config.SiteAssetConfig;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.chen404.domain.entity.Article;
@@ -50,10 +51,6 @@ import java.util.Objects;
 @Service
 public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, FileReference> implements FileReferenceService {
 
-    private static final Long SITE_CONFIG_REF_ID = 1L;
-    private static final String KEY_SITE_LOGO = "site.logo";
-    private static final String KEY_SITE_FAVICON = "site.favicon";
-    private static final String KEY_HERO_IMAGES = "site.hero_images";
 
     private final SysFileService sysFileService;
     private final ArticleMapper articleMapper;
@@ -181,7 +178,7 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
                 if (!StringUtils.hasText(entry.getKey()) || !StringUtils.hasText(entry.getValue())) {
                     continue;
                 }
-                namedHeroes.put(KEY_HERO_IMAGES + "." + entry.getKey().trim(), entry.getValue().trim());
+                namedHeroes.put(SiteAssetConfig.HERO_IMAGES_KEY + "." + entry.getKey().trim(), entry.getValue().trim());
             }
         }
         replaceReferences(
@@ -368,10 +365,10 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
         }
 
         syncSiteConfigReferences(
-                SITE_CONFIG_REF_ID,
-                loadSiteConfigValue(KEY_SITE_LOGO),
-                loadSiteConfigValue(KEY_SITE_FAVICON),
-                parseHeroImages(loadSiteConfigValue(KEY_HERO_IMAGES))
+                SiteAssetConfig.REFERENCE_ID,
+                loadSiteConfigValue(SiteAssetConfig.LOGO_KEY),
+                loadSiteConfigValue(SiteAssetConfig.FAVICON_KEY),
+                parseHeroImages(loadSiteConfigValue(SiteAssetConfig.HERO_IMAGES_KEY))
         );
 
         int travelLocationCount = 0;

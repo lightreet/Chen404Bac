@@ -64,7 +64,6 @@ public class AiChatServiceImpl implements AiChatService {
     private static final Logger log = LoggerFactory.getLogger(AiChatServiceImpl.class);
 
     private static final String DEFAULT_FINISH_REASON = "stop";
-    private static final String DEFAULT_MOOD = "happy";
     private static final String SSE_EVENT_SESSION = "session";
     private static final String SSE_EVENT_MESSAGE_START = "message_start";
     private static final String SSE_EVENT_DELTA = "delta";
@@ -433,7 +432,7 @@ public class AiChatServiceImpl implements AiChatService {
         sendEvent(emitter, SSE_EVENT_MESSAGE_START, JSONObject.of(
                 "messageId", context.messageId(),
                 "scene", context.scene().name().toLowerCase(Locale.ROOT),
-                "mood", DEFAULT_MOOD
+                "mood", MaidChatScenarioResult.DEFAULT_MOOD
         ));
         for (AiChatCitationDTO citation : buildCitations(context.knowledgeHits(), context.aiConfig())) {
             sendEvent(emitter, SSE_EVENT_CITATION, JSON.parseObject(JSON.toJSONString(citation)));

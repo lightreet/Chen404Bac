@@ -1,5 +1,6 @@
 package com.chen404.service.impl;
 
+import com.chen404.domain.PageBounds;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.chen404.converter.AdminCommentConverter;
@@ -32,9 +33,6 @@ import java.util.stream.Collectors;
 @Service
 public class AdminCommentServiceImpl implements AdminCommentService {
 
-    private static final long DEFAULT_PAGE = 1L;
-    private static final long DEFAULT_PAGE_SIZE = 20L;
-    private static final long MAX_PAGE_SIZE = 100L;
 
     private final CommentMapper commentMapper;
     private final ArticleMapper articleMapper;
@@ -60,10 +58,7 @@ public class AdminCommentServiceImpl implements AdminCommentService {
             CommentSceneEnum scene,
             String keyword) {
         validateQueryStatus(status);
-        long current = page == null || page < 1 ? DEFAULT_PAGE : page;
-        long pageSize = size == null || size < 1
-                ? DEFAULT_PAGE_SIZE
-                : Math.min(size, MAX_PAGE_SIZE);
+        PageBounds bounds = PageBounds.of(page, size, PageBounds.ADMIN_DEFAULT_SIZE);
         CommentSceneEnum normalizedScene = scene == null ? CommentSceneEnum.ALL : scene;
 
         LambdaQueryWrapper<Comment> wrapper = new LambdaQueryWrapper<>();
@@ -78,7 +73,7 @@ public class AdminCommentServiceImpl implements AdminCommentService {
             wrapper.orderByDesc(Comment::getCreateTime).orderByDesc(Comment::getId);
         }
 
-        Page<Comment> commentPage = commentMapper.selectPage(new Page<>(current, pageSize), wrapper);
+        Page<Comment> commentPage = commentMapper.selectPage(new Page<>(bounds.current(), bounds.size()), wrapper);
         List<AdminCommentVO> list = toAdminCommentVOList(commentPage.getRecords());
         return new PageResult<>(list, commentPage.getTotal(), commentPage.getCurrent(), commentPage.getSize());
     }

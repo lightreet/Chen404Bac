@@ -7,6 +7,8 @@ public final class AuthConstants {
 
     private AuthConstants() {}
 
+    public static final String SESSION_VERSION_CLAIM = "sessionVersion";
+
     public static final int SEND_CODE_EXPIRE_SECONDS = 300;
     public static final int SEND_CODE_INTERVAL_SECONDS = 60;
     public static final int MAX_DAILY_SEND_CODE_COUNT = 10;

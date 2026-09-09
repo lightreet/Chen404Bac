@@ -1,5 +1,6 @@
 package com.chen404.service.support;
 
+import com.chen404.domain.enums.LlmApiStyle;
 import com.chen404.domain.dto.AiAdminConfigDTO;
 import com.chen404.service.AiConfigService;
 import org.springframework.stereotype.Component;
@@ -11,7 +12,6 @@ import org.springframework.util.StringUtils;
 @Component
 public class AiLlmRequestFactory {
 
-    private static final String DEFAULT_API_STYLE = "chat-completions";
 
     private final AiConfigService aiConfigService;
 
@@ -34,7 +34,7 @@ public class AiLlmRequestFactory {
                 llm.getMaxTokens(),
                 llm.getBaseUrl().trim(),
                 llm.getApiKey().trim(),
-                normalizeApiStyle(llm.getApiStyle()),
+                LlmApiStyle.fromValue(llm.getApiStyle()).getValue(),
                 null,
                 null,
                 llm.getTimeoutSeconds()
@@ -59,11 +59,4 @@ public class AiLlmRequestFactory {
         }
     }
 
-    private String normalizeApiStyle(String apiStyle) {
-        if (!StringUtils.hasText(apiStyle)) {
-            return DEFAULT_API_STYLE;
-        }
-        String normalized = apiStyle.trim().toLowerCase();
-        return "responses".equals(normalized) ? "responses" : DEFAULT_API_STYLE;
-    }
 }

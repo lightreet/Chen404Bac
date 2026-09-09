@@ -1,5 +1,6 @@
 package com.chen404.service.support.scenario.chat;
 
+import com.chen404.service.support.AiJsonOutput;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
@@ -41,13 +42,8 @@ public class MaidChatScenarioDefinition implements AiScenarioDefinition<MaidChat
     private static final String OUTPUT_FIELD_BUBBLE_TEXT = "bubbleText";
     private static final String OUTPUT_FIELD_MOOD = "mood";
     private static final String OUTPUT_FIELD_SUGGESTIONS = "suggestions";
-    private static final String DEFAULT_MOOD = "happy";
     private static final String DEFAULT_REPLY = "我在呢。你可以告诉我你想聊聊，还是想让我帮你看看这页内容呀。";
     private static final String DEFAULT_HELPER_REPLY = "这页如果你想抓重点，我可以先帮你压成几句短的。";
-    private static final String CODE_FENCE_PREFIX = "```";
-    private static final String JSON_FENCE_PATTERN = "^```(?:json)?\\s*";
-    private static final String JSON_FENCE_SUFFIX_PATTERN = "\\s*```$";
-    private static final String EMPTY_TEXT = "";
 
     private final LlmClient llmClient;
     private final AiRuntimeProperties aiRuntimeProperties;
@@ -85,7 +81,7 @@ public class MaidChatScenarioDefinition implements AiScenarioDefinition<MaidChat
         return new MaidChatScenarioResult(
                 resolvePanelAnswer(streamedReply, request.scene()),
                 resolveBubbleText(streamedReply, request),
-                DEFAULT_MOOD,
+                MaidChatScenarioResult.DEFAULT_MOOD,
                 defaultSuggestions(request.scene(), request.currentArticle(), request.aiConfig())
         );
     }
@@ -94,14 +90,14 @@ public class MaidChatScenarioDefinition implements AiScenarioDefinition<MaidChat
         return new MaidChatScenarioResult(
                 request.scene() == AiMaidPromptScene.HELPER ? DEFAULT_HELPER_REPLY : DEFAULT_REPLY,
                 request.scene() == AiMaidPromptScene.HELPER ? DEFAULT_HELPER_REPLY : DEFAULT_REPLY,
-                DEFAULT_MOOD,
+                MaidChatScenarioResult.DEFAULT_MOOD,
                 defaultSuggestions(request.scene(), request.currentArticle(), request.aiConfig())
         );
     }
 
     private MaidChatScenarioResult parseStructuredResponse(String outputText, MaidChatScenarioRequest request) {
         try {
-            JSONObject payload = JSON.parseObject(stripCodeFence(outputText));
+            JSONObject payload = JSON.parseObject(AiJsonOutput.stripCodeFence(outputText));
             String panelAnswer = resolvePanelAnswer(resolvePanelAnswerField(payload), request.scene());
             return new MaidChatScenarioResult(
                     panelAnswer,
@@ -320,14 +316,6 @@ public class MaidChatScenarioDefinition implements AiScenarioDefinition<MaidChat
         return aiRuntimeProperties.getChat().getMaxArticleContentChars();
     }
 
-    private String stripCodeFence(String text) {
-        String trimmed = text == null ? EMPTY_TEXT : text.trim();
-        if (trimmed.startsWith(CODE_FENCE_PREFIX)) {
-            trimmed = trimmed.replaceFirst(JSON_FENCE_PATTERN, EMPTY_TEXT);
-            trimmed = trimmed.replaceFirst(JSON_FENCE_SUFFIX_PATTERN, EMPTY_TEXT);
-        }
-        return trimmed;
-    }
 
     private String resolvePanelAnswer(String replyText, AiMaidPromptScene scene) {
         if (!StringUtils.hasText(replyText)) {
@@ -338,7 +326,7 @@ public class MaidChatScenarioDefinition implements AiScenarioDefinition<MaidChat
 
     private String resolveMood(String mood) {
         if (!StringUtils.hasText(mood)) {
-            return DEFAULT_MOOD;
+            return MaidChatScenarioResult.DEFAULT_MOOD;
         }
         return mood.trim();
     }
