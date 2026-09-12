@@ -24,7 +24,7 @@ public interface UserService {
     LoginResultDTO login(LoginDTO loginDTO, String clientIp);
 
     /**
-     * 用户注册
+     * 使用已验证邮箱注册，以邮箱作为用户名并在事务内绑定默认角色。
      */
     User register(RegisterDTO registerDTO);
 

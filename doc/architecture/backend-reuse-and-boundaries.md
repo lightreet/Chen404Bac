@@ -13,6 +13,7 @@
 | 站点资产配置键与引用 ID | `SiteAssetConfig` | 配置保存和文件引用重建 |
 | JWT 会话版本声明名 | `AuthConstants.SESSION_VERSION_CLAIM` | JWT 签发与会话校验 |
 | 用户启停状态 | `UserStatusEnum` | 读取权限、登录、刷新令牌、找回密码、启用用户查询；未知值按不可用处理 |
+| 账号字段长度与密码约束 | `UserConstraints` | 注册、资料更新、验证码申请和密码重置；邮箱及默认昵称容量保持一致 |
 | LLM 协议风格 | `LlmApiStyle` | 配置归一化、请求工厂与客户端分派 |
 | AI 默认参数 | `LlmProperties`、`AiMaidProperties`、`AiRuntimeProperties.Chat` | 启动值、数据库配置回退及聊天场景；已有常量直接复用 |
 | AI 输出 JSON 围栏处理 | `AiJsonOutput` | 聊天、文章助手、音乐建议 |
@@ -42,3 +43,7 @@
 - 分页和导入恢复的 SQL、并发验证分别见 [文章查询边界](article-query-boundaries.md) 与 [阅读器导入恢复](reader-import-recovery.md)。
 
 尚未迁移的实体边界、核心服务职责、热门/相邻文章候选扫描等保留在 [Java 质量债务](java-quality-debt.md)，后续修改对应模块时继续消除。
+
+## 邮箱注册写入边界
+
+新账号以已核验邮箱作为用户名，旧客户端的 `username` 字段会被忽略。注册前检查邮箱与用户名冲突，并在写入前确认默认角色存在；数据库唯一键冲突转换为业务冲突，角色绑定失败抛出异常并由注册事务回滚。测试使用 Mock 验证写入顺序和失败边界，迁移由正式 Flyway 文件交付。

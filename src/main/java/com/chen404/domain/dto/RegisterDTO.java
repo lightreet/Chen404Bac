@@ -1,6 +1,8 @@
 package com.chen404.domain.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.chen404.domain.UserConstraints;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Email;
@@ -10,33 +12,26 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 /**
- * 注册请求DTO
+ * 注册请求DTO；用户名使用注册邮箱，忽略旧客户端提交的用户名。
  */
 @Schema(description = "注册请求参数")
 @Data
+@JsonIgnoreProperties("username")
 public class RegisterDTO {
-
-    /**
-     * 用户名（3-20位字母数字下划线）
-     */
-    @Schema(description = "用户名，3-20位字母数字下划线", required = true, example = "testuser")
-    @NotBlank(message = "用户名不能为空")
-    @Size(min = 3, max = 20, message = "用户名长度3-20位")
-    @Pattern(regexp = "^[a-zA-Z0-9_]+$", message = "用户名只能包含字母、数字、下划线")
-    private String username;
 
     /**
      * 密码（6-20位）
      */
     @Schema(description = "密码，6-20位", required = true, example = "123456")
     @NotBlank(message = "密码不能为空")
-    @Size(min = 6, max = 20, message = "密码长度6-20位")
+    @Size(min = UserConstraints.PASSWORD_MIN_LENGTH, max = UserConstraints.PASSWORD_MAX_LENGTH, message = "密码长度6-20位")
     private String password;
 
     /**
      * 昵称（可选）
      */
     @Schema(description = "昵称（可选）", example = "测试用户")
+    @Size(max = UserConstraints.NICKNAME_MAX_LENGTH, message = "昵称长度不能超过100位")
     private String nickname;
 
     /**
@@ -44,6 +39,7 @@ public class RegisterDTO {
      */
     @Schema(description = "邮箱（邮箱注册时必填）", example = "test@example.com")
     @Email(message = "邮箱格式不正确")
+    @Size(max = UserConstraints.EMAIL_MAX_LENGTH, message = "邮箱长度不能超过100位")
     private String email;
 
     /**

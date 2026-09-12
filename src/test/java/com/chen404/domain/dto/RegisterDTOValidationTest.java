@@ -31,9 +31,28 @@ class RegisterDTOValidationTest {
 
     private RegisterDTO validBase() {
         RegisterDTO dto = new RegisterDTO();
-        dto.setUsername("user_404");
         dto.setPassword("secure-password");
         dto.setCode("123456");
         return dto;
+    }
+
+    @Test
+    void shouldAcceptFullEmailUpToDatabaseCapacityWithoutUsername() {
+        RegisterDTO request = validBase();
+        request.setEmail("a".repeat(60) + "@" + "b".repeat(35) + ".com");
+        assertTrue(validator.validate(request).isEmpty());
+
+        request.setEmail("a".repeat(60) + "@" + "b".repeat(36) + ".com");
+        assertFalse(validator.validate(request).isEmpty());
+    }
+
+    @Test
+    void defaultEmailNicknameMustRemainEditableInProfile() {
+        UpdateProfileDTO profile = new UpdateProfileDTO();
+        profile.setAvatar("/default-member-avatar.svg");
+        profile.setNickname("a".repeat(60) + "@" + "b".repeat(35) + ".com");
+        assertTrue(validator.validate(profile).isEmpty());
+        profile.setNickname(profile.getNickname() + "x");
+        assertFalse(validator.validate(profile).isEmpty());
     }
 }

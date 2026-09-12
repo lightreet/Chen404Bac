@@ -1,9 +1,11 @@
 package com.chen404.domain.dto;
 
+import com.chen404.domain.UserConstraints;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 /**
@@ -18,6 +20,7 @@ public class SendCodeDTO {
      */
     @Schema(description = "邮箱（邮箱验证时必填）", example = "test@example.com")
     @Email(message = "邮箱格式不正确")
+    @Size(max = UserConstraints.EMAIL_MAX_LENGTH, message = "邮箱长度不能超过100位")
     private String email;
 
     /**

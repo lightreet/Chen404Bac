@@ -1,5 +1,6 @@
 package com.chen404.domain.dto;
 
+import com.chen404.domain.UserConstraints;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -16,15 +17,16 @@ public class ForgotPasswordDTO {
     @Schema(description = "已注册邮箱", required = true, example = "chen404@example.com")
     @NotBlank(message = "邮箱不能为空")
     @Email(message = "邮箱格式不正确")
+    @Size(max = UserConstraints.EMAIL_MAX_LENGTH, message = "邮箱长度不能超过100位")
     private String email;
 
     @Schema(description = "邮箱验证码", required = true, example = "123456")
     @NotBlank(message = "验证码不能为空")
-    @Size(min = 4, max = 6, message = "验证码长度需为 4-6 位")
+    @Size(min = UserConstraints.VERIFICATION_CODE_MIN_LENGTH, max = UserConstraints.VERIFICATION_CODE_MAX_LENGTH, message = "验证码长度需为 4-6 位")
     private String code;
 
     @Schema(description = "新密码（6-20位）", required = true, example = "newPassword123")
     @NotBlank(message = "新密码不能为空")
-    @Size(min = 6, max = 20, message = "新密码长度6-20位")
+    @Size(min = UserConstraints.PASSWORD_MIN_LENGTH, max = UserConstraints.PASSWORD_MAX_LENGTH, message = "新密码长度6-20位")
     private String newPassword;
 }

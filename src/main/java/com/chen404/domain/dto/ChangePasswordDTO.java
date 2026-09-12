@@ -1,5 +1,6 @@
 package com.chen404.domain.dto;
 
+import com.chen404.domain.UserConstraints;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -18,7 +19,7 @@ public class ChangePasswordDTO {
 
     @Schema(description = "新密码（6-20位）", required = true)
     @NotBlank(message = "新密码不能为空")
-    @Size(min = 6, max = 20, message = "新密码长度6-20位")
+    @Size(min = UserConstraints.PASSWORD_MIN_LENGTH, max = UserConstraints.PASSWORD_MAX_LENGTH, message = "新密码长度6-20位")
     private String newPassword;
 }
 

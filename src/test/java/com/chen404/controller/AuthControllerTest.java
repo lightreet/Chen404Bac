@@ -3,7 +3,10 @@ package com.chen404.controller;
 import com.auth0.jwt.interfaces.DecodedJWT;
 import com.chen404.converter.UserConverter;
 import com.chen404.domain.dto.RefreshTokenDTO;
+import com.chen404.domain.dto.RegisterDTO;
+import com.chen404.domain.dto.UserProfileVO;
 import com.chen404.domain.entity.User;
+import com.chen404.domain.enums.VerificationCodeTypeEnum;
 import com.chen404.exception.UnauthorizedException;
 import com.chen404.service.AuthSessionService;
 import com.chen404.service.UserService;
@@ -16,6 +19,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.mockito.ArgumentCaptor;
 
 import java.time.Duration;
 
@@ -25,8 +31,42 @@ import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verify;
+import static org.mockito.ArgumentMatchers.any;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 
 class AuthControllerTest {
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void registrationMustAcceptMissingUsernameAndIgnoreLegacyClientUsername(boolean legacyClient) throws Exception {
+        UserService users = mock(UserService.class);
+        VerificationCodeService codes = mock(VerificationCodeService.class);
+        UserConverter converter = mock(UserConverter.class);
+        AuthController controller = new AuthController(users, codes, mock(JwtUtil.class),
+                mock(RedisUtil.class), converter, mock(AuthSessionService.class));
+        User user = new User();
+        UserProfileVO profile = new UserProfileVO();
+        profile.setUsername("reader@example.com");
+        when(codes.verifyCode("reader@example.com", VerificationCodeTypeEnum.REGISTER, "123456"))
+                .thenReturn(true);
+        when(users.register(any(RegisterDTO.class))).thenReturn(user);
+        when(converter.toVO(user)).thenReturn(profile);
+
+        String legacyField = legacyClient ? "\"username\":\"client_chosen\"," : "";
+        MockMvcBuilders.standaloneSetup(controller).build().perform(post("/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{" + legacyField + "\"email\":\"reader@example.com\","
+                        + "\"password\":\"secure-password\",\"code\":\"123456\",\"registerType\":\"email\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.username").value("reader@example.com"));
+
+        ArgumentCaptor<RegisterDTO> captured = ArgumentCaptor.forClass(RegisterDTO.class);
+        verify(users).register(captured.capture());
+        assertEquals("reader@example.com", captured.getValue().getEmail());
+    }
 
     @ParameterizedTest
     @NullSource

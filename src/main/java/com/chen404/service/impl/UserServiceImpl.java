@@ -13,6 +13,7 @@ import com.chen404.domain.entity.SysFile;
 import com.chen404.domain.entity.User;
 import com.chen404.domain.entity.UserRole;
 import com.chen404.domain.enums.UserStatusEnum;
+import com.chen404.domain.enums.UserRoleEnum;
 import com.chen404.domain.enums.UserTrustLevelEnum;
 import com.chen404.exception.BadRequestException;
 import com.chen404.exception.ConflictException;
@@ -35,6 +36,7 @@ import com.chen404.util.RedisUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,6 +55,7 @@ import java.util.Objects;
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService {
 
     private static final String DEFAULT_MEMBER_AVATAR = "/default-member-avatar.svg";
+    private static final int EMAIL_VERIFIED = 1;
     private static final int LOGIN_FAIL_LIMIT = 5;
     private static final Duration LOGIN_FAIL_WINDOW = Duration.ofMinutes(15);
     private static final Duration LOGIN_BLOCK_TTL = Duration.ofMinutes(15);
@@ -197,51 +200,51 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     @Transactional(rollbackFor = Exception.class)
     public User register(RegisterDTO registerDTO) {
-        // 用户名唯一
-        if (isUsernameExists(registerDTO.getUsername())) {
-            throw new ConflictException("用户名已存在");
+        if (registerDTO == null || !registerDTO.isSupportedRegistrationChannel()) {
+            throw new BadRequestException("当前仅支持邮箱注册");
         }
-
+        String email = registerDTO.getEmail().trim();
         // 邮箱唯一
-        if (StringUtils.hasText(registerDTO.getEmail()) && isEmailExists(registerDTO.getEmail())) {
+        if (isEmailExists(email) || isUsernameExists(email)) {
             throw new ConflictException("邮箱已被注册");
         }
 
-        // 手机号唯一
-        if (StringUtils.hasText(registerDTO.getPhone()) && isPhoneExists(registerDTO.getPhone())) {
-            throw new ConflictException("手机号已被注册");
+        Role defaultRole = roleMapper.selectByRoleCode(UserRoleEnum.USER.getRoleCode());
+        if (defaultRole == null) {
+            log.error("[USER_REGISTER_ROLE_MISSING] roleCode={}", UserRoleEnum.USER.getRoleCode());
+            throw new IllegalStateException("注册默认角色未配置");
         }
 
         // 构造用户实体
         User user = new User();
-        user.setUsername(registerDTO.getUsername());
+        // 用户名直接使用已验证邮箱；用户 ID 仍沿用原有分配方式。
+        user.setUsername(email);
         // 密码 BCrypt 加密
         user.setPassword(passwordEncoder.encode(registerDTO.getPassword()));
-        user.setNickname(StringUtils.hasText(registerDTO.getNickname()) ?
-                registerDTO.getNickname() : registerDTO.getUsername());
-        user.setEmail(registerDTO.getEmail());
-        user.setPhone(registerDTO.getPhone());
+        user.setEmail(email);
         user.setAvatar(DEFAULT_MEMBER_AVATAR);
         user.setStatus(UserStatusEnum.ENABLED.getValue());
         user.setTrustLevel(UserTrustLevelEnum.NORMAL.getLevel());
 
-        // 填写邮箱则标记为已验证；手机号默认未验证（需后续验证流程）
-        if (StringUtils.hasText(registerDTO.getEmail())) {
-            user.setEmailVerified(1);
-        }
-        if (StringUtils.hasText(registerDTO.getPhone())) {
-            user.setPhoneVerified(0);
+        // 控制器完成邮箱验证码核验后才进入注册事务。
+        user.setEmailVerified(EMAIL_VERIFIED);
+        user.setNickname(StringUtils.hasText(registerDTO.getNickname()) ?
+                registerDTO.getNickname().trim() : user.getUsername());
+        try {
+            if (userMapper.insert(user) != 1) {
+                throw new IllegalStateException("用户创建失败");
+            }
+        } catch (DuplicateKeyException conflict) {
+            // 预检查不能避免并发注册，唯一索引冲突统一返回业务冲突，不暴露数据库信息。
+            throw new ConflictException("邮箱已被注册");
         }
 
-        userMapper.insert(user);
-
-        // 绑定默认 user 角色
-        Role userRole = roleMapper.selectByRoleCode("user");
-        if (userRole != null) {
-            UserRole ur = new UserRole();
-            ur.setUserId(user.getId());
-            ur.setRoleId(userRole.getId());
-            userRoleMapper.insert(ur);
+        UserRole membership = new UserRole();
+        membership.setUserId(user.getId());
+        membership.setRoleId(defaultRole.getId());
+        if (userRoleMapper.insert(membership) != 1) {
+            log.error("[USER_REGISTER_ROLE_BIND_FAILED] userId={} roleId={}", user.getId(), defaultRole.getId());
+            throw new IllegalStateException("注册角色绑定失败");
         }
 
         return getCurrentUser(user.getId());

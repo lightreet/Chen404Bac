@@ -51,18 +51,21 @@ class FlywayMigrationLayoutTest {
             "V2026082001__add_reader_reading_mode.sql",
             "V2026090801__create_file_deletion_task.sql",
             "V2026090802__add_article_edit_version.sql",
-            "V2026090901__add_reader_import_lease.sql"
+            "V2026090901__add_reader_import_lease.sql",
+            "V2026091201__support_email_as_username.sql"
     );
 
     @Test
     void shouldProvideOrderedFlywayMigrationsForCurrentSchema() throws IOException {
         assertTrue(Files.isDirectory(MIGRATION_DIR), "Flyway 迁移目录缺失");
 
-        List<String> migrationFiles = Files.list(MIGRATION_DIR)
-                .filter(Files::isRegularFile)
-                .map(path -> path.getFileName().toString())
-                .sorted()
-                .collect(Collectors.toList());
+        List<String> migrationFiles;
+        try (var paths = Files.list(MIGRATION_DIR)) {
+            migrationFiles = paths.filter(Files::isRegularFile)
+                    .map(path -> path.getFileName().toString())
+                    .sorted()
+                    .collect(Collectors.toList());
+        }
 
         assertEquals(EXPECTED_MIGRATIONS, migrationFiles, "Flyway 迁移文件顺序或命名不符合预期");
     }

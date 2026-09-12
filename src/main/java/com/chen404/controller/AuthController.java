@@ -84,7 +84,7 @@ public class AuthController {
         return Result.success("登录成功", result);
     }
 
-    @Operation(summary = "用户注册", description = "支持邮箱注册，需要验证码")
+    @Operation(summary = "用户注册", description = "使用邮箱验证码注册，用户名直接使用注册邮箱")
     @PostMapping("/register")
     public Result<UserProfileVO> register(@Valid @RequestBody RegisterDTO registerDTO) {
         boolean valid = verificationCodeService.verifyCode(
