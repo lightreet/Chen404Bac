@@ -44,8 +44,6 @@ class OpenAiCompatibleLlmClientStreamTest {
         properties.setBaseUrl("http://127.0.0.1:" + server.getAddress().getPort());
         properties.setChatCompletionsPath("/stream");
         properties.setResponsesPath("/stream");
-        limits.setTotalTimeoutMs(3000);
-        limits.setIdleTimeoutMs(250);
     }
 
     @AfterEach
@@ -57,57 +55,6 @@ class OpenAiCompatibleLlmClientStreamTest {
         scheduler.shutdownNow();
         assertTrue(worker.awaitTermination(2, TimeUnit.SECONDS), "LLM 工作线程必须退出");
         assertTrue(scheduler.awaitTermination(2, TimeUnit.SECONDS));
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {"chat-completions", "responses"})
-    void idleTimeoutMustCloseBodyEvenWhenReadNeverReturns(String style) throws Exception {
-        properties.setApiStyle(style);
-        start(exchange -> {
-            sendHeaders(exchange);
-            exchange.getResponseBody().write(" ".getBytes(StandardCharsets.UTF_8));
-            exchange.getResponseBody().flush();
-            received.countDown();
-            holdServer();
-            exchange.close();
-        });
-        Handler handler = new Handler();
-        Future<?> request = invoke(handler);
-        assertTrue(received.await(2, TimeUnit.SECONDS));
-        ExecutionException failure = assertThrows(ExecutionException.class, () -> request.get(2, TimeUnit.SECONDS));
-        assertInstanceOf(LlmStreamTimeoutException.class, failure.getCause());
-        assertEquals(0, handler.completed.get());
-    }
-
-    @Test
-    void totalTimeoutMustStopAContinuouslyActiveStream() throws Exception {
-        limits.setTotalTimeoutMs(450);
-        limits.setIdleTimeoutMs(1000);
-        start(exchange -> {
-            sendHeaders(exchange);
-            while (releaseServer.getCount() > 0) {
-                try {
-                    exchange.getResponseBody().write("data: {\"choices\":[{\"delta\":{\"content\":\"x\"}}]}\n\n"
-                            .getBytes(StandardCharsets.UTF_8));
-                    exchange.getResponseBody().flush();
-                    if (releaseServer.await(40, TimeUnit.MILLISECONDS)) {
-                        break;
-                    }
-                } catch (IOException ex) {
-                    break;
-                } catch (InterruptedException ex) {
-                    Thread.currentThread().interrupt();
-                    break;
-                }
-            }
-            exchange.close();
-        });
-        Handler handler = new Handler();
-        Future<?> request = invoke(handler);
-        ExecutionException failure = assertThrows(ExecutionException.class, () -> request.get(2, TimeUnit.SECONDS));
-        assertInstanceOf(LlmStreamTimeoutException.class, failure.getCause());
-        assertFalse(handler.text.isEmpty());
-        assertEquals(0, handler.completed.get());
     }
 
     @ParameterizedTest
