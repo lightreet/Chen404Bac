@@ -128,6 +128,13 @@
             <version>8.5.7</version>
         </dependency>
 
+        <!-- 图片转存使用自定义 DNS 校验；与 MinIO 已使用的版本保持一致 -->
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp</artifactId>
+            <version>4.10.0</version>
+        </dependency>
+
         <!-- XXL-JOB 分布式任务调度 -->
         <dependency>
             <groupId>com.xuxueli</groupId>

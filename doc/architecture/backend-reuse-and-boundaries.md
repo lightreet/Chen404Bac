@@ -44,6 +44,14 @@
 
 尚未迁移的实体边界、核心服务职责、热门/相邻文章候选扫描等保留在 [Java 质量债务](java-quality-debt.md)，后续修改对应模块时继续消除。
 
+## 文章 Markdown 图片转存
+
+新增 `POST /upload/image/import`，请求为 `{ "url": "https://…" }`，返回现有 `UploadFileVO`；旧上传和文章接口不变。`ArticleImageImportService` 检查文章创作权限，每个用户最多同时转存一张，全局最多四张，并调用现有 `SysFileService.uploadTempFile`，用途固定为 `ARTICLE_CONTENT`。文章保存后正常认领，未认领的临时文件沿用 24 小时清理流程，无新增表或迁移。
+
+`RemoteArticleImageDownloader` 不携带用户凭证，仅允许 HTTP(S) 标准端口，禁用代理和自动重定向，在实际连接的 DNS 解析器中拒绝任何非公网地址；最多三次重定向，每跳重新校验。下载受总超时、站点配置与 12 MB 上限约束；ImageIO 识别实际栅格格式并限制 4000 万像素，拒绝 HTML/SVG 伪装。失败不创建文章，前端保留原图链接并提供重试、手动替换。
+
+本机代理若用保留地址模拟 DNS，直连转存会被拒绝；应在正常公网 DNS 环境验证，不能通过放开内网地址解决。部署先后端再前端，转存失败时仍可手动上传。验证入口为 `RemoteArticleImageDownloaderTest`、`ArticleImageImportServiceTest`、`ArticleImageImportControllerTest`。
+
 ## 邮箱注册写入边界
 
 新账号以已核验邮箱作为用户名，旧客户端的 `username` 字段会被忽略。注册前检查邮箱与用户名冲突，并在写入前确认默认角色存在；数据库唯一键冲突转换为业务冲突，角色绑定失败抛出异常并由注册事务回滚。测试使用 Mock 验证写入顺序和失败边界，迁移由正式 Flyway 文件交付。
