@@ -15,6 +15,8 @@ import com.chen404.security.AuthenticatedUser;
 import com.chen404.service.SysFileService;
 import com.chen404.service.AccessService;
 import com.chen404.service.TravelMemoryImageMetadataService;
+import com.chen404.service.TravelVideoService;
+import com.chen404.service.support.TravelMotionPhotoReader;
 import com.chen404.util.CurrentUserUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -116,17 +118,20 @@ public class UploadController {
     private final TravelMemoryImageMetadataService travelMemoryImageMetadataService;
     private final Executor uploadTaskExecutor;
     private final AccessService accessService;
+    private final TravelVideoService travelVideos;
 
     public UploadController(
             SysFileService sysFileService,
             SiteRuntimeProperties siteRuntimeProperties,
             TravelMemoryImageMetadataService travelMemoryImageMetadataService,
             AccessService accessService,
+            TravelVideoService travelVideos,
             @Qualifier(UploadTaskConfig.UPLOAD_TASK_EXECUTOR) Executor uploadTaskExecutor) {
         this.sysFileService = sysFileService;
         this.siteRuntimeProperties = siteRuntimeProperties;
         this.travelMemoryImageMetadataService = travelMemoryImageMetadataService;
         this.accessService = accessService;
+        this.travelVideos = travelVideos;
         this.uploadTaskExecutor = uploadTaskExecutor;
     }
 
@@ -313,6 +318,11 @@ public class UploadController {
         Long userId = CurrentUserUtil.requireUserId(currentUser);
         ensureTravelCreator(userId);
         MultipartFile file = form.getFile();
+        var motion = TravelMotionPhotoReader.read(file);
+        if (motion != null) {
+            validateImage(motion.image(), resolveImageMaxSize(), resolveAllowedImageTypes());
+            return Result.success(MSG_UPLOAD_SUCCESS, travelVideos.upload(motion.video(), userId, motion.image()));
+        }
         validateImage(file, resolveImageMaxSize(), resolveAllowedImageTypes());
 
         try {

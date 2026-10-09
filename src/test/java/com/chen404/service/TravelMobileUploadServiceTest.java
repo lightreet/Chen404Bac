@@ -144,6 +144,26 @@ class TravelMobileUploadServiceTest {
         verifyNoInteractions(files);
     }
 
+    @Test void motionPhotoKeepsBothUrlsAndChecksStillSizeAfterSplitting() throws Exception {
+        var created = create("stop");
+        byte[] image = com.chen404.service.support.MotionPhotoFixtures.jpeg();
+        var photo = new MockMultipartFile("file", "live.jpg", "image/jpeg",
+                com.chen404.service.support.MotionPhotoFixtures.join(image,
+                        com.chen404.service.support.MotionPhotoFixtures.container()));
+        properties.setUploadMaxSize(image.length); // 总大小超过普通图片限制，静态部分仍合法。
+        var uploaded = new com.chen404.domain.dto.UploadFileVO();
+        uploaded.setId(101L);
+        uploaded.setUrl("/api/files/101");
+        uploaded.setVideoUrl("/api/files/102");
+        when(videos.upload(any(), eq(1L), any())).thenReturn(uploaded);
+        var result = service.upload(created.sessionId(), created.token(), REQUEST, photo);
+        assertEquals(result, service.upload(created.sessionId(), created.token(), REQUEST, photo));
+        verify(videos, times(1)).upload(any(), eq(1L), any());
+        verifyNoInteractions(files);
+        assertTrue(service.poll(created.sessionId(), 1L).images().get(0).getVideoUrl().startsWith("/api/files/102?ticket="));
+        assertTrue(service.mobileStatus(created.sessionId(), created.token()).images().isEmpty());
+    }
+
     @Test void validImageBytesCannotBeStoredWithExecutableContentType() throws Exception {
         var created = create("stop");
         var disguised = new MockMultipartFile("file", "trip.html", "text/html", photo.getBytes());

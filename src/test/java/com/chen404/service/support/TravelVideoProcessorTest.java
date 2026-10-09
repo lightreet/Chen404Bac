@@ -48,8 +48,17 @@ class TravelVideoProcessorTest {
         assertTrue(result.video().getSize() > 100);
         assertNotNull(javax.imageio.ImageIO.read(result.poster().getInputStream()));
         assertTrue(result.durationSeconds() > 0 && result.durationSeconds() < 30);
+        var motion = TravelMotionPhotoReader.read(new MockMultipartFile("file", "live.jpg", "image/jpeg",
+                MotionPhotoFixtures.join(MotionPhotoFixtures.jpeg(), Files.readAllBytes(clip), new byte[32])));
+        assertNotNull(motion);
+        var liveResult = processor.process(motion.video());
+        assertTrue(liveResult.durationSeconds() > 0 && liveResult.durationSeconds() < 30);
+        assertEquals(16, javax.imageio.ImageIO.read(motion.image().getInputStream()).getWidth());
         Path longClip = directory.resolve("long.mp4");
         generate(encoder, longClip, "30");
+        var longMotion = TravelMotionPhotoReader.read(new MockMultipartFile("file", "long-live.jpg", "image/jpeg",
+                MotionPhotoFixtures.join(MotionPhotoFixtures.jpeg(), Files.readAllBytes(longClip))));
+        assertThrows(BadRequestException.class, () -> processor.process(longMotion.video()));
         assertThrows(BadRequestException.class, () -> processor.process(
                 new MockMultipartFile("file", "long.mp4", "video/mp4", Files.readAllBytes(longClip))));
         assertThrows(BadRequestException.class, () -> processor.process(

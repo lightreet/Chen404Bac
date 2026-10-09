@@ -41,6 +41,7 @@ class UploadControllerSiteImageTest {
                 siteRuntimeProperties,
                 mock(TravelMemoryImageMetadataService.class),
                 mock(AccessService.class),
+                mock(com.chen404.service.TravelVideoService.class),
                 Runnable::run
         );
     }

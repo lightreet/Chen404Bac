@@ -11,6 +11,7 @@ import com.chen404.service.support.TravelMobileUploadSession;
 import com.chen404.service.support.TravelMobileUploadSession.Item;
 import com.chen404.service.support.TravelMobileUploadStore;
 import com.chen404.service.support.TravelVideoProcessor;
+import com.chen404.service.support.TravelMotionPhotoReader;
 import com.chen404.service.support.SiteFrontendAddress;
 import com.chen404.util.RedisKeys;
 import com.chen404.util.RedisUtil;
@@ -173,10 +174,11 @@ public class TravelMobileUploadService {
         if (previous != null && DONE.equals(previous.getStatus())) return receipt(requestId, previous);
         boolean video = file != null && file.getOriginalFilename() != null
                 && file.getOriginalFilename().toLowerCase(java.util.Locale.ROOT).matches(".*\\.(mp4|mov|webm)$");
+        var motion = video ? null : TravelMotionPhotoReader.read(file);
         if (video) {
             TravelVideoProcessor.validateFile(file);
         } else {
-            validateImage(file);
+            validateImage(motion == null ? file : motion.image());
         }
         String attemptId = UUID.randomUUID().toString();
         TravelMobileUploadSession reserved = store.update(id, s -> {
@@ -206,7 +208,7 @@ public class TravelMobileUploadService {
         Item item = reserved.getItems().get(requestId);
         if (DONE.equals(item.getStatus())) return receipt(requestId, item);
         try {
-            UploadFileVO result = uploadMedia(file, reserved.getOwnerId(), video);
+            UploadFileVO result = uploadMedia(file, reserved.getOwnerId(), video, motion);
             // 关闭/过期后完成的存储仍为临时文件，由既有清理任务回收，不能回填到其他草稿。
             var completed = store.update(id, s -> {
                 ensureActive(s);
@@ -217,7 +219,7 @@ public class TravelMobileUploadService {
                 current.setStatus(DONE);
                 current.setResult(result);
             });
-            log.info("[TRAVEL_MOBILE_UPLOAD_OK] userId={} fileId={} video={}", reserved.getOwnerId(), result.getId(), video);
+            log.info("[TRAVEL_MOBILE_UPLOAD_OK] userId={} fileId={} video={}", reserved.getOwnerId(), result.getId(), result.getVideoUrl() != null);
             return receipt(requestId, completed.getItems().get(requestId));
         } catch (RuntimeException ex) {
             try {
@@ -235,9 +237,9 @@ public class TravelMobileUploadService {
         }
     }
 
-    private UploadFileVO uploadMedia(MultipartFile file, Long ownerId, boolean video) {
-        if (video) {
-            UploadFileVO result = videos.upload(file, ownerId);
+    private UploadFileVO uploadMedia(MultipartFile file, Long ownerId, boolean video, TravelMotionPhotoReader.MotionPhoto motion) {
+        if (video || motion != null) {
+            UploadFileVO result = motion == null ? videos.upload(file, ownerId) : videos.upload(motion.video(), ownerId, motion.image());
             result.setUrl(fileUrls.normalize(result.getUrl()));
             result.setVideoUrl(fileUrls.normalize(result.getVideoUrl()));
             return result;
