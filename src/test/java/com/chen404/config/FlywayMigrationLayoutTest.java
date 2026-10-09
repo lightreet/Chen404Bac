@@ -52,7 +52,8 @@ class FlywayMigrationLayoutTest {
             "V2026090801__create_file_deletion_task.sql",
             "V2026090802__add_article_edit_version.sql",
             "V2026090901__add_reader_import_lease.sql",
-            "V2026091201__support_email_as_username.sql"
+            "V2026091201__support_email_as_username.sql",
+            "V2026100901__travel_entry_video.sql"
     );
 
     @Test

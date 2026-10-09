@@ -19,6 +19,9 @@ public class TravelMemoryEntryVO {
     @Schema(description = "图片地址", example = "https://cdn.example.com/travel/gz-park-1.jpg")
     private String imageUrl;
 
+    @Schema(description = "短视频地址，可选；为空时为照片，imageUrl 为照片或视频封面")
+    private String videoUrl;
+
     @Schema(description = "图片备注", example = "湖面和桥")
     private String remark;
 

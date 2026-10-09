@@ -30,6 +30,9 @@ public class TravelMemoryEntry implements Serializable {
 
     private String imageUrl;
 
+    /** 短视频地址；空值兼容历史照片，imageUrl 始终为静态封面。 */
+    private String videoUrl;
+
     private String remark;
 
     private String thanksNote;

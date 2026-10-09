@@ -65,6 +65,7 @@ public interface TravelMemoryConverter {
 
     @BeanMapping(ignoreByDefault = true)
     @Mapping(target = "imageUrl", source = "imageUrl")
+    @Mapping(target = "videoUrl", source = "videoUrl")
     @Mapping(target = "remark", source = "remark")
     @Mapping(target = "thanksNote", source = "thanksNote")
     @Mapping(target = "shotAt", source = "shotAt")
@@ -100,6 +101,7 @@ public interface TravelMemoryConverter {
     @BeanMapping(ignoreByDefault = true)
     @Mapping(target = "id", source = "id")
     @Mapping(target = "imageUrl", source = "imageUrl")
+    @Mapping(target = "videoUrl", source = "videoUrl")
     @Mapping(target = "remark", source = "remark")
     @Mapping(target = "thanksNote", source = "thanksNote")
     @Mapping(target = "shotAt", source = "shotAt")

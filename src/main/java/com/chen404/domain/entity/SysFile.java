@@ -79,6 +79,7 @@ public class SysFile implements Serializable {
         String AVATAR = "AVATAR";
         String TRUST_REQUEST_ATTACHMENT = "TRUST_REQUEST_ATTACHMENT";
         String TRAVEL_MEMORY_IMAGE = "TRAVEL_MEMORY_IMAGE";
+        String TRAVEL_MEMORY_VIDEO = "TRAVEL_MEMORY_VIDEO";
         String MUSIC_AUDIO = "MUSIC_AUDIO";
         String MUSIC_COVER = "MUSIC_COVER";
         String NOVEL_SOURCE = "NOVEL_SOURCE";

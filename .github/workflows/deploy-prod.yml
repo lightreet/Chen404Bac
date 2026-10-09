@@ -25,6 +25,12 @@ jobs:
           java-version: 17
           cache: maven
 
+      - name: Prepare video test runtime
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+          echo "TRAVEL_FFMPEG_TEST_BIN=$(dirname "$(command -v ffmpeg)")" >> "$GITHUB_ENV"
+
       - name: Verify and build jar
         run: mvn -B clean verify
 

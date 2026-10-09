@@ -22,6 +22,7 @@ Chen404Bac 是 Chen404 的 Spring Boot 后端服务，负责 REST API、认证�
 - MySQL 8+
 - Redis 7+
 - MinIO 或兼容对象存储
+- FFmpeg / ffprobe（旅行短视频需要，须包含 `libx264` 和 AAC 编码器；默认从 PATH 查找，可通过 `app.travel-video.ffmpeg`、`app.travel-video.ffprobe` 指定路径）
 
 ## 启动与构建
 
@@ -146,6 +147,7 @@ src/main/resources/db/migration/
 | `HomeController` | `/home/**` | 首页聚合数据、站点统计 |
 | `UploadController` | `/upload/**` | 图片、封面、头像、站点资源、旅行图片、音乐音频/封面、附件上传与文件删除 |
 | `TravelMobileUploadController` | `/upload/travel-mobile/**` | 旅行照片短时扫码授权、匿名手机上传与桌面回填；[设计与验证](doc/architecture/travel-mobile-upload.md) |
+| `TravelVideoUploadController` | `/upload/travel-memory-video` | 少于 30 秒的旅行视频校验、转码和静态封面生成 |
 | `FileAccessController` | `/files/{id}` | 通过短期票据或当前用户身份读取受保护文件 |
 | `AdminFileController` | `/admin/files/**` | 文件列表、详情、统计 |
 | `EmojiController` | `/emoji/**`, `/admin/emoji/**` | 表情包公开下发、后台维护、ZIP 导入 |

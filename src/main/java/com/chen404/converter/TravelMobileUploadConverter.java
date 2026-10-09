@@ -14,10 +14,19 @@ public interface TravelMobileUploadConverter {
     @Mapping(target = "name", source = "file.fileName")
     @Mapping(target = "size", source = "file.fileSize")
     @Mapping(target = "url", ignore = true)
+    @Mapping(target = "videoUrl", ignore = true)
     @Mapping(target = "latitude", source = "metadata.latitude")
     @Mapping(target = "longitude", source = "metadata.longitude")
     @Mapping(target = "shotAt", source = "metadata.shotAt")
     UploadFileVO fromFile(SysFile file, TravelMemoryImageMetadata metadata);
+
+    /** 视频结果沿用 url 作为封面，附加 videoUrl，不改变旧图片消费者的字段语义。 */
+    @org.mapstruct.BeanMapping(ignoreByDefault = true)
+    @Mapping(target = "id", source = "poster.id")
+    @Mapping(target = "url", source = "poster.fileUrl")
+    @Mapping(target = "videoUrl", source = "video.fileUrl")
+    @Mapping(target = "size", source = "video.fileSize")
+    UploadFileVO fromVideo(SysFile poster, SysFile video);
 
     /** 复制展示字段，避免签发票据时修改会话内保存的稳定地址。 */
     UploadFileVO copy(UploadFileVO source);

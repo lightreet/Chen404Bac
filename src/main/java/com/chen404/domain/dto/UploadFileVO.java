@@ -19,6 +19,9 @@ public class UploadFileVO {
     @Schema(description = "文件访问地址", example = "https://cdn.example.com/upload/demo.png")
     private String url;
 
+    @Schema(description = "短视频地址；存在时 url 为自动生成的静态封面")
+    private String videoUrl;
+
     @Schema(description = "文件名", example = "demo.png")
     private String name;
 

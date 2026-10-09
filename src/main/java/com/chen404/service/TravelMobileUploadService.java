@@ -10,6 +10,7 @@ import com.chen404.exception.ForbiddenException;
 import com.chen404.service.support.TravelMobileUploadSession;
 import com.chen404.service.support.TravelMobileUploadSession.Item;
 import com.chen404.service.support.TravelMobileUploadStore;
+import com.chen404.service.support.TravelVideoProcessor;
 import com.chen404.service.support.SiteFrontendAddress;
 import com.chen404.util.RedisKeys;
 import com.chen404.util.RedisUtil;
@@ -60,6 +61,7 @@ public class TravelMobileUploadService {
     private final ManagedFileUrlCodec fileUrls;
     private final SiteConfigService siteConfigService;
     private final TravelMobileUploadConverter converter;
+    private final TravelVideoService videos;
 
     /** 只能由具备旅行创作权限的登录用户发起，不信任客户端传来的 ownerId。 */
     public TravelMobileUploadDTO.Created create(Long ownerId, TravelMobileUploadDTO.Create request) {
@@ -169,7 +171,13 @@ public class TravelMobileUploadService {
         ensureCreator(before.getOwnerId());
         Item previous = before.getItems().get(requestId);
         if (previous != null && DONE.equals(previous.getStatus())) return receipt(requestId, previous);
-        validateImage(file);
+        boolean video = file != null && file.getOriginalFilename() != null
+                && file.getOriginalFilename().toLowerCase(java.util.Locale.ROOT).matches(".*\\.(mp4|mov|webm)$");
+        if (video) {
+            TravelVideoProcessor.validateFile(file);
+        } else {
+            validateImage(file);
+        }
         String attemptId = UUID.randomUUID().toString();
         TravelMobileUploadSession reserved = store.update(id, s -> {
             ensureActive(s);
@@ -198,10 +206,7 @@ public class TravelMobileUploadService {
         Item item = reserved.getItems().get(requestId);
         if (DONE.equals(item.getStatus())) return receipt(requestId, item);
         try {
-            var metadata = metadataService.extract(file);
-            SysFile saved = files.uploadTempFile(file, reserved.getOwnerId(), SysFile.RefType.TRAVEL_MEMORY_IMAGE);
-            UploadFileVO result = converter.fromFile(saved, metadata);
-            result.setUrl(fileUrls.stableUrl(saved.getId()));
+            UploadFileVO result = uploadMedia(file, reserved.getOwnerId(), video);
             // 关闭/过期后完成的存储仍为临时文件，由既有清理任务回收，不能回填到其他草稿。
             var completed = store.update(id, s -> {
                 ensureActive(s);
@@ -212,7 +217,7 @@ public class TravelMobileUploadService {
                 current.setStatus(DONE);
                 current.setResult(result);
             });
-            log.info("[TRAVEL_MOBILE_UPLOAD_OK] userId={} fileId={}", reserved.getOwnerId(), saved.getId());
+            log.info("[TRAVEL_MOBILE_UPLOAD_OK] userId={} fileId={} video={}", reserved.getOwnerId(), result.getId(), video);
             return receipt(requestId, completed.getItems().get(requestId));
         } catch (RuntimeException ex) {
             try {
@@ -228,6 +233,20 @@ public class TravelMobileUploadService {
             log.warn("[TRAVEL_MOBILE_UPLOAD_FAIL] userId={} exception={}", reserved.getOwnerId(), ex.getClass().getSimpleName());
             throw ex;
         }
+    }
+
+    private UploadFileVO uploadMedia(MultipartFile file, Long ownerId, boolean video) {
+        if (video) {
+            UploadFileVO result = videos.upload(file, ownerId);
+            result.setUrl(fileUrls.normalize(result.getUrl()));
+            result.setVideoUrl(fileUrls.normalize(result.getVideoUrl()));
+            return result;
+        }
+        var metadata = metadataService.extract(file);
+        SysFile saved = files.uploadTempFile(file, ownerId, SysFile.RefType.TRAVEL_MEMORY_IMAGE);
+        UploadFileVO result = converter.fromFile(saved, metadata);
+        result.setUrl(fileUrls.stableUrl(saved.getId()));
+        return result;
     }
 
     private TravelMobileUploadDTO.Snapshot snapshot(TravelMobileUploadSession s, boolean desktop) {
@@ -247,6 +266,10 @@ public class TravelMobileUploadService {
     private UploadFileVO issueImageView(UploadFileVO source) {
         UploadFileVO view = converter.copy(source);
         view.setUrl(fileUrls.ticketedUrl(view.getId()));
+        Long videoId = fileUrls.resolveFileId(view.getVideoUrl());
+        if (videoId != null) {
+            view.setVideoUrl(fileUrls.ticketedUrl(videoId));
+        }
         return view;
     }
 

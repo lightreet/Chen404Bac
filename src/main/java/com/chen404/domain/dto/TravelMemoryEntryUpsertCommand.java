@@ -23,6 +23,10 @@ public class TravelMemoryEntryUpsertCommand {
     @Size(max = 500, message = "图片地址长度不能超过 500 个字符")
     private String imageUrl;
 
+    @Schema(description = "短视频地址，可选；为空时为照片，imageUrl 为照片或视频封面")
+    @Size(max = 500, message = "视频地址长度不能超过 500 个字符")
+    private String videoUrl;
+
     @Schema(description = "图片备注", example = "湖面和桥")
     @Size(max = 255, message = "图片备注长度不能超过 255 个字符")
     private String remark;

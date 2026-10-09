@@ -155,7 +155,7 @@ public class ProtectedFileAccessService {
         return switch (file.getRefType()) {
             case SysFile.RefType.ARTICLE_CONTENT, SysFile.RefType.ARTICLE_COVER ->
                     canReadArticle(file.getRefId(), viewerId);
-            case SysFile.RefType.TRAVEL_MEMORY_IMAGE ->
+            case SysFile.RefType.TRAVEL_MEMORY_IMAGE, SysFile.RefType.TRAVEL_MEMORY_VIDEO ->
                     canReadTravelMemory(file.getRefId(), viewerId);
             case SysFile.RefType.MUSIC_AUDIO, SysFile.RefType.MUSIC_COVER ->
                     canReadMusic(file.getRefId(), viewerId);

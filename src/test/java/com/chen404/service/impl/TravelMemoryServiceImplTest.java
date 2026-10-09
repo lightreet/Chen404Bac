@@ -236,6 +236,9 @@ class TravelMemoryServiceImplTest {
         TravelMemoryEntry oldKeep = buildEntry(11L, 7L, "https://cdn.example.com/keep.jpg", 0, 1);
         TravelMemoryEntry oldRemove = buildEntry(12L, 7L, "https://cdn.example.com/remove.jpg", 1, 0);
         TravelMemoryEntry newKeep = buildEntry(21L, 7L, "https://cdn.example.com/keep.jpg", 0, 1);
+        oldKeep.setVideoUrl("/api/files/101");
+        newKeep.setVideoUrl("/api/files/101");
+        oldRemove.setVideoUrl("/api/files/102");
 
         AtomicInteger entrySelectCount = new AtomicInteger();
         when(entryMapper.selectList(any())).thenAnswer(invocation -> {
@@ -255,11 +258,17 @@ class TravelMemoryServiceImplTest {
         commandLocation.setStatus(1);
         commandLocation.setSortOrder(3);
         TravelMemoryEntry commandEntry = buildEntry(null, null, "https://cdn.example.com/keep.jpg", 0, 1);
+        commandEntry.setVideoUrl("/api/files/101");
 
         service.updateLocation(7L, commandLocation, List.of(), List.of(commandEntry), 1L);
 
         verify(sysFileService, times(1)).requestDeletionByUrl("https://cdn.example.com/remove.jpg", 1L);
         verify(sysFileService, never()).requestDeletionByUrl("https://cdn.example.com/keep.jpg", 1L);
+        verify(sysFileService).requestDeletionByUrl("/api/files/102", 1L);
+        verify(sysFileService, never()).requestDeletionByUrl("/api/files/101", 1L);
+        verify(sysFileService).claimPermanentFiles(1L,
+                List.of(com.chen404.service.FileClaim.byIdAndUrl(101L, "/api/files/101")),
+                com.chen404.domain.entity.SysFile.RefType.TRAVEL_MEMORY_VIDEO, 7L);
     }
 
     @Test

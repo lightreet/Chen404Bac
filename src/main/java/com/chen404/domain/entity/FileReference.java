@@ -71,6 +71,7 @@ public class FileReference implements Serializable {
         String AVATAR = "avatar";
         String AUTHOR_AVATAR = "authorAvatar";
         String IMAGE_URL = "imageUrl";
+        String VIDEO_URL = "videoUrl";
         String ATTACHMENTS = "attachments";
         String AUDIO_URL = "audioUrl";
         String COVER_URL = "coverUrl";

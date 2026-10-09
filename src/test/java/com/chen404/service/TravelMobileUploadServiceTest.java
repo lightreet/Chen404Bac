@@ -32,6 +32,7 @@ class TravelMobileUploadServiceTest {
     private final MemoryStore store = new MemoryStore(mapper);
     private AccessService access;
     private SysFileService files;
+    private TravelVideoService videos;
     private SiteRuntimeProperties properties;
     private TravelMobileUploadService service;
     private SiteConfigService siteConfigService;
@@ -42,6 +43,7 @@ class TravelMobileUploadServiceTest {
     void setup() throws Exception {
         access = mock(AccessService.class);
         files = mock(SysFileService.class);
+        videos = mock(TravelVideoService.class);
         RedisUtil redis = mock(RedisUtil.class);
         properties = new SiteRuntimeProperties();
         when(access.canCreateTravelMemory(anyLong())).thenReturn(true);
@@ -54,7 +56,7 @@ class TravelMobileUploadServiceTest {
         when(siteConfigService.getConfig()).thenReturn(siteConfig);
         service = new TravelMobileUploadService(store, access, redis, files, metadata, properties,
                 new ManagedFileUrlCodec("test-only-mobile-upload-secret-key-32-bytes", 5), siteConfigService,
-                Mappers.getMapper(TravelMobileUploadConverter.class));
+                Mappers.getMapper(TravelMobileUploadConverter.class), videos);
         when(files.uploadTempFile(any(), anyLong(), anyString())).thenAnswer(call -> savedFile());
         var output = new ByteArrayOutputStream();
         ImageIO.write(new BufferedImage(10, 10, BufferedImage.TYPE_INT_RGB), "png", output);
@@ -112,6 +114,27 @@ class TravelMobileUploadServiceTest {
         properties.setUploadMaxSize(1);
         assertThrows(BadRequestException.class, () -> service.upload(created.sessionId(), created.token(), REQUEST, photo));
         verifyNoInteractions(files);
+    }
+
+    @Test void videoUploadIsIdempotentAndDesktopReceivesBothSignedUrls() {
+        var created = create("stop");
+        var clip = new MockMultipartFile("file", "trip.mov", "video/quicktime", new byte[]{1});
+        var uploaded = new com.chen404.domain.dto.UploadFileVO();
+        uploaded.setId(101L);
+        uploaded.setUrl("/api/files/101?ticket=old-poster-ticket");
+        uploaded.setVideoUrl("/api/files/102?ticket=old-video-ticket");
+        when(videos.upload(clip, 1L)).thenReturn(uploaded);
+
+        var receipt = service.upload(created.sessionId(), created.token(), REQUEST, clip);
+        assertEquals(receipt, service.upload(created.sessionId(), created.token(), REQUEST, clip));
+        verify(videos, times(1)).upload(clip, 1L);
+        verifyNoInteractions(files);
+        assertTrue(service.mobileStatus(created.sessionId(), created.token()).images().isEmpty());
+        var stored = store.read(created.sessionId()).getItems().get(REQUEST).getResult();
+        assertEquals("/api/files/102", stored.getVideoUrl());
+        var view = service.poll(created.sessionId(), 1L).images().get(0);
+        assertTrue(view.getUrl().startsWith("/api/files/101?ticket="));
+        assertTrue(view.getVideoUrl().startsWith("/api/files/102?ticket="));
     }
 
     @Test void respectsConfiguredFormatRestrictions() {

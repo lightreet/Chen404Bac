@@ -198,7 +198,7 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
         List<TravelMemoryEntry> oldEntries = listEntriesByLocationIds(List.of(id)).getOrDefault(id, List.of());
         TravelMemoryLocation normalizedLocation = normalizeLocation(location, stops, legacyEntries, operatorId, existing);
         Set<String> newUrls = normalizedLocation.getEntries().stream()
-                .map(TravelMemoryEntry::getImageUrl)
+                .flatMap(entry -> java.util.stream.Stream.of(entry.getImageUrl(), entry.getVideoUrl()))
                 .filter(StringUtils::hasText)
                 .map(String::trim)
                 .collect(Collectors.toSet());
@@ -565,6 +565,10 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
                 continue;
             }
             entry.setImageUrl(protectedFileAccessService.normalizeUrl(entry.getImageUrl().trim()));
+            entry.setVideoUrl(protectedFileAccessService.normalizeUrl(trimToNull(entry.getVideoUrl())));
+            if (StringUtils.hasText(entry.getVideoUrl()) && !entry.getVideoUrl().matches("/api/files/[1-9][0-9]*")) {
+                throw new BadRequestException("视频必须通过旅行上传入口上传");
+            }
             entry.setRemark(trimToEmpty(entry.getRemark()));
             entry.setThanksNote(trimToEmpty(entry.getThanksNote()));
             entry.setDisplayOrder(entry.getDisplayOrder() == null ? index : entry.getDisplayOrder());
@@ -590,6 +594,8 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
             if (location.getEntries() != null) {
                 for (TravelMemoryEntry entry : location.getEntries()) {
                     entry.setImageUrl(issueTravelMemoryFileUrl(entry.getImageUrl(), locationId));
+                    entry.setVideoUrl(protectedFileAccessService.issueUrlForReference(
+                            entry.getVideoUrl(), SysFile.RefType.TRAVEL_MEMORY_VIDEO, locationId));
                 }
             }
             if (location.getStops() != null) {
@@ -598,6 +604,8 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
                     if (stop.getEntries() != null) {
                         for (TravelMemoryEntry entry : stop.getEntries()) {
                             entry.setImageUrl(issueTravelMemoryFileUrl(entry.getImageUrl(), locationId));
+                            entry.setVideoUrl(protectedFileAccessService.issueUrlForReference(
+                                    entry.getVideoUrl(), SysFile.RefType.TRAVEL_MEMORY_VIDEO, locationId));
                         }
                     }
                 }
@@ -755,11 +763,25 @@ public class TravelMemoryServiceImpl implements TravelMemoryService {
                 SysFile.RefType.TRAVEL_MEMORY_IMAGE,
                 locationId
         );
+        List<FileClaim> videoClaims = entries.stream().map(TravelMemoryEntry::getVideoUrl)
+                .filter(StringUtils::hasText).distinct().map(this::videoClaim).toList();
+        if (!videoClaims.isEmpty()) {
+            sysFileService.claimPermanentFiles(operatorId, videoClaims, SysFile.RefType.TRAVEL_MEMORY_VIDEO, locationId);
+        }
+    }
+
+    private FileClaim videoClaim(String url) {
+        try {
+            // 视频只认领系统已校验的文件；显式 ID 使不存在的文件无法走旧外链兼容分支。
+            return FileClaim.byIdAndUrl(Long.parseLong(url.substring(url.lastIndexOf('/') + 1)), url);
+        } catch (NumberFormatException ex) {
+            throw new BadRequestException("视频地址无效，请重新上传");
+        }
     }
 
     private void scheduleRemovedEntryImagesCleanup(List<TravelMemoryEntry> oldEntries, Set<String> newUrls, Long adminId) {
         List<String> urlsToDelete = oldEntries.stream()
-                .map(TravelMemoryEntry::getImageUrl)
+                .flatMap(entry -> java.util.stream.Stream.of(entry.getImageUrl(), entry.getVideoUrl()))
                 .filter(StringUtils::hasText)
                 .map(String::trim)
                 .filter(url -> !newUrls.contains(url))

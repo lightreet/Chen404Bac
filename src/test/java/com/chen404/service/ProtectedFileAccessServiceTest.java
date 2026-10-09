@@ -28,6 +28,7 @@ class ProtectedFileAccessServiceTest {
     private SysFileMapper sysFileMapper;
     private ArticleMapper articleMapper;
     private ReaderBookMapper readerBookMapper;
+    private TravelMemoryLocationMapper travelMemoryLocationMapper;
     private AccessService accessService;
     private FileStorageService fileStorageService;
     private ManagedFileUrlCodec codec;
@@ -38,6 +39,7 @@ class ProtectedFileAccessServiceTest {
         sysFileMapper = mock(SysFileMapper.class);
         articleMapper = mock(ArticleMapper.class);
         readerBookMapper = mock(ReaderBookMapper.class);
+        travelMemoryLocationMapper = mock(TravelMemoryLocationMapper.class);
         accessService = mock(AccessService.class);
         fileStorageService = mock(FileStorageService.class);
         codec = new ManagedFileUrlCodec("test-protected-file-secret", 5);
@@ -46,7 +48,7 @@ class ProtectedFileAccessServiceTest {
         protectedFileAccessService = new ProtectedFileAccessService(
                 sysFileMapper,
                 articleMapper,
-                mock(TravelMemoryLocationMapper.class),
+                travelMemoryLocationMapper,
                 mock(MusicTrackMapper.class),
                 readerBookMapper,
                 mock(UserTrustRequestMapper.class),
@@ -153,5 +155,20 @@ class ProtectedFileAccessServiceTest {
         file.setRefId(99L);
         file.setFileUrl(codec.stableUrl(12L));
         return file;
+    }
+
+    @Test
+    void videoReadUsesTheOwningTravelVisibility() {
+        SysFile file = buildProtectedArticleFile();
+        file.setRefType(SysFile.RefType.TRAVEL_MEMORY_VIDEO);
+        var location = new com.chen404.domain.entity.TravelMemoryLocation();
+        location.setId(99L);
+        when(sysFileMapper.selectById(12L)).thenReturn(file);
+        when(travelMemoryLocationMapper.selectById(99L)).thenReturn(location);
+        assertThrows(ForbiddenException.class,
+                () -> protectedFileAccessService.resolveDownloadUrl(12L, null, null));
+        when(accessService.canViewTravelMemory(null, location)).thenReturn(true);
+        when(fileStorageService.getPresignedGetUrl("protected", "article/a.webp", 5)).thenReturn("https://storage.example.com/video");
+        assertEquals("https://storage.example.com/video", protectedFileAccessService.resolveDownloadUrl(12L, null, null));
     }
 }

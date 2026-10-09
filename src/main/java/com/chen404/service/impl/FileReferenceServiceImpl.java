@@ -214,15 +214,15 @@ public class FileReferenceServiceImpl extends ServiceImpl<FileReferenceMapper, F
             if (entry == null || entry.getId() == null) {
                 continue;
             }
+            List<ResolvedReference> mediaReferences = new ArrayList<>(resolveReferences(
+                    Collections.singletonList(entry.getImageUrl()), FileReference.FieldKey.IMAGE_URL, FileReference.SourceType.DIRECT));
+            mediaReferences.addAll(resolveReferences(
+                    Collections.singletonList(entry.getVideoUrl()), FileReference.FieldKey.VIDEO_URL, FileReference.SourceType.DIRECT));
             replaceReferences(
                     FileReference.ModuleCode.TRAVEL_MEMORY_ENTRY,
                     FileReference.BizType.TRAVEL_MEMORY_ENTRY_IMAGE,
                     entry.getId(),
-                    resolveReferences(
-                            Collections.singletonList(entry.getImageUrl()),
-                            FileReference.FieldKey.IMAGE_URL,
-                            FileReference.SourceType.DIRECT
-                    )
+                    mediaReferences
             );
         }
         log.debug("[FILE_REFERENCE_SYNC] module=TRAVEL_MEMORY bizId={} entryCount={} hasCover={}",

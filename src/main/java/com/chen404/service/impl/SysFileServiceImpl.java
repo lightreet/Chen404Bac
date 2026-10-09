@@ -431,6 +431,7 @@ public class SysFileServiceImpl extends ServiceImpl<SysFileMapper, SysFile> impl
         return SysFile.RefType.ARTICLE_CONTENT.equals(refType)
                 || SysFile.RefType.ARTICLE_COVER.equals(refType)
                 || SysFile.RefType.TRAVEL_MEMORY_IMAGE.equals(refType)
+                || SysFile.RefType.TRAVEL_MEMORY_VIDEO.equals(refType)
                 || SysFile.RefType.MUSIC_AUDIO.equals(refType)
                 || SysFile.RefType.MUSIC_COVER.equals(refType)
                 || SysFile.RefType.NOVEL_SOURCE.equals(refType)
